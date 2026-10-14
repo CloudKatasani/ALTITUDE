@@ -1,0 +1,121 @@
+dialect: oracle
+description: Golden tests for Oracle S1 issues (see teradata/tests/golden.yaml for the structure).
+test_cases:
+  - id: TC-OR-01-001
+    issue_id: OR-01
+    kind: golden
+    description: IS NULL filter counts '' as NULL in Oracle only
+    source_sql: |
+      CREATE TABLE crm.customer (customer_id NUMBER(10), first_name VARCHAR2(40), middle_name VARCHAR2(40));
+      SELECT COUNT(*) FROM crm.customer WHERE middle_name IS NULL;
+    fixture: |
+      CREATE TABLE customer (customer_id INTEGER, first_name VARCHAR, middle_name VARCHAR);
+      INSERT INTO customer VALUES (1, 'Ann', NULL), (2, 'Bob', ''), (3, 'Cy', 'J');
+    source_emulation: |
+      -- Oracle stores the empty string as NULL
+      SELECT COUNT(*) FROM customer WHERE nullif(middle_name, '') IS NULL;
+    naive:
+      snowflake: SELECT COUNT(*) FROM customer WHERE middle_name IS NULL;
+      expect: diverge
+    fixed:
+      snowflake: SELECT COUNT(*) FROM customer WHERE (middle_name IS NULL OR middle_name = '');
+    fix_pattern: FX-OR-01-B
+    expected_rows: [[2]]
+
+  - id: TC-OR-01-002
+    issue_id: OR-01
+    kind: golden
+    description: Concatenation with NULL yields the other operand in Oracle and NULL in Snowflake
+    source_sql: |
+      CREATE TABLE crm.customer (customer_id NUMBER(10), first_name VARCHAR2(40), middle_name VARCHAR2(40));
+      SELECT customer_id, first_name || ' ' || middle_name AS display_name FROM crm.customer ORDER BY customer_id;
+    fixture: |
+      CREATE TABLE customer (customer_id INTEGER, first_name VARCHAR, middle_name VARCHAR);
+      INSERT INTO customer VALUES (1, 'Ann', NULL), (2, 'Bob', ''), (3, 'Cy', 'J');
+    source_emulation: |
+      -- Oracle || treats NULL as the empty string
+      SELECT customer_id, first_name || ' ' || coalesce(middle_name, '') FROM customer ORDER BY customer_id;
+    naive:
+      snowflake: SELECT customer_id, first_name || ' ' || middle_name AS display_name FROM customer ORDER BY customer_id;
+      expect: diverge
+    fixed:
+      snowflake: SELECT customer_id, first_name || ' ' || COALESCE(middle_name, '') AS display_name FROM customer ORDER BY customer_id;
+    fix_pattern: FX-OR-01-B
+    expected_rows: [[1, "Ann "], [2, "Bob "], [3, "Cy J"]]
+
+  - id: TC-OR-02-001
+    issue_id: OR-02
+    kind: golden
+    description: Unscaled NUMBER becomes NUMBER(38,0) and rounds prices
+    source_sql: |
+      CREATE TABLE fin.invoice_line (line_id NUMBER(10), unit_price NUMBER, qty NUMBER(5));
+      SELECT SUM(unit_price * qty) FROM fin.invoice_line;
+    fixture: |
+      CREATE TABLE invoice_line_stage (line_id INTEGER, unit_price DECIMAL(38,4), qty INTEGER);
+      INSERT INTO invoice_line_stage VALUES (1, 19.99, 3), (2, 0.25, 10), (3, 4.10, 1);
+    source_emulation: |
+      -- Oracle NUMBER without scale stores the decimals
+      SELECT SUM(unit_price * qty) FROM invoice_line_stage;
+    naive:
+      snowflake: |
+        CREATE TABLE invoice_line (line_id NUMBER(10), unit_price NUMBER, qty NUMBER(5));
+        INSERT INTO invoice_line SELECT line_id, unit_price, qty FROM invoice_line_stage;
+        SELECT SUM(unit_price * qty) FROM invoice_line;
+      expect: diverge
+    fixed:
+      snowflake: |
+        CREATE TABLE invoice_line (line_id NUMBER(10), unit_price NUMBER(38, 4), qty NUMBER(5));
+        INSERT INTO invoice_line SELECT line_id, unit_price, qty FROM invoice_line_stage;
+        SELECT SUM(unit_price * qty) FROM invoice_line;
+    fix_pattern: FX-OR-02-A
+    expected_rows: [[66.57]]
+
+  - id: TC-OR-03-001
+    issue_id: OR-03
+    kind: golden
+    description: Oracle DATE keeps the time of day; mapping to Snowflake DATE drops it
+    source_sql: |
+      CREATE TABLE sales.orders (order_id NUMBER(10), order_dt DATE);
+      SELECT COUNT(*) FROM sales.orders WHERE order_dt >= TO_DATE('2026-10-01 12:00', 'YYYY-MM-DD HH24:MI');
+    fixture: |
+      CREATE TABLE orders_stage (order_id INTEGER, order_dt TIMESTAMP);
+      INSERT INTO orders_stage VALUES (1, '2026-10-01 09:15:00'), (2, '2026-10-01 13:45:00'), (3, '2026-10-02 08:00:00');
+    source_emulation: |
+      SELECT COUNT(*) FROM orders_stage WHERE order_dt >= TIMESTAMP '2026-10-01 12:00:00';
+    naive:
+      snowflake: |
+        CREATE TABLE orders (order_id NUMBER(10), order_dt DATE);
+        INSERT INTO orders SELECT order_id, CAST(order_dt AS DATE) FROM orders_stage;
+        SELECT COUNT(*) FROM orders WHERE order_dt >= TO_TIMESTAMP('2026-10-01 12:00', 'YYYY-MM-DD HH24:MI');
+      expect: diverge
+    fixed:
+      snowflake: |
+        CREATE TABLE orders (order_id NUMBER(10), order_dt TIMESTAMP_NTZ);
+        INSERT INTO orders SELECT order_id, order_dt FROM orders_stage;
+        SELECT COUNT(*) FROM orders WHERE order_dt >= TO_TIMESTAMP('2026-10-01 12:00', 'YYYY-MM-DD HH24:MI');
+    fix_pattern: FX-OR-03-A
+    expected_rows: [[2]]
+
+  - id: TC-OR-08-001
+    issue_id: OR-08
+    kind: golden
+    description: TO_CHAR(date) without a format follows NLS_DATE_FORMAT in Oracle and DATE_OUTPUT_FORMAT in Snowflake
+    source_sql: |
+      ALTER SESSION SET NLS_DATE_FORMAT = 'DD-MON-RR';
+      SELECT order_id, TO_CHAR(order_dt) AS order_day FROM sales.orders ORDER BY order_id;
+    fixture: |
+      CREATE TABLE orders (order_id INTEGER, order_dt DATE);
+      INSERT INTO orders VALUES (1, '2026-10-01'), (2, '2026-12-25');
+    source_emulation: |
+      -- NLS_DATE_FORMAT = DD-MON-RR renders upper-case month abbreviations
+      SELECT order_id, upper(strftime(order_dt, '%d-%b-%y')) FROM orders ORDER BY order_id;
+    naive:
+      snowflake: SELECT order_id, TO_CHAR(order_dt) AS order_day FROM orders ORDER BY order_id;
+      expect: diverge
+    fixed:
+      snowflake: SELECT order_id, UPPER(TO_CHAR(order_dt, 'DD-MON-YY')) AS order_day FROM orders ORDER BY order_id;
+      duckdb: |
+        -- Snowflake TO_CHAR(d, 'DD-MON-YY') renders 'Oct'; UPPER restores the Oracle rendering
+        SELECT order_id, upper(strftime(order_dt, '%d-%b-%y')) AS order_day FROM orders ORDER BY order_id;
+    fix_pattern: FX-OR-08-A
+    expected_rows: [[1, "01-OCT-26"], [2, "25-DEC-26"]]

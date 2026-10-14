@@ -1,0 +1,240 @@
+dialect: sqlserver
+version: 1.0.0
+description: Microsoft SQL Server (incl. Azure SQL, Synapse dedicated pools) known-issues register (Section 10.3).
+known_issues:
+  - id: MS-01
+    source_dialect: sqlserver
+    title: Default case-insensitive collation; Snowflake is case-sensitive
+    severity: S1
+    checklist_items: [1, 7]
+    symptoms:
+      - "Filters on string literals return fewer rows"
+      - "GROUP BY produces separate groups for 'Active' and 'ACTIVE'; joins drop rows"
+    detection:
+      type: static_and_profile
+      static_rule: "String equality/IN/LIKE predicates, string join keys and GROUP BY on character columns; explicit *_CI_* collations"
+      profile_rule: "Database/column collation is case-insensitive (SQL_Latin1_General_CP1_CI_AS etc.)"
+      detector: static.ms_case_insensitive
+      extra_detectors: [profile.case_insensitive_columns]
+    fix_patterns:
+      - id: FX-MS-01-A
+        description: "Programme collation policy: COLLATE 'en-ci' on affected columns"
+        applies_when: "Policy = case_insensitive_collation"
+      - id: FX-MS-01-B
+        description: "Normalise case at ingestion or compare/group on UPPER(col); test joins, filters and GROUP BY"
+        applies_when: "Policy = normalise_case"
+    tests: [TC-MS-01-001, TC-MS-01-002, TC-MS-01-101]
+    validation_normalisation: "Case-fold string columns for L3 hashing only when policy normalise_case is applied"
+    mismatch_signatures: [case_only]
+    decision_required: true
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-sqlserver
+
+  - id: MS-02
+    source_dialect: sqlserver
+    title: DATETIME rounding (1/300 s, about 3 ms) vs Snowflake precision
+    severity: S1
+    checklist_items: [4]
+    symptoms:
+      - "End-of-day boundaries ('23:59:59.999') include next-day midnight rows in SQL Server only"
+      - "L3 timestamp mismatches in the milliseconds"
+    detection:
+      type: static_and_profile
+      static_rule: "DATETIME/SMALLDATETIME columns and variables, literals ending in .997/.998/.999, DATEADD(ms, -n, ...) boundaries"
+      profile_rule: "Source column type DATETIME"
+      detector: static.ms_datetime_precision
+      extra_detectors: [profile.datetime_columns]
+    fix_patterns:
+      - id: FX-MS-02-A
+        description: "Replace '.999' end-of-day literals by the value SQL Server actually used (next day 00:00:00.000) for parity, then move to half-open intervals with data-owner sign-off"
+        applies_when: "Report parity required during parallel run"
+      - id: FX-MS-02-B
+        description: "Explicit TIMESTAMP_NTZ(3) precision and L3 tolerance per rubric"
+        applies_when: "Reconciliation of migrated DATETIME columns"
+    tests: [TC-MS-02-001, TC-MS-02-101]
+    validation_normalisation: "Truncate timestamps to milliseconds before L3 hashing when policy datetime_tolerance is applied"
+    mismatch_signatures: [timestamp_precision]
+    decision_required: true
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-sqlserver
+
+  - id: MS-03
+    source_dialect: sqlserver
+    title: NOLOCK and isolation hints assume the locking model
+    severity: S4
+    checklist_items: []
+    symptoms:
+      - "Hints fail to convert or are silently meaningless"
+    detection:
+      type: static
+      static_rule: "WITH (NOLOCK), READUNCOMMITTED, HOLDLOCK, UPDLOCK, SET TRANSACTION ISOLATION LEVEL"
+      detector: static.ms_nolock
+    fix_patterns:
+      - id: FX-MS-03-A
+        description: "Remove hints; Snowflake uses snapshot semantics"
+        applies_when: "Always"
+    tests: [TC-MS-03-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-sqlserver
+
+  - id: MS-04
+    source_dialect: sqlserver
+    title: Implicit conversions (string to number, string to date)
+    severity: S1
+    checklist_items: [9, 11]
+    symptoms:
+      - "Date literals resolve to different days (SET DATEFORMAT dmy vs Snowflake AUTO)"
+      - "Comparisons between VARCHAR and numbers behave differently"
+    detection:
+      type: static
+      static_rule: "SET DATEFORMAT/LANGUAGE, ambiguous dd/mm literals, comparisons mixing string and numeric operands"
+      detector: static.ms_implicit_conversion
+    fix_patterns:
+      - id: FX-MS-04-A
+        description: "Explicit casts with format models, e.g. TO_DATE('01/10/2026', 'DD/MM/YYYY'); parser flags every implicit conversion"
+        applies_when: "Always"
+    tests: [TC-MS-04-001]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-sqlserver
+
+  - id: MS-05
+    source_dialect: sqlserver
+    title: Error handling with TRY/CATCH, @@ERROR, @@ROWCOUNT, RAISERROR
+    severity: S2
+    checklist_items: [12]
+    symptoms:
+      - "Converted procedures do not stop or roll back as before"
+    detection:
+      type: static
+      static_rule: "BEGIN TRY/CATCH, @@ERROR, @@ROWCOUNT, @@TRANCOUNT, RAISERROR, THROW"
+      detector: static.ms_error_handling
+    fix_patterns:
+      - id: FX-MS-05-A
+        description: "Snowflake Scripting EXCEPTION blocks and SQLROWCOUNT"
+        applies_when: "Always"
+    tests: [TC-MS-05-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-sqlserver
+
+  - id: MS-06
+    source_dialect: sqlserver
+    title: Dynamic SQL built from strings
+    severity: S2
+    checklist_items: []
+    symptoms:
+      - "Statically converted code still emits T-SQL at runtime"
+    detection:
+      type: static
+      static_rule: "EXEC(@sql), EXEC @sql, sp_executesql"
+      detector: static.ms_dynamic_sql
+    fix_patterns:
+      - id: FX-MS-06-A
+        description: "Static analysis + AI review of every generated string; EXECUTE IMMEDIATE with bind variables"
+        applies_when: "Always"
+    tests: [TC-MS-06-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-sqlserver
+
+  - id: MS-07
+    source_dialect: sqlserver
+    title: SSIS packages with script tasks (C#)
+    severity: S2
+    checklist_items: []
+    symptoms:
+      - "Business logic hidden in script tasks is lost by automated conversion"
+    detection:
+      type: static_and_profile
+      static_rule: "ScriptTask / ScriptComponent elements in .dtsx packages"
+      profile_rule: "SSISDB catalog reports packages with script tasks"
+      detector: static.ms_ssis_script_task
+      extra_detectors: [profile.ssis_script_tasks]
+    fix_patterns:
+      - id: FX-MS-07-A
+        description: "Re-engineer; never convert script tasks blindly"
+        applies_when: "Always"
+    tests: [TC-MS-07-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-sqlserver
+
+  - id: MS-08
+    source_dialect: sqlserver
+    title: Triggers and cascading foreign keys enforce integrity that Snowflake does not
+    severity: S1
+    checklist_items: [6]
+    symptoms:
+      - "Orphan child rows after deletes; duplicate keys accepted on insert"
+    detection:
+      type: static_and_profile
+      static_rule: "ON DELETE/UPDATE CASCADE, CREATE TRIGGER, PRIMARY KEY/UNIQUE/FOREIGN KEY/CHECK constraints"
+      profile_rule: "Enforced constraints and triggers in sys.foreign_keys / sys.triggers"
+      detector: static.constraints_enforcement
+      extra_detectors: [profile.unenforced_constraints]
+    fix_patterns:
+      - id: FX-MS-08-A
+        description: "Move cascades into pipeline logic (delete children first) and constraints into DQ rules"
+        applies_when: "Always"
+    tests: [TC-MS-08-001, TC-MS-08-101]
+    validation_normalisation: "None"
+    mismatch_signatures: [duplicate_rows, extra_rows]
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-sqlserver
+
+  - id: MS-09
+    source_dialect: sqlserver
+    title: Row-by-row OLTP patterns pointed at the warehouse
+    severity: S3
+    checklist_items: []
+    symptoms:
+      - "High credit burn from singleton DML"
+    detection:
+      type: static
+      static_rule: "Cursors, FETCH NEXT, WHILE loops with singleton DML"
+      detector: static.cursor_loops
+    fix_patterns:
+      - id: FX-MS-09-A
+        description: "Hybrid tables only for genuine OLTP-ish needs; otherwise set-based rewrite or keep OLTP elsewhere"
+        applies_when: "Always"
+    tests: [TC-MS-09-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-sqlserver
+
+  - id: MS-10
+    source_dialect: sqlserver
+    title: Synapse distribution and columnstore tuning emulation
+    severity: S3
+    checklist_items: []
+    symptoms:
+      - "Effort spent emulating distribution with no benefit"
+    detection:
+      type: static
+      static_rule: "DISTRIBUTION = HASH/ROUND_ROBIN/REPLICATE, CLUSTERED COLUMNSTORE INDEX, index DDL"
+      detector: static.ms_synapse_distribution
+    fix_patterns:
+      - id: FX-MS-10-A
+        description: "Remove; measure; cluster only if needed"
+        applies_when: "Always"
+    tests: [TC-MS-10-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-sqlserver

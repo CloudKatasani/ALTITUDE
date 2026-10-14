@@ -1,0 +1,18 @@
+dialect: sqlserver
+version: 1.0.0
+description: SQL Server to Snowflake conversion map (Section 10.3 highlights).
+mappings:
+  - {id: MAP-MS-001, category: procedural, source_construct: "T-SQL procedures", target_construct: "Snowflake Scripting / JavaScript / Python procedures", note: "", related_issues: [MS-05], last_verified: "2026-10-01", verified_by: practice-lead-sqlserver}
+  - {id: MAP-MS-002, category: ddl, source_construct: "#temp / ##global tables", target_construct: "Temporary tables", note: "", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-sqlserver}
+  - {id: MAP-MS-003, category: ddl, source_construct: "IDENTITY", target_construct: "AUTOINCREMENT / IDENTITY", note: "", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-sqlserver}
+  - {id: MAP-MS-004, category: types, source_construct: "DATETIME / DATETIME2 / DATETIMEOFFSET", target_construct: "TIMESTAMP_NTZ / TIMESTAMP_TZ", note: "DATETIME rounds to 1/300 s", related_issues: [MS-02], last_verified: "2026-10-01", verified_by: practice-lead-sqlserver}
+  - {id: MAP-MS-005, category: types, source_construct: "UNIQUEIDENTIFIER", target_construct: "VARCHAR(36) (+ UUID_STRING())", note: "", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-sqlserver}
+  - {id: MAP-MS-006, category: types, source_construct: "BIT", target_construct: "BOOLEAN", note: "", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-sqlserver}
+  - {id: MAP-MS-007, category: types, source_construct: "MONEY", target_construct: "NUMBER(19,4)", note: "", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-sqlserver}
+  - {id: MAP-MS-008, category: sql, source_construct: "CROSS/OUTER APPLY", target_construct: "LATERAL", note: "", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-sqlserver}
+  - {id: MAP-MS-009, category: sql, source_construct: "TOP n", target_construct: "LIMIT / TOP", note: "", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-sqlserver}
+  - {id: MAP-MS-010, category: scheduling, source_construct: "SQL Agent jobs", target_construct: "Tasks or external orchestrator", note: "", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-sqlserver}
+  - {id: MAP-MS-011, category: etl, source_construct: "SSIS", target_construct: "dbt + orchestrator / Openflow / Matillion etc.", note: "", related_issues: [MS-07], last_verified: "2026-10-01", verified_by: practice-lead-sqlserver}
+  - {id: MAP-MS-012, category: bi, source_construct: "SSRS", target_construct: "Power BI paginated / other BI", note: "", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-sqlserver}
+  - {id: MAP-MS-013, category: integration, source_construct: "Linked servers", target_construct: "Pipelines / external access", note: "", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-sqlserver}
+  - {id: MAP-MS-014, category: procedural, source_construct: "CLR assemblies", target_construct: "Java/Python UDFs or redesign", note: "", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-sqlserver}

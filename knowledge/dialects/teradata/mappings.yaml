@@ -1,0 +1,19 @@
+dialect: teradata
+version: 1.0.0
+description: Teradata to Snowflake conversion map (Section 10.1 highlights).
+mappings:
+  - {id: MAP-TD-001, category: ddl, source_construct: "MULTISET table", target_construct: "Table", note: "Direct", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-teradata}
+  - {id: MAP-TD-002, category: ddl, source_construct: "SET table", target_construct: "Table + explicit dedupe", note: "Snowflake has no SET semantics", related_issues: [TD-01], last_verified: "2026-10-01", verified_by: practice-lead-teradata}
+  - {id: MAP-TD-003, category: ddl, source_construct: "Primary Index / PPI / NUPI", target_construct: "None; clustering key only if justified", note: "Do not emulate distribution", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-teradata}
+  - {id: MAP-TD-004, category: ddl, source_construct: "Volatile table", target_construct: "Temporary table", note: "Session scope semantics differ slightly", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-teradata}
+  - {id: MAP-TD-005, category: procedural, source_construct: "Macro", target_construct: "Stored procedure / view", note: "", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-teradata}
+  - {id: MAP-TD-006, category: procedural, source_construct: "SPL stored procedure", target_construct: "Snowflake Scripting (SQL)", note: "Cursor logic to set-based where possible", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-teradata}
+  - {id: MAP-TD-007, category: scripting, source_construct: "BTEQ script", target_construct: "Snowflake SQL + orchestrator / Snowflake CLI", note: "Control flow (.IF ERRORCODE, .GOTO) must be rebuilt", related_issues: [TD-06], last_verified: "2026-10-01", verified_by: practice-lead-teradata}
+  - {id: MAP-TD-008, category: loading, source_construct: "FastLoad / MultiLoad / TPT", target_construct: "COPY INTO / Snowpipe / Openflow", note: "", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-teradata}
+  - {id: MAP-TD-009, category: sql, source_construct: "QUALIFY", target_construct: "QUALIFY", note: "Supported natively", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-teradata}
+  - {id: MAP-TD-010, category: sql, source_construct: "SAMPLE", target_construct: "SAMPLE / TABLESAMPLE", note: "Semantics differ", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-teradata}
+  - {id: MAP-TD-011, category: types, source_construct: "PERIOD types", target_construct: "Two date/timestamp columns", note: "", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-teradata}
+  - {id: MAP-TD-012, category: ddl, source_construct: "COLLECT STATISTICS", target_construct: "Remove", note: "Not applicable", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-teradata}
+  - {id: MAP-TD-013, category: types, source_construct: "NOT CASESPECIFIC columns", target_construct: "Collation spec or UPPER() normalisation", note: "See issues", related_issues: [TD-02], last_verified: "2026-10-01", verified_by: practice-lead-teradata}
+  - {id: MAP-TD-014, category: types, source_construct: "CHAR(n)", target_construct: "VARCHAR(n) with RTRIM at load", note: "Pad semantics differ", related_issues: [TD-03], last_verified: "2026-10-01", verified_by: practice-lead-teradata}
+  - {id: MAP-TD-015, category: types, source_construct: "TIMESTAMP(n) [WITH TIME ZONE]", target_construct: "TIMESTAMP_NTZ(n) / TIMESTAMP_TZ(n) per programme policy", note: "Decide time-zone policy upfront", related_issues: [TD-11], last_verified: "2026-10-01", verified_by: practice-lead-teradata}

@@ -1,0 +1,36 @@
+version: 1.0.0
+description: >
+  Validation levels applied by table tier (Section 12.3). Tier-1 = regulatory/financial/critical.
+  Modes: full | sample | none. Thresholds per tier are rubric references.
+levels:
+  - id: L0
+    name: Schema parity
+    description: Columns, type families, scale and nullability, mapped per conversion rules
+  - id: L1
+    name: Row counts
+    description: Overall and per partition/date
+  - id: L2
+    name: Column aggregates
+    description: Sum, min, max, count distinct, null count and string-length stats on normalised values
+  - id: L3
+    name: Row-level hash comparison
+    description: Keyed, normalised per drift rules; mismatch keys stay in-boundary
+  - id: L4
+    name: Business-output parity
+    description: Report/KPI values and query-result diffs on top production queries
+  - id: L5
+    name: Performance parity
+    description: Top queries p50/p95 vs baseline and SLA
+tiers:
+  - id: tier1
+    description: Regulatory, financial or critical tables
+    levels: {L0: full, L1: full, L2: full, L3: full, L4: full, L5: full}
+    threshold_ref: rubric.validation.thresholds.tier1
+  - id: tier2
+    description: Important tables
+    levels: {L0: full, L1: full, L2: full, L3: sample, L4: full, L5: full}
+    threshold_ref: rubric.validation.thresholds.tier2
+  - id: tier3
+    description: Everything else
+    levels: {L0: full, L1: full, L2: sample, L3: none, L4: none, L5: none}
+    threshold_ref: rubric.validation.thresholds.tier3

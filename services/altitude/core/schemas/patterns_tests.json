@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pattern Library: golden and detector test cases",
+  "description": "Golden tests: input source code -> expected Snowflake code (fix applied) -> expected results on synthetic data. Source semantics are emulated in DuckDB; the naive conversion must diverge and the fix must converge. Detector tests assert hits and non-hits of the semantic-drift checker.",
+  "x-altitude-globs": ["dialects/*/tests/*.yaml"],
+  "type": "object",
+  "required": ["dialect", "test_cases"],
+  "additionalProperties": false,
+  "properties": {
+    "dialect": {"type": "string"},
+    "description": {"type": "string"},
+    "test_cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "issue_id", "kind", "description", "source_sql"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^TC-[A-Z]{2}-\\d{2}-\\d{3}$"},
+          "issue_id": {"type": "string", "pattern": "^[A-Z]{2}-\\d{2}$"},
+          "kind": {"enum": ["golden", "detector", "profile"]},
+          "description": {"type": "string"},
+          "scan_dialect": {"type": "string"},
+          "source_sql": {"type": "string"},
+          "profile": {"type": "object"},
+          "expect_issues": {"type": "array", "items": {"type": "string"}},
+          "expect_absent": {"type": "array", "items": {"type": "string"}},
+          "expect_lines": {
+            "type": "object",
+            "description": "Exact set of source lines the checker must report per issue id",
+            "additionalProperties": {"type": "array", "items": {"type": "integer", "minimum": 1}}
+          },
+          "fixture": {"type": "string"},
+          "source_emulation": {"type": "string"},
+          "naive": {"$ref": "#/$defs/conversion"},
+          "fixed": {"$ref": "#/$defs/conversion"},
+          "fix_pattern": {"type": "string", "pattern": "^FX-[A-Z]{2}-\\d{2}-[A-Z]$"},
+          "expected_rows": {"type": "array", "items": {"type": "array"}}
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"kind": {"const": "golden"}}},
+            "then": {"required": ["fixture", "source_emulation", "naive", "fixed", "fix_pattern", "expected_rows"]}
+          },
+          {
+            "if": {"properties": {"kind": {"const": "profile"}}},
+            "then": {"required": ["profile", "expect_issues"]}
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "conversion": {
+      "type": "object",
+      "required": ["snowflake"],
+      "additionalProperties": false,
+      "properties": {
+        "snowflake": {"type": "string", "description": "Snowflake SQL; parsed with sqlglot (snowflake) and transpiled to DuckDB for execution"},
+        "duckdb": {"type": "string", "description": "Explicit DuckDB emulation of the Snowflake semantics when transpilation cannot express them"},
+        "expect": {"enum": ["diverge", "error"]},
+        "note": {"type": "string"}
+      }
+    }
+  }
+}
