@@ -1,0 +1,193 @@
+{
+  "_generated": "AUTO-GENERATED — DO NOT EDIT. Source: altitude.diagnostics.bootstrap",
+  "administrative_roles_used": [
+    "SECURITYADMIN",
+    "SYSADMIN",
+    "USERADMIN"
+  ],
+  "client_supplied": [
+    "BI_MEASURES",
+    "BI_REPORTS",
+    "CLIENT_INPUTS"
+  ],
+  "close_out": "teardown.sql: hand over the access log, then revoke and drop every diagnostics object.",
+  "credit_cap": {
+    "credits": 50,
+    "notify_at_percent": 75,
+    "rubric_ref": "rubric.diagnostics.access.credit_budget",
+    "suspend_at_percent": 100
+  },
+  "data_handling": "Metadata only: ACCOUNT_USAGE / SHOW output. Row data never leaves the account.",
+  "evidence_unlocked": {
+    "(session context)": [
+      "ACCOUNT_INFO"
+    ],
+    "MONITOR EXECUTION": [
+      "ALERTS",
+      "TASKS"
+    ],
+    "MONITOR USAGE": [
+      "REPLICATION_GROUPS",
+      "RESOURCE_MONITORS",
+      "WAREHOUSES"
+    ],
+    "SNOWFLAKE.DATA_QUALITY_MONITORING_VIEWER (optional)": [
+      "DATA_QUALITY_MONITORING_RESULTS"
+    ],
+    "SNOWFLAKE.GOVERNANCE_VIEWER": [
+      "ACCESS_HISTORY",
+      "DATA_METRIC_FUNCTION_REFERENCES",
+      "POLICY_REFERENCES",
+      "QUERY_HISTORY",
+      "TAG_REFERENCES"
+    ],
+    "SNOWFLAKE.OBJECT_VIEWER": [
+      "COLUMNS",
+      "CORTEX_SEARCH_SERVICES",
+      "OBJECT_DEPENDENCIES",
+      "SEMANTIC_VIEWS",
+      "TABLES",
+      "VIEWS"
+    ],
+    "SNOWFLAKE.SECURITY_VIEWER": [
+      "GRANTS_TO_ROLES",
+      "GRANTS_TO_USERS",
+      "LOGIN_HISTORY",
+      "NETWORK_POLICIES",
+      "ROLES",
+      "USERS"
+    ],
+    "SNOWFLAKE.USAGE_VIEWER": [
+      "AUTOMATIC_CLUSTERING_HISTORY",
+      "BUDGETS",
+      "COPY_HISTORY",
+      "CORTEX_USAGE_HISTORY",
+      "MATERIALIZED_VIEW_REFRESH_HISTORY",
+      "METERING_DAILY_HISTORY",
+      "PIPE_USAGE_HISTORY",
+      "QUERY_ATTRIBUTION_HISTORY",
+      "SEARCH_OPTIMIZATION_HISTORY",
+      "STORAGE_USAGE",
+      "TABLE_STORAGE_METRICS",
+      "TASK_HISTORY",
+      "WAREHOUSE_LOAD_HISTORY",
+      "WAREHOUSE_METERING_HISTORY"
+    ]
+  },
+  "never_requested": [
+    "account administrator or organisation administrator roles",
+    "any privilege on client databases, schemas, tables, views or stages (no SELECT on row data)",
+    "INSERT / UPDATE / DELETE / TRUNCATE / OWNERSHIP / MODIFY / OPERATE on any client object",
+    "USAGE on client warehouses"
+  ],
+  "notes": [
+    "Verify SNOWFLAKE database role names and view availability (edition) against current documentation.",
+    "Some accounts restrict CREATE RESOURCE MONITOR to the account owner: the platform owner then runs section 3 under their own change process; the diagnostics principal still never receives elevated roles.",
+    "DATA_QUALITY_MONITORING_RESULTS needs the optional SNOWFLAKE.DATA_QUALITY_MONITORING_VIEWER application role; without it the source is recorded as unavailable and confidence is lowered."
+  ],
+  "principal": {
+    "authentication": "key-pair (RSA); no password",
+    "resource_monitor": "ALTITUDE_DIAG_RM",
+    "role": "ALTITUDE_DIAG_ROLE",
+    "user": "ALTITUDE_DIAG_SVC",
+    "warehouse": "ALTITUDE_DIAG_WH"
+  },
+  "privileges": [
+    {
+      "granted_to": "(setup)",
+      "on": "account",
+      "privilege": "CREATE ROLE",
+      "read_only": true,
+      "statement": "CREATE ROLE IF NOT EXISTS ALTITUDE_DIAG_ROLE COMMENT = 'Read-only metadata diagnostics (Package D); revoked at close'",
+      "why": "Dedicated, revocable principal so access is isolated and auditable."
+    },
+    {
+      "granted_to": "ALTITUDE_DIAG_ROLE",
+      "on": "SNOWFLAKE database",
+      "privilege": "DATABASE ROLE SNOWFLAKE.USAGE_VIEWER",
+      "read_only": true,
+      "statement": "GRANT DATABASE ROLE SNOWFLAKE.USAGE_VIEWER TO ROLE ALTITUDE_DIAG_ROLE",
+      "why": "Metering, warehouse load, storage, task/copy/pipe and serverless histories (cost, performance, reliability)."
+    },
+    {
+      "granted_to": "ALTITUDE_DIAG_ROLE",
+      "on": "SNOWFLAKE database",
+      "privilege": "DATABASE ROLE SNOWFLAKE.GOVERNANCE_VIEWER",
+      "read_only": true,
+      "statement": "GRANT DATABASE ROLE SNOWFLAKE.GOVERNANCE_VIEWER TO ROLE ALTITUDE_DIAG_ROLE",
+      "why": "Query history, access history, tag and policy references, data metric function references."
+    },
+    {
+      "granted_to": "ALTITUDE_DIAG_ROLE",
+      "on": "SNOWFLAKE database",
+      "privilege": "DATABASE ROLE SNOWFLAKE.OBJECT_VIEWER",
+      "read_only": true,
+      "statement": "GRANT DATABASE ROLE SNOWFLAKE.OBJECT_VIEWER TO ROLE ALTITUDE_DIAG_ROLE",
+      "why": "Object inventory: tables, columns, views, dependencies, semantic views, search services."
+    },
+    {
+      "granted_to": "ALTITUDE_DIAG_ROLE",
+      "on": "SNOWFLAKE database",
+      "privilege": "DATABASE ROLE SNOWFLAKE.SECURITY_VIEWER",
+      "read_only": true,
+      "statement": "GRANT DATABASE ROLE SNOWFLAKE.SECURITY_VIEWER TO ROLE ALTITUDE_DIAG_ROLE",
+      "why": "Users, roles, grants, login history and network policies."
+    },
+    {
+      "granted_to": "ALTITUDE_DIAG_ROLE",
+      "on": "account",
+      "privilege": "MONITOR USAGE",
+      "read_only": true,
+      "statement": "GRANT MONITOR USAGE ON ACCOUNT TO ROLE ALTITUDE_DIAG_ROLE",
+      "why": "SHOW WAREHOUSES / RESOURCE MONITORS / REPLICATION GROUPS see every object (configuration only, no data)."
+    },
+    {
+      "granted_to": "ALTITUDE_DIAG_ROLE",
+      "on": "account",
+      "privilege": "MONITOR EXECUTION",
+      "read_only": true,
+      "statement": "GRANT MONITOR EXECUTION ON ACCOUNT TO ROLE ALTITUDE_DIAG_ROLE",
+      "why": "SHOW TASKS / ALERTS across the account (definitions and state; cannot run or change them)."
+    },
+    {
+      "granted_to": "(setup)",
+      "on": "account",
+      "privilege": "CREATE WAREHOUSE",
+      "read_only": true,
+      "statement": "CREATE WAREHOUSE IF NOT EXISTS ALTITUDE_DIAG_WH WITH WAREHOUSE_SIZE = 'XSMALL' AUTO_SUSPEND = 60 AUTO_RESUME = TRUE INITIALLY_SUSPENDED = TRUE STATEMENT_TIMEOUT_IN_SECONDS = 3600 COMMENT = 'Package D diagnostics; dropped at close'",
+      "why": "Isolated compute so diagnostics never consume or queue on client warehouses."
+    },
+    {
+      "granted_to": "(setup)",
+      "on": "account",
+      "privilege": "CREATE RESOURCE MONITOR",
+      "read_only": true,
+      "statement": "CREATE RESOURCE MONITOR IF NOT EXISTS ALTITUDE_DIAG_RM WITH CREDIT_QUOTA = 50 FREQUENCY = NEVER START_TIMESTAMP = IMMEDIATELY TRIGGERS ON 75 PERCENT DO NOTIFY ON 100 PERCENT DO SUSPEND_IMMEDIATE",
+      "why": "Hard cap of 50 credits agreed upfront (rubric.diagnostics.access.credit_budget)."
+    },
+    {
+      "granted_to": "ALTITUDE_DIAG_ROLE",
+      "on": "WAREHOUSE ALTITUDE_DIAG_WH",
+      "privilege": "USAGE",
+      "read_only": true,
+      "statement": "GRANT USAGE ON WAREHOUSE ALTITUDE_DIAG_WH TO ROLE ALTITUDE_DIAG_ROLE",
+      "why": "Run the read-only harvest queries on the capped diagnostics warehouse (and no other)."
+    },
+    {
+      "granted_to": "(setup)",
+      "on": "account",
+      "privilege": "CREATE USER",
+      "read_only": true,
+      "statement": "CREATE USER IF NOT EXISTS ALTITUDE_DIAG_SVC TYPE = SERVICE DEFAULT_ROLE = ALTITUDE_DIAG_ROLE DEFAULT_WAREHOUSE = ALTITUDE_DIAG_WH RSA_PUBLIC_KEY = '<RSA_PUBLIC_KEY_FROM_CLIENT_VAULT>' COMMENT = 'Package D diagnostics service user; disabled at close'",
+      "why": "Key-pair authenticated service identity; no password, no interactive login."
+    },
+    {
+      "granted_to": "ALTITUDE_DIAG_SVC",
+      "on": "USER ALTITUDE_DIAG_SVC",
+      "privilege": "ROLE ALTITUDE_DIAG_ROLE",
+      "read_only": true,
+      "statement": "GRANT ROLE ALTITUDE_DIAG_ROLE TO USER ALTITUDE_DIAG_SVC",
+      "why": "The service user can only assume the read-only diagnostics role."
+    }
+  ]
+}
