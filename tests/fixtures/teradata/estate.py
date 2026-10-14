@@ -99,6 +99,24 @@ def _cadence(c: str) -> list[date]:
     return out
 
 
+def bulk_insert(con: duckdb.DuckDBPyConnection, table: str, rows: list[tuple]) -> None:
+    """Fast load of fixture rows (columns by position) through an Arrow scan."""
+    if not rows:
+        return
+    import pyarrow as pa
+
+    cols = list(zip(*rows))
+    batch = pa.table({f"c{i}": [None if v is None else str(v) if isinstance(v, (int, float)) and not isinstance(v, bool)
+                                else v for v in col] for i, col in enumerate(cols)})  # noqa: F841
+    names = [r[0] for r in con.execute(f"DESCRIBE {table}").fetchall()]
+    select = ", ".join(f'CAST(c{i} AS {t}) ' for i, t in enumerate(_types(con, table)))
+    con.execute(f"INSERT INTO {table} ({', '.join(names)}) SELECT {select} FROM batch")
+
+
+def _types(con: duckdb.DuckDBPyConnection, table: str) -> list[str]:
+    return [r[1] for r in con.execute(f"DESCRIBE {table}").fetchall()]
+
+
 def build(*, user_data: bool = True) -> duckdb.DuckDBPyConnection:
     con = duckdb.connect()
     x = con.execute
@@ -118,8 +136,7 @@ def build(*, user_data: bool = True) -> duckdb.DuckDBPyConnection:
       "GrantorName VARCHAR)")
 
     def ins(table: str, rows: list[tuple]) -> None:
-        if rows:
-            con.executemany(f"INSERT INTO {table} VALUES ({', '.join('?' for _ in rows[0])})", rows)
+        bulk_insert(con, table, rows)
 
     ins("DBC.DBCInfoV", [("VERSION", "17.20.03.15"), ("RELEASE", "17.20.03.15"), ("LANGUAGE SUPPORT MODE", "Standard")])
     ins("DBC.TablesV", [(db, name, kind, datetime(2016, 5, 1) + timedelta(days=i * 31), datetime(2024, 2, 1), text, None)

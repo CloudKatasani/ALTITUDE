@@ -243,6 +243,24 @@ def _cadence_dates(cadence: str | None) -> list[date]:
     return []
 
 
+def bulk_insert(con: duckdb.DuckDBPyConnection, table: str, rows: list[tuple]) -> None:
+    """Fast load of fixture rows (columns by position) through an Arrow scan."""
+    if not rows:
+        return
+    import pyarrow as pa
+
+    cols = list(zip(*rows))
+    batch = pa.table({f"c{i}": [None if v is None else str(v) if isinstance(v, (int, float)) and not isinstance(v, bool)
+                                else v for v in col] for i, col in enumerate(cols)})  # noqa: F841
+    names = [r[0] for r in con.execute(f"DESCRIBE {table}").fetchall()]
+    select = ", ".join(f'CAST(c{i} AS {t}) ' for i, t in enumerate(_types(con, table)))
+    con.execute(f"INSERT INTO {table} ({', '.join(names)}) SELECT {select} FROM batch")
+
+
+def _types(con: duckdb.DuckDBPyConnection, table: str) -> list[str]:
+    return [r[1] for r in con.execute(f"DESCRIBE {table}").fetchall()]
+
+
 def build(*, query_store: bool = True, user_data: bool = True) -> duckdb.DuckDBPyConnection:
     con = duckdb.connect()
     x = con.execute
@@ -300,8 +318,8 @@ def build(*, query_store: bool = True, user_data: bool = True) -> duckdb.DuckDBP
     x("CREATE TABLE SSISDB.catalog.executions (execution_id INTEGER, folder_name VARCHAR, project_name VARCHAR, "
       "package_name VARCHAR, status INTEGER, start_time TIMESTAMP, executed_as_name VARCHAR)")
 
-    ins = lambda table, rows: rows and con.executemany(  # noqa: E731
-        f"INSERT INTO {table} VALUES ({', '.join('?' for _ in rows[0])})", rows)
+    def ins(table: str, rows: list[tuple]) -> None:
+        bulk_insert(con, table, rows)
 
     ins("sys.schemas", [(sid, name, 1) for name, sid in SCHEMAS.items()])
     type_ids: dict[str, int] = {}
