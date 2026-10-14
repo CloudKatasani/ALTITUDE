@@ -9,15 +9,28 @@
   {% if live %}
   <form class="contact card" method="post" action="/contact">
   {% else %}
-  <form class="contact card" method="get" action="mailto:{{ theme.SUPPORT_EMAIL }}" enctype="text/plain">
+  <form class="contact card" id="contact-form" novalidate>
   {% endif %}
-    <label>Name<input name="name" required autocomplete="name"></label>
-    <label>Work email<input name="email" type="email" required autocomplete="email"></label>
-    <label>Company<input name="company" required autocomplete="organization"></label>
-    <label>Annual Snowflake spend<select name="spend"><option>Under $250K</option><option>$250K–$1M</option><option>$1M–$5M</option><option>Over $5M</option><option>Not on Snowflake yet</option></select></label>
-    <label>What brings you here?<select name="interest">{% for o in offers %}<option value="{{ o.id }}" {% if o.id == "OFF-D0" %}selected{% endif %}>{{ o.name }}</option>{% endfor %}</select></label>
-    <label>Anything we should know?<textarea name="message" rows="4"></textarea></label>
+    <label>Name<input id="f-name" name="name" required autocomplete="name"></label>
+    <label>Work email<input id="f-email" name="email" type="email" required autocomplete="email"></label>
+    <label>Company<input id="f-company" name="company" required autocomplete="organization"></label>
+    <label>Annual Snowflake spend<select id="f-spend" name="spend"><option>Under $250K</option><option>$250K–$1M</option><option>$1M–$5M</option><option>Over $5M</option><option>Not on Snowflake yet</option></select></label>
+    <label>What brings you here?<select id="f-interest" name="interest">{% for o in offers %}<option value="{{ o.id }}" {% if o.id == "OFF-D0" %}selected{% endif %}>{{ o.name }}</option>{% endfor %}</select></label>
+    <label>Anything we should know?<textarea id="f-message" name="message" rows="4"></textarea></label>
     <button class="btn" type="submit">Request my snapshot</button>
+    {% if not live %}
+    <div class="callout form-note" id="contact-note" hidden role="status"></div>
+    <script>
+      document.getElementById("contact-form").addEventListener("submit", function (e) {
+        e.preventDefault();
+        var form = e.currentTarget, note = document.getElementById("contact-note");
+        if (!form.checkValidity()) { form.reportValidity(); return; }
+        note.hidden = false;
+        note.innerHTML = "<b>Almost there.</b> This preview can't send messages. Email your request to " +
+          "<b style=\"user-select: all\">{{ theme.SUPPORT_EMAIL }}</b> and we'll reply within one business day.";
+      });
+    </script>
+    {% endif %}
   </form>
   <div>
     <h2>What happens next</h2>

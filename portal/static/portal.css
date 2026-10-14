@@ -1,5 +1,5 @@
 * { box-sizing: border-box; }
-body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--text); background: var(--surface); }
+body { margin: 0; font-family: var(--font-body); color: var(--text); background: var(--surface); }
 header.top { display: flex; gap: 1.5rem; align-items: center; padding: .75rem 1.5rem; background: var(--primary); color: white; flex-wrap: wrap; }
 header.top a { color: white; text-decoration: none; opacity: .9; }
 header.top .brand { font-weight: 700; font-size: 1.15rem; opacity: 1; }
@@ -43,3 +43,4 @@ form.facts legend { font-weight: 600; padding-right: .5rem; }
 form.facts small { display: block; margin-top: .15rem; font-size: .78rem; }
 form.facts label.invalid input, form.facts label.invalid select { border-color: var(--danger); }
 small.error { color: var(--danger); opacity: 1; }
+h1, h2, h3, header.top .brand, .kpi b { font-family: var(--font-display); letter-spacing: -0.01em; }

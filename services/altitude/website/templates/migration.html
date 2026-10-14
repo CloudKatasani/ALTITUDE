@@ -9,7 +9,7 @@
 
 <section class="block"><div class="wrap">
   <h2>Eight phases, evidence-based gates</h2>
-  <div class="journey" style="grid-template-columns: repeat(4, 1fr)">
+  <div class="journey j4">
     {% for name, gate in [("0 · Discover", "Sponsor signs off objectives and success KPIs"), ("1 · Assess", "≥95% of objects classified; business case approved"), ("2 · Plan", "Wave 1 frozen; architecture board approval"), ("3 · Foundation", "Well-Architected baseline checks pass"), ("4 · Convert", "Zero open P1 issues; every AI change reviewed"), ("5 · Move & validate", "Reconciliation thresholds met per table tier"), ("6 · Cutover", "Business sign-off; rollback rehearsed"), ("7 · Operate & decommission", "Legacy off; savings booked")] %}
     <a><b>{{ name }}</b><span>{{ gate }}</span></a>{% endfor %}
   </div>

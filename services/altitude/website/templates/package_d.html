@@ -50,7 +50,7 @@
       <tr><th>Hygiene</th><td>Low value, low effort — batched sprint</td><td class="num"><b>{{ s.quadrants.hygiene }}</b></td></tr>
       <tr><th>Defer</th><td>Low value, high effort — backlog with rationale</td><td class="num"><b>{{ s.quadrants.defer }}</b></td></tr>
       </tbody></table>
-      <p style="margin-top:14px"><a href="samples/diagnostic_report.html">Open the full sample report</a> · <a href="samples/findings_register.csv">Download the findings register (CSV)</a></p>
+      <p style="margin-top:14px"><a href="samples/diagnostic_report.html">Open the full sample report</a>{% if live %} · <a href="samples/findings_register.csv">Download the findings register (CSV)</a>{% endif %}</p>
     </div>
   </div>
   <h3 style="margin-top:30px">Top ten suggestions</h3>

@@ -61,6 +61,13 @@ def _price(o: dict) -> str:
     return _usd_range(fee)
 
 
+def _scrollable_tables(html: str) -> str:
+    """Give every table its own horizontal scroll container so the page never scrolls sideways on phones."""
+    import re
+
+    return re.sub(r"(<table\b.*?</table>)", r'<div class="scroll">\1</div>', html, flags=re.S)
+
+
 def _env(theme: str | None) -> Environment:
     env = Environment(loader=FileSystemLoader(str(TEMPLATES)), autoescape=select_autoescape(["html"]))
     env.filters["usd"] = _usd
@@ -71,7 +78,7 @@ def _env(theme: str | None) -> Environment:
     return env
 
 
-def context(samples: dict, theme: str | None = None, live: bool = False) -> dict:
+def context(samples: dict, theme: str | None = None, live: bool = False, bare: bool = False) -> dict:
     cat = load_yaml("commercial/catalog.yaml")
     rs = default_rubrics()
     return {
@@ -81,30 +88,36 @@ def context(samples: dict, theme: str | None = None, live: bool = False) -> dict
         "guardrails": {"value_floor_multiple": rs.get("rubric.commercial.value_floor_multiple"),
                        "fee_credit_window_days": rs.get("rubric.commercial.fee_credit_window_days"),
                        "qualification_min_annual_spend_usd": rs.get("rubric.commercial.qualification_min_annual_spend_usd")},
-        "s": samples, "nav": [(f, label) for f, _, label, _ in PAGES if label], "live": live,
+        "s": samples, "nav": [(f, label) for f, _, label, _ in PAGES if label], "live": live, "bare": bare,
     }
 
 
-def render_site(samples: dict, theme: str | None = None, live: bool = False) -> dict[str, str]:
+def render_site(samples: dict, theme: str | None = None, live: bool = False,
+                bare_index: bool = False) -> dict[str, str]:
+    """``bare_index`` renders index.html without the document wrapper (for hosts that supply it)."""
     env = _env(theme)
-    ctx = context(samples, theme, live)
     out = {}
     for file, template, _label, title in PAGES:
+        ctx = context(samples, theme, live, bare=bare_index and file == "index.html")
         html = env.get_template(template).render(page=file, title=title, **ctx)
+        html = _scrollable_tables(html)
+        if bare_index:  # the host serves the home page at the artifact root, not as index.html
+            html = html.replace('href="index.html"', 'href="./"')
         out[file] = render_tokens(html, theme)
     out["assets/site.css"] = (TEMPLATES / "site.css").read_text()
     out["samples/summary.json"] = json.dumps(samples, indent=2, sort_keys=True, default=str) + "\n"
     return out
 
 
-def build_site(out_dir: str | Path, theme: str | None = None, cache_dir: str | Path | None = None) -> list[str]:
+def build_site(out_dir: str | Path, theme: str | None = None, cache_dir: str | Path | None = None,
+               bare_index: bool = False) -> list[str]:
     """Compute samples and write a self-contained static site (relative links) to ``out_dir``."""
     from .samples import collect
 
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     samples = collect(cache_dir or out.parent / f"{out.name}_cache", out)
-    files = render_site(samples, theme)
+    files = render_site(samples, theme, bare_index=bare_index)
     for rel, content in files.items():
         p = out / rel
         p.parent.mkdir(parents=True, exist_ok=True)
