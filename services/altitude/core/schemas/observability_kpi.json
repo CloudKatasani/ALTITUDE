@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Package O KPI catalogue (Section 7.4)",
+  "x-altitude-globs": ["observability/kpis/*.yaml"],
+  "type": "object",
+  "required": ["version", "kpis"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "kpis": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "domain", "tier", "status", "definition", "unit", "grain", "dimension",
+                     "aggregation", "direction", "sources", "freshness_sla_ref", "owner_role", "waf_pillar",
+                     "linked_checks"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^KPI-(COST|PERF|REL|SEC|GOV|USE|AI|PHI)-\\d{3}$"},
+          "name": {"type": "string", "minLength": 3},
+          "domain": {"enum": ["cost", "performance", "reliability", "security", "governance", "usage", "ai", "health"]},
+          "tier": {"enum": ["core", "extended", "advanced"]},
+          "status": {"enum": ["implemented", "planned"]},
+          "engine": {"enum": ["sql", "python"]},
+          "definition": {"type": "string", "minLength": 10},
+          "unit": {"type": "string"},
+          "grain": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+          "dimension": {"type": "string"},
+          "aggregation": {"enum": ["sum", "avg", "max", "min", "latest"]},
+          "direction": {"enum": ["lower_is_better", "higher_is_better", "neutral"]},
+          "sources": {"type": "array", "items": {"type": "string"}},
+          "freshness_sla_ref": {"type": "string", "pattern": "^rubric\\.obs\\."},
+          "target_ref": {"type": "string", "pattern": "^rubric\\.obs\\."},
+          "owner_role": {"type": "string"},
+          "waf_pillar": {"enum": ["cost_optimization", "performance_efficiency", "reliability", "security_governance",
+                                  "operational_excellence"]},
+          "linked_checks": {"type": "array", "items": {"type": "string", "pattern": "^DX-[A-Z]+-\\d{2}$"}},
+          "synonyms": {"type": "array", "items": {"type": "string"}},
+          "measures": {"type": "array", "items": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"}},
+          "realised_value": {
+            "type": "object", "required": ["basis_kpi"], "additionalProperties": false,
+            "properties": {"basis_kpi": {"type": "string", "pattern": "^KPI-"}}
+          },
+          "alert": {
+            "type": "object", "required": ["threshold_ref", "route_ref", "runbook"], "additionalProperties": false,
+            "properties": {
+              "threshold_ref": {"type": "string"},
+              "route_ref": {"type": "string", "pattern": "^tenant\\.alert_routes\\."},
+              "runbook": {"type": "string", "pattern": "^RB-"}
+            }
+          },
+          "sql": {"type": "string", "minLength": 10}
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"status": {"const": "implemented"}, "engine": {"const": "python"}},
+                   "required": ["status", "engine"]},
+            "then": {"required": ["synonyms"]},
+            "else": {
+              "if": {"properties": {"status": {"const": "implemented"}}},
+              "then": {"required": ["sql", "synonyms"]}
+            }
+          }
+        ]
+      }
+    }
+  }
+}

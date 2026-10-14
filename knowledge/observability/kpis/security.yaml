@@ -1,0 +1,282 @@
+# KPI catalogue — Security & Access (Section 7.4). Snapshot KPIs have one value per harvest day (PERIOD).
+version: 1.0.0
+kpis:
+  - id: KPI-SEC-001
+    name: MFA coverage
+    domain: security
+    tier: core
+    status: implemented
+    definition: >-
+      Share of enabled human users protected by MFA: HAS_MFA, or SSO-only users without a password (MFA enforced by
+      the identity provider).
+    unit: ratio
+    grain: [account, day]
+    dimension: none
+    aggregation: latest
+    direction: higher_is_better
+    sources: [USERS]
+    freshness_sla_ref: rubric.obs.freshness.security
+    target_ref: rubric.obs.kpi_targets.mfa_coverage_min
+    owner_role: SECURITY_LEAD
+    waf_pillar: security_governance
+    linked_checks: [DX-SEC-01]
+    synonyms: [mfa, multi factor, 2fa, mfa coverage, two factor]
+    measures: [HUMANS, COVERED]
+    sql: >-
+      SELECT ACCOUNT_NAME, SNAPSHOT_DATE AS PERIOD, '' AS DIMENSION,
+             avg(CASE WHEN HAS_MFA OR (EXT_AUTHN_UID IS NOT NULL AND NOT coalesce(HAS_PASSWORD, FALSE)) THEN 1.0 ELSE 0.0 END) AS VALUE,
+             count(*) AS HUMANS,
+             count(*) FILTER (WHERE HAS_MFA OR (EXT_AUTHN_UID IS NOT NULL AND NOT coalesce(HAS_PASSWORD, FALSE))) AS COVERED
+      FROM CURATED.SNAP_USERS
+      WHERE coalesce(TYPE, 'PERSON') = 'PERSON' AND NOT coalesce(DISABLED, FALSE)
+      GROUP BY 1, 2
+
+  - id: KPI-SEC-002
+    name: ACCOUNTADMIN grantees
+    domain: security
+    tier: core
+    status: implemented
+    definition: Number of users granted the ACCOUNTADMIN role, per snapshot day.
+    unit: users
+    grain: [account, day]
+    dimension: none
+    aggregation: latest
+    direction: lower_is_better
+    sources: [GRANTS_TO_USERS]
+    freshness_sla_ref: rubric.obs.freshness.security
+    target_ref: rubric.obs.kpi_targets.accountadmin_max
+    owner_role: SECURITY_LEAD
+    waf_pillar: security_governance
+    linked_checks: [DX-SEC-02]
+    synonyms: [accountadmin, account admin, admins, privileged users, administrators]
+    sql: >-
+      SELECT h.ACCOUNT_NAME, h.SNAPSHOT_DATE AS PERIOD, '' AS DIMENSION, count(DISTINCT g.GRANTEE_NAME) AS VALUE
+      FROM CURATED.SNAPSHOT_HARVEST h
+      LEFT JOIN CURATED.SNAP_GRANTS_TO_USERS g ON g.ACCOUNT_NAME = h.ACCOUNT_NAME AND g.SNAPSHOT_DATE = h.SNAPSHOT_DATE
+       AND g.ROLE = 'ACCOUNTADMIN'
+      WHERE h.SOURCE_TABLE = 'GRANTS_TO_USERS' GROUP BY 1, 2
+
+  - id: KPI-SEC-003
+    name: Failed logins
+    domain: security
+    tier: core
+    status: implemented
+    definition: Number of failed login attempts per account and day.
+    unit: logins
+    grain: [account, day]
+    dimension: none
+    aggregation: sum
+    direction: lower_is_better
+    sources: [LOGIN_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.security
+    owner_role: SECURITY_LEAD
+    waf_pillar: security_governance
+    linked_checks: [DX-SEC-01]
+    synonyms: [failed logins, login failures, brute force, authentication failures]
+    measures: [USERS_AFFECTED, SOURCE_IPS]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, '' AS DIMENSION, count(*) FILTER (WHERE NOT IS_SUCCESS) AS VALUE,
+             count(DISTINCT CASE WHEN NOT IS_SUCCESS THEN USER_NAME END) AS USERS_AFFECTED,
+             count(DISTINCT CASE WHEN NOT IS_SUCCESS THEN CLIENT_IP END) AS SOURCE_IPS
+      FROM CURATED.FACT_LOGIN GROUP BY 1, 2
+
+  - id: KPI-SEC-004
+    name: Dormant users
+    domain: security
+    tier: extended
+    status: implemented
+    definition: Enabled human users with no successful login within the rubric dormancy window, per snapshot day.
+    unit: users
+    grain: [account, day]
+    dimension: none
+    aggregation: latest
+    direction: lower_is_better
+    sources: [USERS]
+    freshness_sla_ref: rubric.obs.freshness.security
+    target_ref: rubric.obs.kpi_targets.dormant_users_max
+    owner_role: SECURITY_LEAD
+    waf_pillar: security_governance
+    linked_checks: [DX-SEC-03]
+    synonyms: [dormant, inactive users, stale users, unused accounts]
+    sql: >-
+      SELECT ACCOUNT_NAME, SNAPSHOT_DATE AS PERIOD, '' AS DIMENSION,
+             count(*) FILTER (WHERE LAST_SUCCESS_LOGIN IS NULL
+                              OR date_diff('day', CAST(LAST_SUCCESS_LOGIN AS DATE), SNAPSHOT_DATE) > ${rubric.obs.security.dormant_user_days}) AS VALUE
+      FROM CURATED.SNAP_USERS
+      WHERE coalesce(TYPE, 'PERSON') = 'PERSON' AND NOT coalesce(DISABLED, FALSE)
+      GROUP BY 1, 2
+
+  - id: KPI-SEC-005
+    name: Network-policy coverage
+    domain: security
+    tier: extended
+    status: implemented
+    definition: 1.0 when an account-level network policy is set; otherwise the share of users with a user-level network policy.
+    unit: ratio
+    grain: [account, day]
+    dimension: none
+    aggregation: latest
+    direction: higher_is_better
+    sources: [ACCOUNT_INFO, USERS]
+    freshness_sla_ref: rubric.obs.freshness.security
+    target_ref: rubric.obs.kpi_targets.network_policy_coverage_min
+    owner_role: SECURITY_LEAD
+    waf_pillar: security_governance
+    linked_checks: [DX-SEC-04]
+    synonyms: [network policy, ip allow list, network rules, network coverage]
+    sql: >-
+      SELECT u.ACCOUNT_NAME, u.SNAPSHOT_DATE AS PERIOD, '' AS DIMENSION,
+             CASE WHEN max(a.NETWORK_POLICY) IS NOT NULL THEN 1.0
+                  ELSE avg(CASE WHEN u.NETWORK_POLICY IS NOT NULL THEN 1.0 ELSE 0.0 END) END AS VALUE
+      FROM CURATED.SNAP_USERS u
+      LEFT JOIN CURATED.SNAP_ACCOUNT_INFO a ON a.ACCOUNT_NAME = u.ACCOUNT_NAME AND a.SNAPSHOT_DATE = u.SNAPSHOT_DATE
+      GROUP BY 1, 2
+
+  - id: KPI-SEC-006
+    name: Human users without MFA
+    domain: security
+    tier: core
+    status: implemented
+    definition: Number of enabled human users not protected by MFA (complement of KPI-SEC-001), per snapshot day.
+    unit: users
+    grain: [account, day]
+    dimension: none
+    aggregation: latest
+    direction: lower_is_better
+    sources: [USERS]
+    freshness_sla_ref: rubric.obs.freshness.security
+    owner_role: SECURITY_LEAD
+    waf_pillar: security_governance
+    linked_checks: [DX-SEC-01]
+    synonyms: [without mfa, no mfa, users missing mfa, unprotected users]
+    sql: >-
+      SELECT ACCOUNT_NAME, SNAPSHOT_DATE AS PERIOD, '' AS DIMENSION,
+             count(*) FILTER (WHERE NOT (coalesce(HAS_MFA, FALSE) OR (EXT_AUTHN_UID IS NOT NULL AND NOT coalesce(HAS_PASSWORD, FALSE)))) AS VALUE
+      FROM CURATED.SNAP_USERS
+      WHERE coalesce(TYPE, 'PERSON') = 'PERSON' AND NOT coalesce(DISABLED, FALSE)
+      GROUP BY 1, 2
+
+  - id: KPI-SEC-007
+    name: ACCOUNTADMIN activity
+    domain: security
+    tier: extended
+    status: implemented
+    definition: Queries executed under the ACCOUNTADMIN role per account and day (USERS = distinct users).
+    unit: queries
+    grain: [account, day]
+    dimension: none
+    aggregation: sum
+    direction: lower_is_better
+    sources: [QUERY_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.security
+    owner_role: SECURITY_LEAD
+    waf_pillar: security_governance
+    linked_checks: [DX-SEC-02]
+    synonyms: [accountadmin use, admin activity, privileged activity, break glass]
+    measures: [USERS]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, '' AS DIMENSION, count(*) AS VALUE, count(DISTINCT USER_NAME) AS USERS
+      FROM CURATED.FACT_QUERY WHERE ROLE_NAME = 'ACCOUNTADMIN' GROUP BY 1, 2
+
+  - id: KPI-SEC-008
+    name: Service users with passwords
+    domain: security
+    tier: extended
+    status: implemented
+    definition: Service (or legacy service) users that still authenticate with a password, per snapshot day.
+    unit: users
+    grain: [account, day]
+    dimension: none
+    aggregation: latest
+    direction: lower_is_better
+    sources: [USERS]
+    freshness_sla_ref: rubric.obs.freshness.security
+    owner_role: SECURITY_LEAD
+    waf_pillar: security_governance
+    linked_checks: [DX-SEC-01]
+    synonyms: [service users, service accounts, password service users, legacy service]
+    sql: >-
+      SELECT h.ACCOUNT_NAME, h.SNAPSHOT_DATE AS PERIOD, '' AS DIMENSION, count(u.NAME) AS VALUE
+      FROM CURATED.SNAPSHOT_HARVEST h
+      LEFT JOIN CURATED.SNAP_USERS u ON u.ACCOUNT_NAME = h.ACCOUNT_NAME AND u.SNAPSHOT_DATE = h.SNAPSHOT_DATE
+       AND u.TYPE IN ('SERVICE', 'LEGACY_SERVICE') AND coalesce(u.HAS_PASSWORD, FALSE)
+      WHERE h.SOURCE_TABLE = 'USERS' GROUP BY 1, 2
+
+  - id: KPI-SEC-009
+    name: Direct object grants to users
+    domain: security
+    tier: extended
+    status: planned
+    definition: Object privileges granted directly to users rather than via roles (needs GRANTS_TO_USERS privilege rows).
+    unit: grants
+    grain: [account, day]
+    dimension: none
+    aggregation: latest
+    direction: lower_is_better
+    sources: [GRANTS_TO_USERS]
+    freshness_sla_ref: rubric.obs.freshness.security
+    owner_role: SECURITY_LEAD
+    waf_pillar: security_governance
+    linked_checks: [DX-SEC-03]
+
+  - id: KPI-SEC-010
+    name: Orphan roles
+    domain: security
+    tier: extended
+    status: implemented
+    definition: Non-system roles granted to no user and no role (current snapshot).
+    unit: roles
+    grain: [account, day]
+    dimension: none
+    aggregation: latest
+    direction: lower_is_better
+    sources: [ROLES, GRANTS_TO_USERS, GRANTS_TO_ROLES]
+    freshness_sla_ref: rubric.obs.freshness.security
+    owner_role: SECURITY_LEAD
+    waf_pillar: security_governance
+    linked_checks: [DX-SEC-03]
+    synonyms: [orphan roles, unused roles, role cleanup]
+    sql: >-
+      SELECT r.ACCOUNT_NAME, max(h.SNAPSHOT_DATE) AS PERIOD, '' AS DIMENSION,
+             count(*) FILTER (WHERE NOT r.IS_SYSTEM AND r.USER_GRANTS = 0 AND r.ROLE_GRANTS = 0) AS VALUE
+      FROM CURATED.DIM_ROLE r JOIN CURATED.SNAPSHOT_HARVEST h ON h.ACCOUNT_NAME = r.ACCOUNT_NAME AND h.IS_LATEST
+       AND h.SOURCE_TABLE = 'ROLES'
+      GROUP BY 1
+
+  - id: KPI-SEC-011
+    name: Anomalous access patterns
+    domain: security
+    tier: advanced
+    status: planned
+    definition: Logins or object access outside a user's learned baseline (time, IP range, objects).
+    unit: events
+    grain: [account, user, day]
+    dimension: user
+    aggregation: sum
+    direction: lower_is_better
+    sources: [LOGIN_HISTORY, ACCESS_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.security
+    owner_role: SECURITY_LEAD
+    waf_pillar: security_governance
+    linked_checks: []
+
+  - id: KPI-SEC-012
+    name: Failed login share
+    domain: security
+    tier: extended
+    status: implemented
+    definition: Failed login attempts / all login attempts per account and day.
+    unit: ratio
+    grain: [account, day]
+    dimension: none
+    aggregation: avg
+    direction: lower_is_better
+    sources: [LOGIN_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.security
+    owner_role: SECURITY_LEAD
+    waf_pillar: security_governance
+    linked_checks: [DX-SEC-01]
+    synonyms: [login failure rate, failed login share]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, '' AS DIMENSION, avg(CASE WHEN IS_SUCCESS THEN 0.0 ELSE 1.0 END) AS VALUE
+      FROM CURATED.FACT_LOGIN GROUP BY 1, 2

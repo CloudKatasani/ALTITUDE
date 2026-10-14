@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Package O harvest sources (config-driven harvest)",
+  "x-altitude-globs": ["observability/sources.yaml"],
+  "type": "object",
+  "required": ["version", "sources"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "defaults": {
+      "type": "object", "additionalProperties": false,
+      "properties": {"database": {"type": "string"}, "schema": {"type": "string"}}
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["table", "domain", "strategy", "schedule", "freshness_sla_ref", "live"],
+        "additionalProperties": false,
+        "properties": {
+          "table": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"},
+          "domain": {"enum": ["cost", "performance", "reliability", "security", "governance", "usage", "ai", "reference"]},
+          "strategy": {"enum": ["incremental", "merge", "full_snapshot"]},
+          "watermark": {"type": "string"},
+          "key": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+          "schedule": {"type": "string"},
+          "native_retention_days": {"type": "integer", "minimum": 1},
+          "freshness_sla_ref": {"type": "string", "pattern": "^rubric\\.obs\\.freshness\\."},
+          "live": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "view": {"type": "string"},
+              "where": {"type": "string"},
+              "sql": {"type": "string"},
+              "show": {"type": "string", "pattern": "^SHOW "},
+              "columns": {"type": "object", "additionalProperties": {"type": "string"}},
+              "origin": {"enum": ["client_input"]}
+            },
+            "minProperties": 1
+          }
+        },
+        "allOf": [
+          {"if": {"properties": {"strategy": {"enum": ["incremental", "merge"]}}},
+           "then": {"required": ["watermark", "native_retention_days"]}},
+          {"if": {"properties": {"strategy": {"const": "merge"}}}, "then": {"required": ["key"]}}
+        ]
+      }
+    }
+  }
+}

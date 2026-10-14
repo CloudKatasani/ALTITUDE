@@ -1,0 +1,28 @@
+# Package O runbook (Section 7.6) — referenced by knowledge/observability/alerts.yaml
+id: RB-COST-ANOMALY
+title: Credit anomaly against the forecast band
+alert_classes:
+- credit_anomaly
+owner_role: FINOPS_LEAD
+autonomy: L1
+linked_kpis:
+- KPI-COST-001
+- KPI-COST-002
+- KPI-COST-006
+- KPI-PERF-008
+linked_checks:
+- DX-COST-01
+- DX-COST-02
+steps:
+- action: Confirm the spike in KPI-COST-001 for the warehouse and day in the alert against the forecast band in
+    the evidence.
+- action: Find the query signatures that drove the extra credits (KPI-COST-006 for the day vs the same weekday a
+    week earlier).
+  query: SELECT DIMENSION, VALUE FROM OBS.KPI.KPI_COST_006 WHERE ACCOUNT_NAME = :account AND PERIOD = :day ORDER
+    BY VALUE DESC LIMIT 10
+- action: Check warehouse setting changes (size, auto-suspend, clusters) in the WAREHOUSES snapshots for the day.
+- action: If the workload is unplanned, agree containment with the owner of the top signature (suspend, downsize,
+    statement timeout).
+- action: Record cause and decision on the alert; recurring patterns become a Package D suggestion.
+escalation: Platform owner if the spike exceeds twice the forecast or continues a second day.
+verification: Next day's credits for the warehouse fall back within the forecast band.

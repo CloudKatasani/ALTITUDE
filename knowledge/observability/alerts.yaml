@@ -1,0 +1,204 @@
+# Package O alert catalogue (Section 7.6). Severity, route, runbook, suppression window and owner are data.
+# rule.type:
+#   forecast_band  KPI series per (account, dimension) vs baseline mean +/- max(k*stdev, min_band_pct*mean) over the
+#                  rubric lookback, same day type (weekday/weekend); fires above the band by at least min_abs.
+#   threshold      KPI value for the evaluated day (or latest snapshot <= day) compared with a rubric threshold.
+#   query          SQL over CURATED/KPI returning DIMENSION, OBSERVED, MESSAGE rows; $account / $day parameters.
+# route_ref resolves against the tenant registry's alert_routes (knowledge/observability/accounts/*.yaml).
+version: 1.0.0
+routing_test:
+  interval_ref: rubric.obs.routing.test_interval_days
+  message: "Monthly routing test — no action required"
+severities:
+  critical: {pagerduty: critical, servicenow_impact: 1, servicenow_urgency: 1, slack_prefix: ":rotating_light:"}
+  high: {pagerduty: error, servicenow_impact: 2, servicenow_urgency: 1, slack_prefix: ":red_circle:"}
+  medium: {pagerduty: warning, servicenow_impact: 2, servicenow_urgency: 2, slack_prefix: ":large_orange_circle:"}
+  low: {pagerduty: info, servicenow_impact: 3, servicenow_urgency: 3, slack_prefix: ":large_blue_circle:"}
+alerts:
+  - id: ALR-COST-ANOMALY
+    class: credit_anomaly
+    name: Credit anomaly against the forecast band
+    severity: high
+    kpi: KPI-COST-001
+    rule:
+      type: forecast_band
+      per: dimension
+      lookback_ref: rubric.obs.anomaly.lookback_days
+      min_points_ref: rubric.obs.anomaly.min_history_points
+      band_stdevs_ref: rubric.obs.anomaly.band_stdevs
+      min_band_pct_ref: rubric.obs.anomaly.min_band_pct
+      min_abs_ref: rubric.obs.anomaly.min_abs_credits
+    route_ref: tenant.alert_routes.finops
+    runbook: RB-COST-ANOMALY
+    suppression_hours: 24
+    owner_role: FINOPS_LEAD
+    linked_checks: [DX-COST-01, DX-COST-02, DX-OPS-02]
+
+  - id: ALR-COST-BUDGET
+    class: budget_breach
+    name: Budget threshold breach (month-end forecast)
+    severity: high
+    kpi: KPI-COST-005
+    rule:
+      type: threshold
+      at: month
+      op: gte
+      threshold_ref: rubric.obs.alerts.budget_breach_ratio
+    route_ref: tenant.alert_routes.finops
+    runbook: RB-COST-BUDGET
+    suppression_hours: 168
+    owner_role: FINOPS_LEAD
+    linked_checks: [DX-COST-08]
+
+  - id: ALR-COST-IDLE
+    class: idle_share
+    name: Idle credit share above rubric
+    severity: low
+    kpi: KPI-COST-007
+    rule:
+      type: threshold
+      at: day
+      op: gt
+      threshold_ref: rubric.obs.idle_share_alert
+    route_ref: tenant.alert_routes.finops
+    runbook: RB-COST-IDLE
+    suppression_hours: 168
+    owner_role: PLATFORM_OWNER
+    linked_checks: [DX-COST-01]
+
+  - id: ALR-REL-TIER1-TASK
+    class: tier1_task_failure
+    name: Failed Tier-1 task
+    severity: critical
+    kpi: KPI-REL-002
+    rule:
+      type: query
+      sql: >-
+        SELECT FQ_NAME AS DIMENSION, count(*) AS OBSERVED,
+               'Task ' || FQ_NAME || ' loading Tier-1 table ' || coalesce(TARGET_TABLE, '?') || ' failed: ' ||
+               coalesce(max(ERROR_MESSAGE), 'no error message') AS MESSAGE
+        FROM CURATED.FACT_TASK_RUN
+        WHERE ACCOUNT_NAME = $account AND STATE = 'FAILED' AND IS_TIER1 AND DAY = $day
+        GROUP BY FQ_NAME, TARGET_TABLE
+    route_ref: tenant.alert_routes.dataops
+    runbook: RB-REL-TASK-FAILED
+    suppression_hours: 6
+    owner_role: DATAOPS_LEAD
+    linked_checks: [DX-REL-01]
+
+  - id: ALR-REL-FRESHNESS
+    class: freshness_breach
+    name: Freshness SLA breach
+    severity: high
+    kpi: KPI-REL-003
+    rule:
+      type: query
+      sql: >-
+        SELECT TABLE_NAME AS DIMENSION, 0.0 AS OBSERVED,
+               TABLE_NAME || ' missed its ' || strftime(DEADLINE_TS, '%H:%M') || ' UTC freshness SLA (loaded ' ||
+               coalesce(strftime(LOADED_AT, '%H:%M'), 'not loaded') || ')' AS MESSAGE
+        FROM CURATED.FACT_FRESHNESS
+        WHERE ACCOUNT_NAME = $account AND DAY = $day AND NOT MET
+    route_ref: tenant.alert_routes.dataops
+    runbook: RB-REL-FRESHNESS
+    suppression_hours: 12
+    owner_role: DATAOPS_LEAD
+    linked_checks: [DX-REL-02]
+
+  - id: ALR-SEC-ACCOUNTADMIN
+    class: accountadmin_use
+    name: ACCOUNTADMIN use
+    severity: high
+    kpi: KPI-SEC-007
+    rule:
+      type: threshold
+      at: day
+      op: gt
+      threshold_ref: rubric.obs.alerts.accountadmin_daily_max
+    route_ref: tenant.alert_routes.security
+    runbook: RB-SEC-ACCOUNTADMIN
+    suppression_hours: 24
+    owner_role: SECURITY_LEAD
+    linked_checks: [DX-SEC-02]
+
+  - id: ALR-SEC-NO-MFA
+    class: new_user_without_mfa
+    name: New user without MFA
+    severity: medium
+    kpi: KPI-SEC-006
+    rule:
+      type: query
+      sql: >-
+        SELECT USER_NAME AS DIMENSION, 1.0 AS OBSERVED,
+               'Human user ' || USER_NAME || ' created ' || CAST(CAST(CREATED_ON AS DATE) AS VARCHAR) || ' has no MFA' AS MESSAGE
+        FROM CURATED.DIM_USER
+        WHERE ACCOUNT_NAME = $account AND IS_HUMAN AND NOT coalesce(DISABLED, FALSE)
+          AND NOT (coalesce(HAS_MFA, FALSE) OR (IS_SSO AND NOT coalesce(HAS_PASSWORD, FALSE)))
+          AND CAST(CREATED_ON AS DATE) > CAST($day AS DATE) - ${rubric.obs.alerts.new_user_window_days}
+          AND CAST(CREATED_ON AS DATE) <= CAST($day AS DATE)
+    route_ref: tenant.alert_routes.security
+    runbook: RB-SEC-NO-MFA
+    suppression_hours: 168
+    owner_role: SECURITY_LEAD
+    linked_checks: [DX-SEC-01]
+
+  - id: ALR-GOV-MASKING-GAP
+    class: masking_gap
+    name: Masking gap on a classified column
+    severity: high
+    kpi: KPI-GOV-003
+    rule:
+      type: query
+      sql: >-
+        SELECT c.OBJECT_FQ_NAME || '.' || c.COLUMN_NAME AS DIMENSION, 1.0 AS OBSERVED,
+               'Column ' || c.OBJECT_FQ_NAME || '.' || c.COLUMN_NAME || ' is classified ' || c.TAG_NAME || '=' ||
+               coalesce(c.TAG_VALUE, '') || ' but has no active masking policy' AS MESSAGE
+        FROM CURATED.DIM_TAG c
+        LEFT JOIN CURATED.SNAP_POLICY_REFERENCES p ON p.IS_LATEST AND p.ACCOUNT_NAME = c.ACCOUNT_NAME
+         AND p.POLICY_KIND = 'MASKING_POLICY' AND p.POLICY_STATUS = 'ACTIVE' AND p.REF_DATABASE_NAME = c.OBJECT_DATABASE
+         AND p.REF_SCHEMA_NAME = c.OBJECT_SCHEMA AND p.REF_ENTITY_NAME = c.OBJECT_NAME AND p.REF_COLUMN_NAME = c.COLUMN_NAME
+        WHERE c.ACCOUNT_NAME = $account AND c.DOMAIN = 'COLUMN' AND c.TAG_NAME = 'PII' AND p.POLICY_NAME IS NULL
+          AND $day IS NOT NULL
+    route_ref: tenant.alert_routes.security
+    runbook: RB-GOV-MASKING-GAP
+    suppression_hours: 168
+    owner_role: DATA_GOVERNANCE_LEAD
+    linked_checks: [DX-SEC-05]
+
+  - id: ALR-AI-CORTEX-SPIKE
+    class: cortex_spend_spike
+    name: Cortex spend spike
+    severity: medium
+    kpi: KPI-AI-001
+    rule:
+      type: forecast_band
+      per: total
+      lookback_ref: rubric.obs.anomaly.lookback_days
+      min_points_ref: rubric.obs.anomaly.min_history_points
+      band_stdevs_ref: rubric.obs.anomaly.band_stdevs
+      min_band_pct_ref: rubric.obs.anomaly.min_band_pct
+      min_abs_ref: rubric.obs.anomaly.min_abs_cortex_credits
+    route_ref: tenant.alert_routes.ai
+    runbook: RB-AI-CORTEX-SPIKE
+    suppression_hours: 24
+    owner_role: AI_LEAD
+    linked_checks: [DX-AI-02]
+
+  - id: ALR-PERF-REGRESSION
+    class: signature_regression
+    name: Query-signature performance regression
+    severity: medium
+    kpi: KPI-PERF-007
+    rule:
+      type: forecast_band
+      per: dimension
+      lookback_ref: rubric.obs.anomaly.lookback_days
+      min_points_ref: rubric.obs.anomaly.min_history_points
+      band_stdevs_ref: rubric.obs.anomaly.band_stdevs
+      min_band_pct_ref: rubric.obs.anomaly.min_band_pct
+      min_abs_ref: rubric.obs.anomaly.min_abs_regression_ms
+    route_ref: tenant.alert_routes.platform
+    runbook: RB-PERF-REGRESSION
+    suppression_hours: 24
+    owner_role: PLATFORM_OWNER
+    linked_checks: [DX-PERF-04]

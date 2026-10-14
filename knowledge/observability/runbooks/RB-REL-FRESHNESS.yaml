@@ -1,0 +1,19 @@
+# Package O runbook (Section 7.6) — referenced by knowledge/observability/alerts.yaml
+id: RB-REL-FRESHNESS
+title: Freshness SLA breach
+alert_classes:
+- freshness_breach
+owner_role: DATAOPS_LEAD
+autonomy: L1
+linked_kpis:
+- KPI-REL-003
+- KPI-REL-001
+linked_checks:
+- DX-REL-02
+steps:
+- action: Identify the loading task and whether it failed, was skipped or finished late (CURATED.FACT_FRESHNESS).
+- action: If late, check queueing and load on the task's warehouse at run time (KPI-PERF-002).
+- action: Notify consumers of the table with an expected-ready time.
+- action: If breaches repeat, propose a schedule / dependency redesign (Package D DX-REL-02).
+escalation: Data owner of the table when the breach exceeds two hours.
+verification: KPI-REL-003 back to 1 for the table on the next day.

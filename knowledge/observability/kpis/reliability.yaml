@@ -1,0 +1,236 @@
+# KPI catalogue — Reliability & Pipelines (Section 7.4).
+version: 1.0.0
+kpis:
+  - id: KPI-REL-001
+    name: Task success rate
+    domain: reliability
+    tier: core
+    status: implemented
+    definition: Succeeded task runs / all task runs (failed and skipped runs count as unsuccessful) per account and day.
+    unit: ratio
+    grain: [account, day]
+    dimension: none
+    aggregation: avg
+    direction: higher_is_better
+    sources: [TASK_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.reliability
+    target_ref: rubric.obs.kpi_targets.task_success_min
+    owner_role: DATAOPS_LEAD
+    waf_pillar: reliability
+    linked_checks: [DX-REL-01]
+    synonyms: [task success, task success rate, pipeline success, job success, task reliability]
+    measures: [RUNS, SUCCEEDED, FAILED, SKIPPED]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, '' AS DIMENSION,
+             avg(CASE WHEN STATE = 'SUCCEEDED' THEN 1.0 ELSE 0.0 END) AS VALUE, count(*) AS RUNS,
+             count(*) FILTER (WHERE STATE = 'SUCCEEDED') AS SUCCEEDED, count(*) FILTER (WHERE STATE = 'FAILED') AS FAILED,
+             count(*) FILTER (WHERE STATE = 'SKIPPED') AS SKIPPED
+      FROM CURATED.FACT_TASK_RUN GROUP BY 1, 2
+
+  - id: KPI-REL-002
+    name: Failed tasks (24h)
+    domain: reliability
+    tier: core
+    status: implemented
+    definition: Number of failed task runs per account and day; FAILED_TIER1 counts tasks loading Tier-1 tables.
+    unit: runs
+    grain: [account, day]
+    dimension: none
+    aggregation: sum
+    direction: lower_is_better
+    sources: [TASK_HISTORY, TASKS, TAG_REFERENCES]
+    freshness_sla_ref: rubric.obs.freshness.reliability
+    owner_role: DATAOPS_LEAD
+    waf_pillar: reliability
+    linked_checks: [DX-REL-01]
+    synonyms: [failed tasks, task failures, broken pipelines, failed jobs, failures]
+    measures: [FAILED_TIER1, FAILED_TASKS]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, '' AS DIMENSION, count(*) FILTER (WHERE STATE = 'FAILED') AS VALUE,
+             count(*) FILTER (WHERE STATE = 'FAILED' AND IS_TIER1) AS FAILED_TIER1,
+             count(DISTINCT CASE WHEN STATE = 'FAILED' THEN FQ_NAME END) AS FAILED_TASKS
+      FROM CURATED.FACT_TASK_RUN GROUP BY 1, 2
+
+  - id: KPI-REL-003
+    name: Freshness SLA attainment
+    domain: reliability
+    tier: extended
+    status: implemented
+    definition: 1 when the table's loading task succeeded before the client's daily deadline, else 0; averaged over a window it is the attainment rate.
+    unit: ratio
+    grain: [account, table, day]
+    dimension: table
+    aggregation: avg
+    direction: higher_is_better
+    sources: [TASK_HISTORY, CLIENT_INPUTS]
+    freshness_sla_ref: rubric.obs.freshness.reliability
+    target_ref: rubric.obs.kpi_targets.freshness_attainment_min
+    owner_role: DATAOPS_LEAD
+    waf_pillar: reliability
+    linked_checks: [DX-REL-02]
+    synonyms: [freshness, sla, late data, freshness sla, on time, data late]
+    measures: [LOADED_AT, DEADLINE_TS]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, TABLE_NAME AS DIMENSION, CASE WHEN MET THEN 1.0 ELSE 0.0 END AS VALUE, LOADED_AT,
+             DEADLINE_TS
+      FROM CURATED.FACT_FRESHNESS
+
+  - id: KPI-REL-004
+    name: Harvest success rate
+    domain: reliability
+    tier: core
+    status: implemented
+    definition: Successful (or intentionally skipped) harvest steps / all harvest steps per account and day (Section 7.8 target ≥ 99%).
+    unit: ratio
+    grain: [account, day]
+    dimension: none
+    aggregation: avg
+    direction: higher_is_better
+    sources: [HARVEST_LOG]
+    freshness_sla_ref: rubric.obs.freshness.reliability
+    target_ref: rubric.obs.harvest.success_target
+    owner_role: PLATFORM_OWNER
+    waf_pillar: operational_excellence
+    linked_checks: [DX-OPS-02]
+    synonyms: [harvest, harvest success, observability pipeline, telemetry collection]
+    measures: [STEPS, FAILED_STEPS]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, '' AS DIMENSION,
+             avg(CASE WHEN STATUS IN ('ok', 'skipped') THEN 1.0 ELSE 0.0 END) AS VALUE, count(*) AS STEPS,
+             count(*) FILTER (WHERE STATUS = 'failed') AS FAILED_STEPS
+      FROM CURATED.FACT_HARVEST GROUP BY 1, 2
+
+  - id: KPI-REL-005
+    name: File load error rate
+    domain: reliability
+    tier: extended
+    status: implemented
+    definition: Share of files loaded by COPY / Snowpipe with a status other than Loaded, per target table and day.
+    unit: ratio
+    grain: [account, table, day]
+    dimension: table
+    aggregation: avg
+    direction: lower_is_better
+    sources: [COPY_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.reliability
+    owner_role: DATAOPS_LEAD
+    waf_pillar: reliability
+    linked_checks: [DX-REL-01]
+    synonyms: [copy errors, load errors, snowpipe errors, file load failures]
+    measures: [FILES, ROWS_LOADED]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, TABLE_NAME AS DIMENSION,
+             avg(CASE WHEN STATUS = 'Loaded' THEN 0.0 ELSE 1.0 END) AS VALUE, count(*) AS FILES, sum(ROW_COUNT) AS ROWS_LOADED
+      FROM CURATED.FACT_COPY GROUP BY 1, 2, 3
+
+  - id: KPI-REL-006
+    name: Pipe latency
+    domain: reliability
+    tier: extended
+    status: planned
+    definition: Minutes between file arrival and load for each pipe (needs PIPE ingestion timestamps; not in the harvest contract yet).
+    unit: minutes
+    grain: [account, pipe, day]
+    dimension: pipe
+    aggregation: avg
+    direction: lower_is_better
+    sources: [COPY_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.reliability
+    owner_role: DATAOPS_LEAD
+    waf_pillar: reliability
+    linked_checks: []
+
+  - id: KPI-REL-007
+    name: Dynamic table refresh lag
+    domain: reliability
+    tier: extended
+    status: planned
+    definition: Actual vs target lag per dynamic table (DYNAMIC_TABLE_REFRESH_HISTORY; not in the harvest contract yet).
+    unit: minutes
+    grain: [account, dynamic_table, day]
+    dimension: dynamic_table
+    aggregation: max
+    direction: lower_is_better
+    sources: []
+    freshness_sla_ref: rubric.obs.freshness.reliability
+    owner_role: DATAOPS_LEAD
+    waf_pillar: reliability
+    linked_checks: [DX-REL-02]
+
+  - id: KPI-REL-008
+    name: Mean time to recover (tasks)
+    domain: reliability
+    tier: advanced
+    status: planned
+    definition: Hours from a task's first failure to its next successful run, averaged per month.
+    unit: hours
+    grain: [account, month]
+    dimension: none
+    aggregation: avg
+    direction: lower_is_better
+    sources: [TASK_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.reliability
+    owner_role: DATAOPS_LEAD
+    waf_pillar: reliability
+    linked_checks: [DX-REL-01]
+
+  - id: KPI-REL-009
+    name: Downstream blast radius
+    domain: reliability
+    tier: advanced
+    status: planned
+    definition: Number of downstream tasks, tables and dashboards affected by a failed task (task graph + object dependencies).
+    unit: objects
+    grain: [account, task, day]
+    dimension: task
+    aggregation: max
+    direction: lower_is_better
+    sources: [TASK_HISTORY, TASKS, OBJECT_DEPENDENCIES, BI_REPORTS]
+    freshness_sla_ref: rubric.obs.freshness.reliability
+    owner_role: DATAOPS_LEAD
+    waf_pillar: reliability
+    linked_checks: [DX-REL-01]
+
+  - id: KPI-REL-010
+    name: Task retries
+    domain: reliability
+    tier: extended
+    status: implemented
+    definition: Number of task runs that needed more than one attempt, per account and day.
+    unit: runs
+    grain: [account, day]
+    dimension: none
+    aggregation: sum
+    direction: lower_is_better
+    sources: [TASK_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.reliability
+    owner_role: DATAOPS_LEAD
+    waf_pillar: reliability
+    linked_checks: [DX-REL-01]
+    synonyms: [retries, retried tasks, flaky tasks]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, '' AS DIMENSION, count(*) FILTER (WHERE ATTEMPT_NUMBER > 1) AS VALUE
+      FROM CURATED.FACT_TASK_RUN GROUP BY 1, 2
+
+  - id: KPI-REL-011
+    name: Replication / failover groups
+    domain: reliability
+    tier: extended
+    status: implemented
+    definition: Number of replication or failover groups configured, per snapshot day.
+    unit: groups
+    grain: [account, day]
+    dimension: none
+    aggregation: latest
+    direction: higher_is_better
+    sources: [REPLICATION_GROUPS]
+    freshness_sla_ref: rubric.obs.freshness.reference
+    owner_role: PLATFORM_OWNER
+    waf_pillar: reliability
+    linked_checks: [DX-REL-04]
+    synonyms: [replication, failover, disaster recovery, dr]
+    sql: >-
+      SELECT h.ACCOUNT_NAME, h.SNAPSHOT_DATE AS PERIOD, '' AS DIMENSION, count(r.NAME) AS VALUE
+      FROM CURATED.SNAPSHOT_HARVEST h
+      LEFT JOIN CURATED.SNAP_REPLICATION_GROUPS r ON r.ACCOUNT_NAME = h.ACCOUNT_NAME AND r.SNAPSHOT_DATE = h.SNAPSHOT_DATE
+      WHERE h.SOURCE_TABLE = 'REPLICATION_GROUPS' GROUP BY 1, 2

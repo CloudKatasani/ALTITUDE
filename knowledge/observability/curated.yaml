@@ -1,0 +1,384 @@
+# CURATED layer (Section 7.3): conformed facts and dimensions over the RAW archive.
+# SQL is written in DuckDB dialect and transpiled to Snowflake by `altitude generate`; `sql_snowflake`
+# overrides the transpilation where the dialects differ (JSON flattening, date spines).
+# For every full_snapshot source the platform also creates CURATED.SNAP_<TABLE>
+# (columns: SNAPSHOT_DATE, IS_LATEST, ACCOUNT_NAME, <contract columns>) from RAW.SNAPSHOT_MEMBERSHIP,
+# so any harvest day's state can be reconstructed. Objects are created in list order.
+version: 1.0.0
+objects:
+  - name: SNAPSHOT_HARVEST
+    kind: helper
+    description: Last successful harvest per account, snapshot source and day; IS_LATEST marks the current state.
+    sql: >-
+      SELECT ACCOUNT_NAME, SOURCE_TABLE, SNAPSHOT_DATE, HARVEST_ID,
+             SNAPSHOT_DATE = max(SNAPSHOT_DATE) OVER (PARTITION BY ACCOUNT_NAME, SOURCE_TABLE) AS IS_LATEST
+      FROM (
+        SELECT ACCOUNT_NAME, SOURCE_TABLE, CAST(AS_OF AS DATE) AS SNAPSHOT_DATE, HARVEST_ID
+        FROM RAW.HARVEST_LOG
+        WHERE STATUS = 'ok' AND STRATEGY = 'full_snapshot'
+        QUALIFY row_number() OVER (PARTITION BY ACCOUNT_NAME, SOURCE_TABLE, CAST(AS_OF AS DATE)
+                                   ORDER BY AS_OF DESC, HARVEST_ID DESC) = 1
+      ) s
+
+  - name: CFG_CLIENT_INPUT
+    kind: dim
+    grain: [account, key]
+    description: Latest client-supplied inputs (contract price, commitments, SLAs, tag names). VALUE is JSON text.
+    sql: >-
+      SELECT ACCOUNT_NAME, KEY, VALUE, trim(VALUE, '"') AS VALUE_TEXT
+      FROM CURATED.SNAP_CLIENT_INPUTS WHERE IS_LATEST
+
+  - name: DIM_ACCOUNT
+    kind: dim
+    grain: [account]
+    description: One row per harvested account with contract price and capacity commitment.
+    sql: >-
+      SELECT a.ACCOUNT_NAME, a.ORGANIZATION_NAME, a.REGION, a.EDITION, a.NETWORK_POLICY,
+             max(CASE WHEN c.KEY = 'contract_price_per_credit' THEN TRY_CAST(c.VALUE AS DOUBLE) END) AS PRICE_PER_CREDIT,
+             max(CASE WHEN c.KEY = 'storage_price_per_tb_month' THEN TRY_CAST(c.VALUE AS DOUBLE) END) AS STORAGE_PRICE_PER_TB_MONTH,
+             max(CASE WHEN c.KEY = 'capacity_commitment' THEN TRY_CAST(json_extract_string(c.VALUE, '$.annual_credits') AS DOUBLE) END) AS ANNUAL_COMMIT_CREDITS,
+             max(CASE WHEN c.KEY = 'capacity_commitment' THEN TRY_CAST(json_extract_string(c.VALUE, '$.start_date') AS DATE) END) AS COMMIT_START,
+             max(CASE WHEN c.KEY = 'capacity_commitment' THEN TRY_CAST(json_extract_string(c.VALUE, '$.end_date') AS DATE) END) AS COMMIT_END,
+             max(CASE WHEN c.KEY = 'cost_center_tag' THEN c.VALUE_TEXT END) AS COST_CENTRE_TAG,
+             max(CASE WHEN c.KEY = 'owner_tag' THEN c.VALUE_TEXT END) AS OWNER_TAG
+      FROM CURATED.SNAP_ACCOUNT_INFO a
+      LEFT JOIN CURATED.CFG_CLIENT_INPUT c ON c.ACCOUNT_NAME = a.ACCOUNT_NAME
+      WHERE a.IS_LATEST
+      GROUP BY a.ACCOUNT_NAME, a.ORGANIZATION_NAME, a.REGION, a.EDITION, a.NETWORK_POLICY
+
+  - name: DIM_DAY
+    kind: dim
+    grain: [day]
+    description: Calendar spine covering the archived metering history.
+    sql: >-
+      SELECT CAST(d AS DATE) AS DAY, CAST(date_trunc('month', d) AS DATE) AS MONTH, dayofweek(d) AS DOW,
+             dayofweek(d) IN (0, 6) AS IS_WEEKEND
+      FROM (SELECT unnest(generate_series(min(CAST(START_TIME AS DATE)), max(CAST(START_TIME AS DATE)), INTERVAL 1 DAY)) AS d
+            FROM RAW.WAREHOUSE_METERING_HISTORY) s
+    sql_snowflake: >-
+      WITH b AS (SELECT MIN(START_TIME::DATE) AS lo, MAX(START_TIME::DATE) AS hi FROM RAW.WAREHOUSE_METERING_HISTORY)
+      SELECT DATEADD(DAY, g.n, b.lo) AS DAY, DATE_TRUNC('MONTH', DATEADD(DAY, g.n, b.lo))::DATE AS MONTH,
+             DAYOFWEEK(DATEADD(DAY, g.n, b.lo)) AS DOW, DAYOFWEEK(DATEADD(DAY, g.n, b.lo)) IN (0, 6) AS IS_WEEKEND
+      FROM b, (SELECT ROW_NUMBER() OVER (ORDER BY SEQ4()) - 1 AS n FROM TABLE(GENERATOR(ROWCOUNT => 3660))) g
+      WHERE DATEADD(DAY, g.n, b.lo) <= b.hi
+
+  - name: DIM_TAG
+    kind: dim
+    grain: [account, object, tag]
+    description: Current tag assignments.
+    sql: >-
+      SELECT ACCOUNT_NAME, TAG_NAME, TAG_VALUE, DOMAIN, OBJECT_DATABASE, OBJECT_SCHEMA, OBJECT_NAME, COLUMN_NAME,
+             CASE WHEN OBJECT_DATABASE IS NULL THEN OBJECT_NAME
+                  ELSE OBJECT_DATABASE || '.' || OBJECT_SCHEMA || '.' || OBJECT_NAME END AS OBJECT_FQ_NAME
+      FROM CURATED.SNAP_TAG_REFERENCES WHERE IS_LATEST
+
+  - name: DIM_WAREHOUSE
+    kind: dim
+    grain: [account, warehouse]
+    description: Current warehouses with their cost-centre tag (UNALLOCATED when untagged).
+    sql: >-
+      SELECT w.ACCOUNT_NAME, w.WAREHOUSE_NAME, w.WAREHOUSE_SIZE, w.AUTO_SUSPEND, w.MIN_CLUSTER_COUNT,
+             w.MAX_CLUSTER_COUNT, w.SCALING_POLICY, w.RESOURCE_MONITOR, w.WORKLOAD_CLASS, w.OWNER,
+             coalesce(t.TAG_VALUE, 'UNALLOCATED') AS COST_CENTRE
+      FROM CURATED.SNAP_WAREHOUSES w
+      LEFT JOIN CURATED.DIM_ACCOUNT a ON a.ACCOUNT_NAME = w.ACCOUNT_NAME
+      LEFT JOIN (SELECT ACCOUNT_NAME, TAG_NAME, OBJECT_NAME, max(TAG_VALUE) AS TAG_VALUE FROM CURATED.DIM_TAG
+                 WHERE DOMAIN = 'WAREHOUSE' GROUP BY 1, 2, 3) t
+        ON t.ACCOUNT_NAME = w.ACCOUNT_NAME AND t.OBJECT_NAME = w.WAREHOUSE_NAME
+       AND t.TAG_NAME = coalesce(a.COST_CENTRE_TAG, 'COST_CENTER')
+      WHERE w.IS_LATEST
+
+  - name: DIM_COST_CENTRE
+    kind: dim
+    grain: [account, cost_centre]
+    description: Cost centres (from warehouse tags) plus the UNALLOCATED bucket.
+    sql: >-
+      SELECT DISTINCT ACCOUNT_NAME, COST_CENTRE FROM CURATED.DIM_WAREHOUSE
+      UNION
+      SELECT ACCOUNT_NAME, 'UNALLOCATED' AS COST_CENTRE FROM CURATED.DIM_ACCOUNT
+
+  - name: DIM_USER
+    kind: dim
+    grain: [account, user]
+    description: Current users; IS_HUMAN for PERSON (or untyped) users; IS_ACCOUNTADMIN when granted ACCOUNTADMIN.
+    sql: >-
+      SELECT u.ACCOUNT_NAME, u.NAME AS USER_NAME, u.TYPE, coalesce(u.TYPE, 'PERSON') = 'PERSON' AS IS_HUMAN,
+             u.HAS_PASSWORD, u.HAS_MFA, u.HAS_RSA_PUBLIC_KEY, u.EXT_AUTHN_UID IS NOT NULL AS IS_SSO, u.DISABLED,
+             u.CREATED_ON, u.LAST_SUCCESS_LOGIN, u.NETWORK_POLICY, u.DEFAULT_ROLE,
+             coalesce(g.IS_ADMIN, FALSE) AS IS_ACCOUNTADMIN
+      FROM CURATED.SNAP_USERS u
+      LEFT JOIN (SELECT ACCOUNT_NAME, GRANTEE_NAME, TRUE AS IS_ADMIN FROM CURATED.SNAP_GRANTS_TO_USERS
+                 WHERE IS_LATEST AND ROLE = 'ACCOUNTADMIN' GROUP BY 1, 2) g
+        ON g.ACCOUNT_NAME = u.ACCOUNT_NAME AND g.GRANTEE_NAME = u.NAME
+      WHERE u.IS_LATEST
+
+  - name: DIM_ROLE
+    kind: dim
+    grain: [account, role]
+    description: Current roles with the number of users and roles they are granted to.
+    sql: >-
+      SELECT r.ACCOUNT_NAME, r.NAME AS ROLE_NAME, r.ROLE_TYPE, r.OWNER,
+             r.NAME IN ('ACCOUNTADMIN', 'SECURITYADMIN', 'SYSADMIN', 'USERADMIN', 'ORGADMIN', 'PUBLIC') AS IS_SYSTEM,
+             (SELECT count(*) FROM CURATED.SNAP_GRANTS_TO_USERS gu WHERE gu.IS_LATEST AND gu.ACCOUNT_NAME = r.ACCOUNT_NAME
+                AND gu.ROLE = r.NAME) AS USER_GRANTS,
+             (SELECT count(*) FROM CURATED.SNAP_GRANTS_TO_ROLES gr WHERE gr.IS_LATEST AND gr.ACCOUNT_NAME = r.ACCOUNT_NAME
+                AND gr.GRANTED_ON = 'ROLE' AND gr.NAME = r.NAME) AS ROLE_GRANTS
+      FROM CURATED.SNAP_ROLES r WHERE r.IS_LATEST
+
+  - name: FACT_ACCESS
+    kind: fact
+    grain: [account, query, object]
+    description: Object access events (reads and writes) from ACCESS_HISTORY.
+    sql: >-
+      SELECT DISTINCT ACCOUNT_NAME, QUERY_ID, QUERY_START_TIME, CAST(QUERY_START_TIME AS DATE) AS DAY, USER_NAME,
+             OBJECT_NAME, OBJECT_DOMAIN, ACCESS_TYPE
+      FROM RAW.ACCESS_HISTORY
+
+  - name: DIM_OBJECT
+    kind: dim
+    grain: [account, object]
+    description: Current tables with tier, owner tag, comment flag and last recorded access.
+    sql: >-
+      SELECT t.ACCOUNT_NAME, t.FQ_NAME, t.TABLE_CATALOG, t.TABLE_SCHEMA, t.TABLE_NAME, t.TABLE_TYPE, t.IS_TRANSIENT,
+             t.BYTES, t.ROW_COUNT, t.RETENTION_TIME, t.CREATED, t.LAST_ALTERED, t.COMMENT IS NOT NULL AS HAS_COMMENT,
+             coalesce(tier.TAG_VALUE, 'untiered') AS TIER, coalesce(tier.TAG_VALUE, '') = 'tier1' AS IS_TIER1,
+             own.TAG_VALUE AS OWNER_TAG_VALUE, acc.LAST_ACCESSED
+      FROM CURATED.SNAP_TABLES t
+      LEFT JOIN CURATED.DIM_ACCOUNT a ON a.ACCOUNT_NAME = t.ACCOUNT_NAME
+      LEFT JOIN (SELECT ACCOUNT_NAME, OBJECT_FQ_NAME, max(TAG_VALUE) AS TAG_VALUE FROM CURATED.DIM_TAG
+                 WHERE DOMAIN = 'TABLE' AND TAG_NAME = 'TIER' GROUP BY 1, 2) tier
+        ON tier.ACCOUNT_NAME = t.ACCOUNT_NAME AND tier.OBJECT_FQ_NAME = t.FQ_NAME
+      LEFT JOIN (SELECT ACCOUNT_NAME, TAG_NAME, OBJECT_FQ_NAME, max(TAG_VALUE) AS TAG_VALUE FROM CURATED.DIM_TAG
+                 WHERE DOMAIN = 'TABLE' GROUP BY 1, 2, 3) own
+        ON own.ACCOUNT_NAME = t.ACCOUNT_NAME AND own.OBJECT_FQ_NAME = t.FQ_NAME
+       AND own.TAG_NAME = coalesce(a.OWNER_TAG, 'DATA_OWNER')
+      LEFT JOIN (SELECT ACCOUNT_NAME, OBJECT_NAME, max(QUERY_START_TIME) AS LAST_ACCESSED FROM CURATED.FACT_ACCESS
+                 GROUP BY 1, 2) acc
+        ON acc.ACCOUNT_NAME = t.ACCOUNT_NAME AND acc.OBJECT_NAME = t.FQ_NAME
+      WHERE t.IS_LATEST
+
+  - name: DIM_TASK
+    kind: dim
+    grain: [account, task]
+    description: Current tasks with their target table and whether it is Tier-1.
+    sql: >-
+      SELECT k.ACCOUNT_NAME, k.FQ_NAME, k.TASK_NAME, k.DATABASE_NAME, k.SCHEMA_NAME, k.OWNER, k.WAREHOUSE, k.SCHEDULE,
+             k.PREDECESSORS, k.STATE, k.TARGET_TABLE, coalesce(o.IS_TIER1, FALSE) AS IS_TIER1
+      FROM CURATED.SNAP_TASKS k
+      LEFT JOIN CURATED.DIM_OBJECT o ON o.ACCOUNT_NAME = k.ACCOUNT_NAME AND o.FQ_NAME = k.TARGET_TABLE
+      WHERE k.IS_LATEST
+
+  - name: FACT_METERING_DAILY
+    kind: fact
+    grain: [account, day, service_type]
+    description: Billing truth — latest restatement of METERING_DAILY_HISTORY per account, day and service type.
+    sql: >-
+      SELECT ACCOUNT_NAME, USAGE_DATE AS DAY, SERVICE_TYPE, CREDITS_USED_COMPUTE, CREDITS_USED_CLOUD_SERVICES,
+             CREDITS_USED, CREDITS_ADJUSTMENT_CLOUD_SERVICES, CREDITS_BILLED
+      FROM RAW.METERING_DAILY_HISTORY
+      QUALIFY row_number() OVER (PARTITION BY ACCOUNT_NAME, USAGE_DATE, SERVICE_TYPE
+                                 ORDER BY _LOADED_AT DESC, _HARVEST_ID DESC) = 1
+
+  - name: FACT_WAREHOUSE_HOURLY
+    kind: fact
+    grain: [account, warehouse, hour]
+    description: Hourly warehouse metering joined to load (latest restatement per hour).
+    sql: >-
+      SELECT m.ACCOUNT_NAME, m.WAREHOUSE_NAME, m.START_TIME, CAST(m.START_TIME AS DATE) AS DAY, m.CREDITS_USED,
+             m.CREDITS_USED_COMPUTE, m.CREDITS_USED_CLOUD_SERVICES, l.AVG_RUNNING, l.AVG_QUEUED_LOAD
+      FROM (SELECT * FROM RAW.WAREHOUSE_METERING_HISTORY
+            QUALIFY row_number() OVER (PARTITION BY ACCOUNT_NAME, WAREHOUSE_NAME, START_TIME
+                                       ORDER BY _LOADED_AT DESC, _HARVEST_ID DESC) = 1) m
+      LEFT JOIN (SELECT * FROM RAW.WAREHOUSE_LOAD_HISTORY
+                 QUALIFY row_number() OVER (PARTITION BY ACCOUNT_NAME, WAREHOUSE_NAME, START_TIME
+                                            ORDER BY _LOADED_AT DESC, _HARVEST_ID DESC) = 1) l
+        ON l.ACCOUNT_NAME = m.ACCOUNT_NAME AND l.WAREHOUSE_NAME = m.WAREHOUSE_NAME AND l.START_TIME = m.START_TIME
+
+  - name: FACT_QUERY_ATTRIBUTION
+    kind: fact
+    grain: [account, query]
+    description: Compute credits attributed to each query.
+    sql: >-
+      SELECT ACCOUNT_NAME, QUERY_ID, WAREHOUSE_NAME, QUERY_PARAMETERIZED_HASH, QUERY_TAG, USER_NAME, START_TIME,
+             CAST(START_TIME AS DATE) AS DAY, CREDITS_ATTRIBUTED_COMPUTE
+      FROM RAW.QUERY_ATTRIBUTION_HISTORY
+      QUALIFY row_number() OVER (PARTITION BY ACCOUNT_NAME, QUERY_ID ORDER BY _LOADED_AT DESC, _HARVEST_ID DESC) = 1
+
+  - name: FACT_WAREHOUSE_DAILY
+    kind: fact
+    grain: [account, warehouse, day]
+    description: >-
+      Daily warehouse credits. CREDITS_BILLED allocates the account-day cloud-services adjustment from
+      METERING_DAILY_HISTORY pro rata to each warehouse's cloud-services credits, so warehouse cost reconciles to
+      billing. IDLE_CREDITS = compute credits not attributed to any query.
+    sql: >-
+      WITH h AS (
+        SELECT ACCOUNT_NAME, WAREHOUSE_NAME, DAY, sum(CREDITS_USED) AS CREDITS_USED,
+               sum(CREDITS_USED_COMPUTE) AS CREDITS_USED_COMPUTE, sum(CREDITS_USED_CLOUD_SERVICES) AS CREDITS_USED_CLOUD_SERVICES,
+               count(*) AS ACTIVE_HOURS, avg(AVG_RUNNING) AS AVG_RUNNING, avg(AVG_QUEUED_LOAD) AS AVG_QUEUED_LOAD
+        FROM CURATED.FACT_WAREHOUSE_HOURLY GROUP BY 1, 2, 3),
+      tot AS (SELECT ACCOUNT_NAME, DAY, sum(CREDITS_USED_CLOUD_SERVICES) AS CLOUD FROM h GROUP BY 1, 2),
+      adj AS (SELECT ACCOUNT_NAME, DAY, sum(CREDITS_ADJUSTMENT_CLOUD_SERVICES) AS ADJ FROM CURATED.FACT_METERING_DAILY
+              WHERE SERVICE_TYPE = 'WAREHOUSE_METERING' GROUP BY 1, 2),
+      att AS (SELECT ACCOUNT_NAME, WAREHOUSE_NAME, DAY, sum(CREDITS_ATTRIBUTED_COMPUTE) AS ATTRIBUTED
+              FROM CURATED.FACT_QUERY_ATTRIBUTION GROUP BY 1, 2, 3)
+      SELECT h.ACCOUNT_NAME, h.WAREHOUSE_NAME, h.DAY, h.CREDITS_USED, h.CREDITS_USED_COMPUTE, h.CREDITS_USED_CLOUD_SERVICES,
+             coalesce(adj.ADJ, 0) * CASE WHEN tot.CLOUD > 0 THEN h.CREDITS_USED_CLOUD_SERVICES / tot.CLOUD ELSE 0 END
+               AS CREDITS_ADJUSTMENT_ALLOCATED,
+             h.CREDITS_USED + coalesce(adj.ADJ, 0) * CASE WHEN tot.CLOUD > 0 THEN h.CREDITS_USED_CLOUD_SERVICES / tot.CLOUD ELSE 0 END
+               AS CREDITS_BILLED,
+             least(coalesce(att.ATTRIBUTED, 0), h.CREDITS_USED_COMPUTE) AS CREDITS_ATTRIBUTED,
+             h.CREDITS_USED_COMPUTE - least(coalesce(att.ATTRIBUTED, 0), h.CREDITS_USED_COMPUTE) AS IDLE_CREDITS,
+             h.ACTIVE_HOURS, h.AVG_RUNNING, h.AVG_QUEUED_LOAD, w.COST_CENTRE
+      FROM h
+      JOIN tot ON tot.ACCOUNT_NAME = h.ACCOUNT_NAME AND tot.DAY = h.DAY
+      LEFT JOIN adj ON adj.ACCOUNT_NAME = h.ACCOUNT_NAME AND adj.DAY = h.DAY
+      LEFT JOIN att ON att.ACCOUNT_NAME = h.ACCOUNT_NAME AND att.WAREHOUSE_NAME = h.WAREHOUSE_NAME AND att.DAY = h.DAY
+      LEFT JOIN CURATED.DIM_WAREHOUSE w ON w.ACCOUNT_NAME = h.ACCOUNT_NAME AND w.WAREHOUSE_NAME = h.WAREHOUSE_NAME
+
+  - name: FACT_SERVERLESS_DAILY
+    kind: fact
+    grain: [account, day, service_type, object]
+    description: Serverless and AI credits by service type and object (service types match METERING_DAILY_HISTORY).
+    sql: >-
+      SELECT ACCOUNT_NAME, CAST(START_TIME AS DATE) AS DAY, 'AUTO_CLUSTERING' AS SERVICE_TYPE, TABLE_NAME AS OBJECT_NAME,
+             sum(CREDITS_USED) AS CREDITS FROM RAW.AUTOMATIC_CLUSTERING_HISTORY GROUP BY 1, 2, 3, 4
+      UNION ALL
+      SELECT ACCOUNT_NAME, CAST(START_TIME AS DATE), 'SEARCH_OPTIMIZATION', TABLE_NAME, sum(CREDITS_USED)
+      FROM RAW.SEARCH_OPTIMIZATION_HISTORY GROUP BY 1, 2, 3, 4
+      UNION ALL
+      SELECT ACCOUNT_NAME, CAST(START_TIME AS DATE), 'MATERIALIZED_VIEW', TABLE_NAME, sum(CREDITS_USED)
+      FROM RAW.MATERIALIZED_VIEW_REFRESH_HISTORY GROUP BY 1, 2, 3, 4
+      UNION ALL
+      SELECT ACCOUNT_NAME, CAST(START_TIME AS DATE), 'PIPE', PIPE_NAME, sum(CREDITS_USED)
+      FROM RAW.PIPE_USAGE_HISTORY GROUP BY 1, 2, 3, 4
+      UNION ALL
+      SELECT ACCOUNT_NAME, CAST(START_TIME AS DATE), 'AI_SERVICES', FUNCTION_NAME, sum(TOKEN_CREDITS)
+      FROM RAW.CORTEX_USAGE_HISTORY GROUP BY 1, 2, 3, 4
+
+  - name: FACT_QUERY
+    kind: fact
+    grain: [account, query]
+    description: Queries with signature, timings, scan/spill/pruning metrics and attributed credits.
+    sql: >-
+      SELECT q.ACCOUNT_NAME, q.QUERY_ID, CAST(q.START_TIME AS DATE) AS DAY, q.START_TIME, q.END_TIME,
+             coalesce(q.QUERY_PARAMETERIZED_HASH, '(none)') AS SIGNATURE, q.QUERY_TYPE, q.DATABASE_NAME, q.USER_NAME,
+             q.ROLE_NAME, q.WAREHOUSE_NAME, q.WAREHOUSE_SIZE, q.QUERY_TAG, q.EXECUTION_STATUS,
+             coalesce(q.CLIENT_APPLICATION_ID, 'UNKNOWN') AS CLIENT_APPLICATION, q.TOTAL_ELAPSED_TIME, q.EXECUTION_TIME,
+             q.QUEUED_OVERLOAD_TIME, q.COMPILATION_TIME, q.BYTES_SCANNED, q.PERCENTAGE_SCANNED_FROM_CACHE,
+             q.PARTITIONS_SCANNED, q.PARTITIONS_TOTAL, q.BYTES_SPILLED_TO_LOCAL_STORAGE, q.BYTES_SPILLED_TO_REMOTE_STORAGE,
+             q.CREDITS_USED_CLOUD_SERVICES, coalesce(a.CREDITS_ATTRIBUTED_COMPUTE, 0) AS CREDITS_ATTRIBUTED_COMPUTE
+      FROM (SELECT * FROM RAW.QUERY_HISTORY
+            QUALIFY row_number() OVER (PARTITION BY ACCOUNT_NAME, QUERY_ID ORDER BY _LOADED_AT DESC, _HARVEST_ID DESC) = 1) q
+      LEFT JOIN CURATED.FACT_QUERY_ATTRIBUTION a ON a.ACCOUNT_NAME = q.ACCOUNT_NAME AND a.QUERY_ID = q.QUERY_ID
+
+  - name: DIM_QUERY_SIGNATURE
+    kind: dim
+    grain: [account, signature]
+    description: Parameterised query signatures with a sample text and activity window.
+    sql: >-
+      SELECT q.ACCOUNT_NAME, q.QUERY_PARAMETERIZED_HASH AS SIGNATURE, min(q.QUERY_TEXT) AS SAMPLE_TEXT,
+             min(q.START_TIME) AS FIRST_SEEN, max(q.START_TIME) AS LAST_SEEN, count(*) AS EXECUTIONS,
+             min(q.WAREHOUSE_NAME) AS WAREHOUSE_NAME
+      FROM RAW.QUERY_HISTORY q WHERE q.QUERY_PARAMETERIZED_HASH IS NOT NULL GROUP BY 1, 2
+
+  - name: FACT_TASK_RUN
+    kind: fact
+    grain: [account, task, run]
+    description: Task runs (latest state per run and attempt) with the Tier-1 flag of the target table.
+    sql: >-
+      SELECT r.ACCOUNT_NAME, r.FQ_NAME, r.NAME AS TASK_NAME, r.STATE, r.ERROR_CODE, r.ERROR_MESSAGE, r.SCHEDULED_TIME,
+             CAST(r.SCHEDULED_TIME AS DATE) AS DAY, r.QUERY_START_TIME, r.COMPLETED_TIME, r.RUN_ID, r.ATTEMPT_NUMBER,
+             coalesce(t.IS_TIER1, FALSE) AS IS_TIER1, t.TARGET_TABLE
+      FROM (SELECT * FROM RAW.TASK_HISTORY
+            QUALIFY row_number() OVER (PARTITION BY ACCOUNT_NAME, FQ_NAME, RUN_ID, ATTEMPT_NUMBER
+                                       ORDER BY _LOADED_AT DESC, _HARVEST_ID DESC) = 1) r
+      LEFT JOIN CURATED.DIM_TASK t ON t.ACCOUNT_NAME = r.ACCOUNT_NAME AND t.FQ_NAME = r.FQ_NAME
+
+  - name: FACT_FRESHNESS
+    kind: fact
+    grain: [account, table, day]
+    description: Freshness SLA outcome per Tier-1 table and day (client SLAs joined to the loading task's runs).
+    sql: >-
+      WITH sla AS (
+        SELECT ACCOUNT_NAME, s."table" AS TABLE_NAME, s.loaded_by AS LOADED_BY, s.deadline_utc AS DEADLINE_UTC
+        FROM (SELECT ACCOUNT_NAME, unnest(from_json(VALUE, '[{"table":"VARCHAR","loaded_by":"VARCHAR","deadline_utc":"VARCHAR"}]')) AS s
+              FROM CURATED.CFG_CLIENT_INPUT WHERE KEY = 'freshness_slas') x),
+      runs AS (
+        SELECT ACCOUNT_NAME, FQ_NAME, DAY, max(CASE WHEN STATE = 'SUCCEEDED' THEN COMPLETED_TIME END) AS LOADED_AT,
+               max(STATE) AS ANY_STATE
+        FROM CURATED.FACT_TASK_RUN GROUP BY 1, 2, 3)
+      SELECT r.ACCOUNT_NAME, r.DAY, sla.TABLE_NAME, sla.LOADED_BY,
+             strptime(CAST(r.DAY AS VARCHAR) || ' ' || sla.DEADLINE_UTC, '%Y-%m-%d %H:%M') AS DEADLINE_TS, r.LOADED_AT,
+             r.LOADED_AT IS NOT NULL AND r.LOADED_AT <= strptime(CAST(r.DAY AS VARCHAR) || ' ' || sla.DEADLINE_UTC, '%Y-%m-%d %H:%M') AS MET
+      FROM sla JOIN runs r ON r.ACCOUNT_NAME = sla.ACCOUNT_NAME AND r.FQ_NAME = sla.LOADED_BY
+    sql_snowflake: >-
+      WITH sla AS (
+        SELECT c.ACCOUNT_NAME, f.value:"table"::STRING AS TABLE_NAME, f.value:"loaded_by"::STRING AS LOADED_BY,
+               f.value:"deadline_utc"::STRING AS DEADLINE_UTC
+        FROM CURATED.CFG_CLIENT_INPUT c, LATERAL FLATTEN(input => PARSE_JSON(c.VALUE)) f
+        WHERE c.KEY = 'freshness_slas'),
+      runs AS (
+        SELECT ACCOUNT_NAME, FQ_NAME, DAY, MAX(CASE WHEN STATE = 'SUCCEEDED' THEN COMPLETED_TIME END) AS LOADED_AT
+        FROM CURATED.FACT_TASK_RUN GROUP BY 1, 2, 3)
+      SELECT r.ACCOUNT_NAME, r.DAY, sla.TABLE_NAME, sla.LOADED_BY,
+             TO_TIMESTAMP(r.DAY::STRING || ' ' || sla.DEADLINE_UTC, 'YYYY-MM-DD HH24:MI') AS DEADLINE_TS, r.LOADED_AT,
+             r.LOADED_AT IS NOT NULL AND r.LOADED_AT <= TO_TIMESTAMP(r.DAY::STRING || ' ' || sla.DEADLINE_UTC, 'YYYY-MM-DD HH24:MI') AS MET
+      FROM sla JOIN runs r ON r.ACCOUNT_NAME = sla.ACCOUNT_NAME AND r.FQ_NAME = sla.LOADED_BY
+
+  - name: FACT_LOGIN
+    kind: fact
+    grain: [account, login_event]
+    description: Login attempts.
+    sql: >-
+      SELECT ACCOUNT_NAME, EVENT_ID, EVENT_TIMESTAMP, CAST(EVENT_TIMESTAMP AS DATE) AS DAY, USER_NAME, CLIENT_IP,
+             REPORTED_CLIENT_TYPE, FIRST_AUTHENTICATION_FACTOR, SECOND_AUTHENTICATION_FACTOR, IS_SUCCESS = 'YES' AS IS_SUCCESS,
+             ERROR_CODE, ERROR_MESSAGE
+      FROM RAW.LOGIN_HISTORY
+      QUALIFY row_number() OVER (PARTITION BY ACCOUNT_NAME, EVENT_ID ORDER BY _LOADED_AT DESC, _HARVEST_ID DESC) = 1
+
+  - name: FACT_STORAGE_DAILY
+    kind: fact
+    grain: [account, day]
+    description: Account storage by day.
+    sql: >-
+      SELECT ACCOUNT_NAME, USAGE_DATE AS DAY, STORAGE_BYTES, STAGE_BYTES, FAILSAFE_BYTES, HYBRID_TABLE_STORAGE_BYTES
+      FROM RAW.STORAGE_USAGE
+      QUALIFY row_number() OVER (PARTITION BY ACCOUNT_NAME, USAGE_DATE ORDER BY _LOADED_AT DESC, _HARVEST_ID DESC) = 1
+
+  - name: FACT_CORTEX_USAGE
+    kind: fact
+    grain: [account, cortex_call]
+    description: Cortex function and agent usage.
+    sql: >-
+      SELECT ACCOUNT_NAME, START_TIME, END_TIME, CAST(START_TIME AS DATE) AS DAY, FUNCTION_NAME, MODEL_NAME,
+             coalesce(AGENT_NAME, '(no agent)') AS AGENT_NAME, AGENT_NAME IS NULL AS NO_AGENT, ROLE_NAME, USER_NAME,
+             TOKENS, TOKEN_CREDITS
+      FROM RAW.CORTEX_USAGE_HISTORY
+
+  - name: FACT_DQ_RESULT
+    kind: fact
+    grain: [account, table, metric, measurement]
+    description: Data metric function results.
+    sql: >-
+      SELECT ACCOUNT_NAME, MEASUREMENT_TIME, CAST(MEASUREMENT_TIME AS DATE) AS DAY, TABLE_NAME, METRIC_NAME, VALUE,
+             coalesce(EXPECTATION_VIOLATED, FALSE) AS EXPECTATION_VIOLATED
+      FROM RAW.DATA_QUALITY_MONITORING_RESULTS
+
+  - name: FACT_COPY
+    kind: fact
+    grain: [account, file]
+    description: Bulk and Snowpipe file loads.
+    sql: >-
+      SELECT ACCOUNT_NAME, FILE_NAME, TABLE_NAME, PIPE_NAME, LAST_LOAD_TIME, CAST(LAST_LOAD_TIME AS DATE) AS DAY,
+             ROW_COUNT, ERROR_COUNT, STATUS
+      FROM RAW.COPY_HISTORY
+
+  - name: FACT_HARVEST
+    kind: fact
+    grain: [account, harvest, source]
+    description: Harvest runs per source (Section 7.8 service levels).
+    sql: >-
+      SELECT ACCOUNT_NAME, HARVEST_ID, SOURCE_TABLE, STRATEGY, AS_OF, CAST(AS_OF AS DATE) AS DAY, ROWS_READ,
+             ROWS_INSERTED, ROWS_DUPLICATE, STATUS, ERROR
+      FROM RAW.HARVEST_LOG

@@ -1,0 +1,48 @@
+# Tenant accounts registry (example). One file per tenant: which Snowflake accounts Package O harvests,
+# how each is reached, and where each alert route delivers. Credentials are never stored here —
+# `connection_ref` names an entry in the tenant vault.
+tenant_id: TEN-EXAMPLE
+tenant_name: Example Utilities Co
+central_account: ACME_PROD           # account that hosts the OBS database
+accounts:
+  - account_name: ACME_PROD
+    environment: prod
+    source: synthetic                  # synthetic | snowflake
+    synthetic: {organization: ACME, profile: seeded, seed: 7}
+    connection_ref: vault://example/acme_prod/obs_harvester
+  - account_name: ACME_DEV
+    environment: dev
+    source: synthetic
+    synthetic: {organization: ACME, profile: clean, seed: 11}
+    connection_ref: vault://example/acme_dev/obs_harvester
+cost_centres:
+  unallocated_label: UNALLOCATED
+  owners:
+    FINANCE_BI: finance-bi@example.com
+    ANALYTICS: analytics@example.com
+    DATA_PLATFORM: platform@example.com
+    DATA_SCIENCE: ds@example.com
+    ENGINEERING: eng@example.com
+    AI_PLATFORM: ai@example.com
+alert_routes:
+  finops:
+    channel: slack
+    target: "#finops-alerts"
+    webhook_ref: vault://example/slack/finops
+  dataops:
+    channel: pagerduty
+    target: dataops-oncall
+    routing_key_ref: vault://example/pagerduty/dataops
+  platform:
+    channel: teams
+    target: Platform Engineering / Alerts
+    webhook_ref: vault://example/teams/platform
+  security:
+    channel: servicenow
+    target: SEC-OPS
+    assignment_group: Security Operations
+    instance_ref: vault://example/servicenow/prod
+  ai:
+    channel: slack
+    target: "#ai-platform"
+    webhook_ref: vault://example/slack/ai

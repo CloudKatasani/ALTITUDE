@@ -1,0 +1,26 @@
+-- AUTO-GENERATED — DO NOT EDIT. Source: knowledge/observability/sources.yaml. Regenerate with `altitude generate`.
+-- Package O OBS database (Section 7.3). Run as a role with CREATE DATABASE / CREATE ROLE.
+CREATE ROLE IF NOT EXISTS OBS_ADMIN;
+CREATE ROLE IF NOT EXISTS OBS_LOADER;
+CREATE ROLE IF NOT EXISTS OBS_TRANSFORMER;
+CREATE ROLE IF NOT EXISTS OBS_READER;
+CREATE ROLE IF NOT EXISTS OBS_AGENT;
+GRANT ROLE OBS_LOADER TO ROLE OBS_ADMIN;
+GRANT ROLE OBS_TRANSFORMER TO ROLE OBS_ADMIN;
+GRANT ROLE OBS_READER TO ROLE OBS_ADMIN;
+GRANT ROLE OBS_AGENT TO ROLE OBS_ADMIN;
+
+CREATE WAREHOUSE IF NOT EXISTS OBS_WH WAREHOUSE_SIZE = XSMALL AUTO_SUSPEND = 60 AUTO_RESUME = TRUE
+  INITIALLY_SUSPENDED = TRUE COMMENT = 'Package O harvest, KPI refresh and alerts';
+CREATE DATABASE IF NOT EXISTS OBS COMMENT = 'Package O observability data product (client-owned)';
+GRANT OWNERSHIP ON DATABASE OBS TO ROLE OBS_ADMIN COPY CURRENT GRANTS;
+USE DATABASE OBS;
+
+-- RAW is a managed-access schema owned by OBS_ADMIN: only the owner can grant, and no pipeline role
+-- receives UPDATE, DELETE or TRUNCATE (see 02_grants.sql and the CI kill-test).
+CREATE SCHEMA IF NOT EXISTS OBS.RAW WITH MANAGED ACCESS DATA_RETENTION_TIME_IN_DAYS = 90
+  COMMENT = 'Immutable, append-only archive of ACCOUNT_USAGE et al.; retention beyond the native window';
+CREATE SCHEMA IF NOT EXISTS OBS.CURATED COMMENT = 'Conformed facts and dimensions';
+CREATE SCHEMA IF NOT EXISTS OBS.KPI COMMENT = 'Dynamic tables implementing the KPI catalogue';
+CREATE SCHEMA IF NOT EXISTS OBS.SEMANTIC COMMENT = 'Semantic views holding certified KPI definitions';
+CREATE SCHEMA IF NOT EXISTS OBS.OPS WITH MANAGED ACCESS COMMENT = 'Alert events and routing tests (append-only)';

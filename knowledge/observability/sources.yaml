@@ -1,0 +1,415 @@
+# Package O harvest configuration (Section 7.3): one entry per harvest-contract table
+# (altitude.synthetic.schema.HARVEST_SCHEMA). Sources, schedules and load strategies are data.
+#
+# strategy:
+#   incremental    append rows newer than the archive watermark (minus rubric overlap); de-duplicated by row hash
+#   merge          incremental read of rows that are restated in place at source (billing, task runs);
+#                  RAW keeps every version, CURATED takes the latest version per `key`
+#   full_snapshot  the current state is captured once per harvest day (_SNAPSHOT_DATE); history = daily snapshots
+# native_retention_days: how far back the source view can be read. The RAW archive keeps history beyond it.
+# live: how the read-only live harvester reads it (SELECT / SHOW only). `view` = ACCOUNT_USAGE view whose
+#   columns match the contract names; `sql` = explicit SELECT (params: %(since)s); `show` + `columns` = SHOW
+#   command read through RESULT_SCAN; `origin: client_input` = supplied by the client, not read from Snowflake.
+version: 1.0.0
+defaults:
+  database: SNOWFLAKE
+  schema: ACCOUNT_USAGE
+sources:
+  - table: ACCOUNT_INFO
+    domain: reference
+    strategy: full_snapshot
+    schedule: "USING CRON 0 5 * * * UTC"
+    freshness_sla_ref: rubric.obs.freshness.reference
+    live:
+      sql: >-
+        SELECT CURRENT_ACCOUNT_NAME() AS ACCOUNT_NAME, CURRENT_ORGANIZATION_NAME() AS ORGANIZATION_NAME,
+        CURRENT_REGION() AS REGION, NULL AS EDITION, CURRENT_ACCOUNT() AS ACCOUNT_LOCATOR, NULL AS NETWORK_POLICY
+  - table: CLIENT_INPUTS
+    domain: reference
+    strategy: full_snapshot
+    schedule: "on change"
+    freshness_sla_ref: rubric.obs.freshness.reference
+    live: {origin: client_input}
+  - table: WAREHOUSES
+    domain: cost
+    strategy: full_snapshot
+    schedule: "USING CRON 0 * * * * UTC"
+    freshness_sla_ref: rubric.obs.freshness.cost
+    live:
+      show: "SHOW WAREHOUSES"
+      columns: {WAREHOUSE_NAME: '"name"', WAREHOUSE_SIZE: 'UPPER(REPLACE("size", ''-'', ''''))', AUTO_SUSPEND: '"auto_suspend"',
+                AUTO_RESUME: '"auto_resume"::BOOLEAN', MIN_CLUSTER_COUNT: '"min_cluster_count"',
+                MAX_CLUSTER_COUNT: '"max_cluster_count"', SCALING_POLICY: '"scaling_policy"',
+                RESOURCE_MONITOR: 'NULLIF("resource_monitor", ''null'')', OWNER: '"owner"', COMMENT: '"comment"',
+                STATEMENT_TIMEOUT_IN_SECONDS: 'NULL', WORKLOAD_CLASS: 'NULL'}
+  - table: RESOURCE_MONITORS
+    domain: cost
+    strategy: full_snapshot
+    schedule: "USING CRON 0 5 * * * UTC"
+    freshness_sla_ref: rubric.obs.freshness.reference
+    live:
+      show: "SHOW RESOURCE MONITORS"
+      columns: {NAME: '"name"', CREDIT_QUOTA: '"credit_quota"', LEVEL: '"level"', WAREHOUSES: '"warehouses"',
+                NOTIFY_AT: '"notify_at"', SUSPEND_AT: 'TRY_TO_NUMBER(REPLACE("suspend_at", ''%'', ''''))'}
+  - table: WAREHOUSE_METERING_HISTORY
+    domain: cost
+    strategy: incremental
+    watermark: START_TIME
+    schedule: "USING CRON 15 * * * * UTC"
+    native_retention_days: 365
+    freshness_sla_ref: rubric.obs.freshness.cost
+    live: {view: WAREHOUSE_METERING_HISTORY}
+  - table: WAREHOUSE_LOAD_HISTORY
+    domain: performance
+    strategy: incremental
+    watermark: START_TIME
+    schedule: "USING CRON 15 * * * * UTC"
+    native_retention_days: 365
+    freshness_sla_ref: rubric.obs.freshness.performance
+    live: {view: WAREHOUSE_LOAD_HISTORY}
+  - table: METERING_DAILY_HISTORY
+    domain: cost
+    strategy: merge
+    watermark: USAGE_DATE
+    key: [USAGE_DATE, SERVICE_TYPE]
+    schedule: "USING CRON 30 5 * * * UTC"
+    native_retention_days: 365
+    freshness_sla_ref: rubric.obs.freshness.cost
+    live: {view: METERING_DAILY_HISTORY}
+  - table: QUERY_HISTORY
+    domain: performance
+    strategy: incremental
+    watermark: START_TIME
+    schedule: "USING CRON 20 * * * * UTC"
+    native_retention_days: 365
+    freshness_sla_ref: rubric.obs.freshness.performance
+    live:
+      sql: >-
+        SELECT q.QUERY_ID, q.QUERY_TEXT, q.QUERY_PARAMETERIZED_HASH, q.QUERY_TYPE, q.DATABASE_NAME, q.SCHEMA_NAME,
+        q.USER_NAME, q.ROLE_NAME, q.WAREHOUSE_NAME, q.WAREHOUSE_SIZE, q.QUERY_TAG, q.EXECUTION_STATUS, q.ERROR_MESSAGE,
+        q.START_TIME, q.END_TIME, q.TOTAL_ELAPSED_TIME, q.EXECUTION_TIME, q.QUEUED_OVERLOAD_TIME, q.COMPILATION_TIME,
+        q.BYTES_SCANNED, q.PERCENTAGE_SCANNED_FROM_CACHE, q.BYTES_WRITTEN, q.ROWS_PRODUCED, q.ROWS_INSERTED,
+        q.PARTITIONS_SCANNED, q.PARTITIONS_TOTAL, q.BYTES_SPILLED_TO_LOCAL_STORAGE, q.BYTES_SPILLED_TO_REMOTE_STORAGE,
+        q.CREDITS_USED_CLOUD_SERVICES, s.CLIENT_APPLICATION_ID
+        FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY q LEFT JOIN SNOWFLAKE.ACCOUNT_USAGE.SESSIONS s ON s.SESSION_ID = q.SESSION_ID
+        WHERE q.START_TIME >= %(since)s
+  - table: QUERY_ATTRIBUTION_HISTORY
+    domain: cost
+    strategy: incremental
+    watermark: START_TIME
+    schedule: "USING CRON 25 */6 * * * UTC"
+    native_retention_days: 365
+    freshness_sla_ref: rubric.obs.freshness.cost
+    live: {view: QUERY_ATTRIBUTION_HISTORY}
+  - table: ACCESS_HISTORY
+    domain: governance
+    strategy: incremental
+    watermark: QUERY_START_TIME
+    schedule: "USING CRON 40 */3 * * * UTC"
+    native_retention_days: 365
+    freshness_sla_ref: rubric.obs.freshness.governance
+    live:
+      sql: >-
+        SELECT a.QUERY_ID, a.QUERY_START_TIME, a.USER_NAME, o.value:"objectName"::STRING AS OBJECT_NAME,
+        o.value:"objectDomain"::STRING AS OBJECT_DOMAIN, 'READ' AS ACCESS_TYPE
+        FROM SNOWFLAKE.ACCOUNT_USAGE.ACCESS_HISTORY a, LATERAL FLATTEN(input => a.BASE_OBJECTS_ACCESSED) o
+        WHERE a.QUERY_START_TIME >= %(since)s
+        UNION ALL
+        SELECT a.QUERY_ID, a.QUERY_START_TIME, a.USER_NAME, o.value:"objectName"::STRING, o.value:"objectDomain"::STRING,
+        'WRITE' FROM SNOWFLAKE.ACCOUNT_USAGE.ACCESS_HISTORY a, LATERAL FLATTEN(input => a.OBJECTS_MODIFIED) o
+        WHERE a.QUERY_START_TIME >= %(since)s
+  - table: AUTOMATIC_CLUSTERING_HISTORY
+    domain: cost
+    strategy: incremental
+    watermark: START_TIME
+    schedule: "USING CRON 45 */6 * * * UTC"
+    native_retention_days: 365
+    freshness_sla_ref: rubric.obs.freshness.cost
+    live:
+      sql: >-
+        SELECT START_TIME, END_TIME, DATABASE_NAME || '.' || SCHEMA_NAME || '.' || TABLE_NAME AS TABLE_NAME, CREDITS_USED,
+        NUM_BYTES_RECLUSTERED, NUM_ROWS_RECLUSTERED FROM SNOWFLAKE.ACCOUNT_USAGE.AUTOMATIC_CLUSTERING_HISTORY
+        WHERE START_TIME >= %(since)s
+  - table: SEARCH_OPTIMIZATION_HISTORY
+    domain: cost
+    strategy: incremental
+    watermark: START_TIME
+    schedule: "USING CRON 45 */6 * * * UTC"
+    native_retention_days: 365
+    freshness_sla_ref: rubric.obs.freshness.cost
+    live:
+      sql: >-
+        SELECT START_TIME, END_TIME, DATABASE_NAME || '.' || SCHEMA_NAME || '.' || TABLE_NAME AS TABLE_NAME, CREDITS_USED
+        FROM SNOWFLAKE.ACCOUNT_USAGE.SEARCH_OPTIMIZATION_HISTORY WHERE START_TIME >= %(since)s
+  - table: MATERIALIZED_VIEW_REFRESH_HISTORY
+    domain: cost
+    strategy: incremental
+    watermark: START_TIME
+    schedule: "USING CRON 45 */6 * * * UTC"
+    native_retention_days: 365
+    freshness_sla_ref: rubric.obs.freshness.cost
+    live:
+      sql: >-
+        SELECT START_TIME, END_TIME, DATABASE_NAME || '.' || SCHEMA_NAME || '.' || TABLE_NAME AS TABLE_NAME, CREDITS_USED
+        FROM SNOWFLAKE.ACCOUNT_USAGE.MATERIALIZED_VIEW_REFRESH_HISTORY WHERE START_TIME >= %(since)s
+  - table: STORAGE_USAGE
+    domain: cost
+    strategy: incremental
+    watermark: USAGE_DATE
+    schedule: "USING CRON 0 6 * * * UTC"
+    native_retention_days: 365
+    freshness_sla_ref: rubric.obs.freshness.governance
+    live: {view: STORAGE_USAGE}
+  - table: TABLES
+    domain: governance
+    strategy: full_snapshot
+    schedule: "USING CRON 0 6 * * * UTC"
+    freshness_sla_ref: rubric.obs.freshness.governance
+    live:
+      sql: >-
+        SELECT TABLE_ID, TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME, TABLE_CATALOG || '.' || TABLE_SCHEMA || '.' || TABLE_NAME AS FQ_NAME,
+        TABLE_TYPE, IS_TRANSIENT = 'YES' AS IS_TRANSIENT, IS_ICEBERG = 'YES' AS IS_ICEBERG, CLUSTERING_KEY, ROW_COUNT, BYTES,
+        RETENTION_TIME, CREATED, LAST_ALTERED, LAST_DDL, TABLE_OWNER, COMMENT, NULL AS CLONE_GROUP_ID, NULL AS COLUMN_SIGNATURE
+        FROM SNOWFLAKE.ACCOUNT_USAGE.TABLES WHERE DELETED IS NULL
+  - table: TABLE_STORAGE_METRICS
+    domain: cost
+    strategy: full_snapshot
+    schedule: "USING CRON 0 6 * * * UTC"
+    freshness_sla_ref: rubric.obs.freshness.governance
+    live:
+      sql: >-
+        SELECT ID, TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME, TABLE_CATALOG || '.' || TABLE_SCHEMA || '.' || TABLE_NAME AS FQ_NAME,
+        IS_TRANSIENT = 'YES' AS IS_TRANSIENT, ACTIVE_BYTES, TIME_TRAVEL_BYTES, FAILSAFE_BYTES, RETAINED_FOR_CLONE_BYTES,
+        DELETED, CLONE_GROUP_ID FROM SNOWFLAKE.ACCOUNT_USAGE.TABLE_STORAGE_METRICS WHERE NOT DELETED
+  - table: COLUMNS
+    domain: governance
+    strategy: full_snapshot
+    schedule: "USING CRON 0 6 * * * UTC"
+    freshness_sla_ref: rubric.obs.freshness.governance
+    live:
+      sql: >-
+        SELECT TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME, TABLE_CATALOG || '.' || TABLE_SCHEMA || '.' || TABLE_NAME AS FQ_NAME,
+        COLUMN_NAME, ORDINAL_POSITION, DATA_TYPE, IS_NULLABLE, COMMENT FROM SNOWFLAKE.ACCOUNT_USAGE.COLUMNS WHERE DELETED IS NULL
+  - table: VIEWS
+    domain: governance
+    strategy: full_snapshot
+    schedule: "USING CRON 0 6 * * * UTC"
+    freshness_sla_ref: rubric.obs.freshness.governance
+    live:
+      sql: >-
+        SELECT TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME, TABLE_CATALOG || '.' || TABLE_SCHEMA || '.' || TABLE_NAME AS FQ_NAME,
+        VIEW_DEFINITION, IS_SECURE = 'YES' AS IS_SECURE, COMMENT FROM SNOWFLAKE.ACCOUNT_USAGE.VIEWS WHERE DELETED IS NULL
+  - table: OBJECT_DEPENDENCIES
+    domain: governance
+    strategy: full_snapshot
+    schedule: "USING CRON 0 6 * * * UTC"
+    freshness_sla_ref: rubric.obs.freshness.governance
+    live:
+      sql: >-
+        SELECT REFERENCING_DATABASE || '.' || REFERENCING_SCHEMA || '.' || REFERENCING_OBJECT_NAME AS REFERENCING_OBJECT_NAME,
+        REFERENCING_OBJECT_DOMAIN, REFERENCED_DATABASE || '.' || REFERENCED_SCHEMA || '.' || REFERENCED_OBJECT_NAME AS REFERENCED_OBJECT_NAME,
+        REFERENCED_OBJECT_DOMAIN, DEPENDENCY_TYPE FROM SNOWFLAKE.ACCOUNT_USAGE.OBJECT_DEPENDENCIES
+  - table: TASKS
+    domain: reliability
+    strategy: full_snapshot
+    schedule: "USING CRON 0 * * * * UTC"
+    freshness_sla_ref: rubric.obs.freshness.reliability
+    live:
+      show: "SHOW TASKS IN ACCOUNT"
+      columns: {TASK_NAME: '"name"', DATABASE_NAME: '"database_name"', SCHEMA_NAME: '"schema_name"',
+                FQ_NAME: '"database_name" || ''.'' || "schema_name" || ''.'' || "name"', OWNER: '"owner"',
+                WAREHOUSE: '"warehouse"', SCHEDULE: '"schedule"', PREDECESSORS: 'ARRAY_TO_STRING("predecessors", '','')',
+                STATE: '"state"', TARGET_TABLE: 'NULL', DEFINITION: '"definition"'}
+  - table: TASK_HISTORY
+    domain: reliability
+    strategy: merge
+    watermark: SCHEDULED_TIME
+    key: [FQ_NAME, RUN_ID, ATTEMPT_NUMBER]
+    schedule: "USING CRON */15 * * * * UTC"
+    native_retention_days: 365
+    freshness_sla_ref: rubric.obs.freshness.reliability
+    live:
+      sql: >-
+        SELECT NAME, DATABASE_NAME, SCHEMA_NAME, DATABASE_NAME || '.' || SCHEMA_NAME || '.' || NAME AS FQ_NAME, STATE,
+        ERROR_CODE, ERROR_MESSAGE, SCHEDULED_TIME, QUERY_START_TIME, COMPLETED_TIME, ROOT_TASK_ID, RUN_ID::STRING AS RUN_ID,
+        ATTEMPT_NUMBER, QUERY_ID FROM SNOWFLAKE.ACCOUNT_USAGE.TASK_HISTORY WHERE SCHEDULED_TIME >= %(since)s
+  - table: COPY_HISTORY
+    domain: reliability
+    strategy: incremental
+    watermark: LAST_LOAD_TIME
+    schedule: "USING CRON 10 * * * * UTC"
+    native_retention_days: 365
+    freshness_sla_ref: rubric.obs.freshness.reliability
+    live:
+      sql: >-
+        SELECT FILE_NAME, TABLE_CATALOG_NAME || '.' || TABLE_SCHEMA_NAME || '.' || TABLE_NAME AS TABLE_NAME, PIPE_NAME,
+        LAST_LOAD_TIME, ROW_COUNT, ERROR_COUNT, STATUS FROM SNOWFLAKE.ACCOUNT_USAGE.COPY_HISTORY WHERE LAST_LOAD_TIME >= %(since)s
+  - table: PIPE_USAGE_HISTORY
+    domain: cost
+    strategy: incremental
+    watermark: START_TIME
+    schedule: "USING CRON 10 * * * * UTC"
+    native_retention_days: 365
+    freshness_sla_ref: rubric.obs.freshness.cost
+    live: {view: PIPE_USAGE_HISTORY}
+  - table: REPLICATION_GROUPS
+    domain: reliability
+    strategy: full_snapshot
+    schedule: "USING CRON 0 6 * * * UTC"
+    freshness_sla_ref: rubric.obs.freshness.reference
+    live:
+      show: "SHOW REPLICATION GROUPS"
+      columns: {NAME: '"name"', TYPE: '"type"', OBJECT_TYPES: '"object_types"', ALLOWED_DATABASES: '"allowed_databases"',
+                REPLICATION_SCHEDULE: '"replication_schedule"', IS_PRIMARY: '"is_primary"::BOOLEAN'}
+  - table: USERS
+    domain: security
+    strategy: full_snapshot
+    schedule: "USING CRON 0 */4 * * * UTC"
+    freshness_sla_ref: rubric.obs.freshness.security
+    live:
+      sql: >-
+        SELECT NAME, TYPE, LOGIN_NAME, DEFAULT_ROLE, HAS_PASSWORD, HAS_MFA, HAS_RSA_PUBLIC_KEY, EXT_AUTHN_UID, DISABLED,
+        CREATED_ON, LAST_SUCCESS_LOGIN, NULL AS NETWORK_POLICY, OWNER, COMMENT FROM SNOWFLAKE.ACCOUNT_USAGE.USERS
+        WHERE DELETED_ON IS NULL
+  - table: ROLES
+    domain: security
+    strategy: full_snapshot
+    schedule: "USING CRON 0 6 * * * UTC"
+    freshness_sla_ref: rubric.obs.freshness.security
+    live:
+      sql: >-
+        SELECT NAME, ROLE_TYPE, OWNER, COMMENT, CREATED_ON FROM SNOWFLAKE.ACCOUNT_USAGE.ROLES WHERE DELETED_ON IS NULL
+  - table: GRANTS_TO_ROLES
+    domain: security
+    strategy: full_snapshot
+    schedule: "USING CRON 0 6 * * * UTC"
+    freshness_sla_ref: rubric.obs.freshness.security
+    live:
+      sql: >-
+        SELECT PRIVILEGE, GRANTED_ON, NAME, TABLE_CATALOG, TABLE_SCHEMA, GRANTED_TO, GRANTEE_NAME, GRANT_OPTION, GRANTED_BY,
+        CREATED_ON FROM SNOWFLAKE.ACCOUNT_USAGE.GRANTS_TO_ROLES WHERE DELETED_ON IS NULL
+  - table: GRANTS_TO_USERS
+    domain: security
+    strategy: full_snapshot
+    schedule: "USING CRON 0 */4 * * * UTC"
+    freshness_sla_ref: rubric.obs.freshness.security
+    live:
+      sql: >-
+        SELECT ROLE, GRANTED_TO, GRANTEE_NAME, GRANTED_BY, CREATED_ON FROM SNOWFLAKE.ACCOUNT_USAGE.GRANTS_TO_USERS
+        WHERE DELETED_ON IS NULL
+  - table: LOGIN_HISTORY
+    domain: security
+    strategy: incremental
+    watermark: EVENT_TIMESTAMP
+    schedule: "USING CRON 5 * * * * UTC"
+    native_retention_days: 365
+    freshness_sla_ref: rubric.obs.freshness.security
+    live:
+      sql: >-
+        SELECT EVENT_ID::STRING AS EVENT_ID, EVENT_TIMESTAMP, USER_NAME, CLIENT_IP, REPORTED_CLIENT_TYPE,
+        FIRST_AUTHENTICATION_FACTOR, SECOND_AUTHENTICATION_FACTOR, IS_SUCCESS, ERROR_CODE::STRING AS ERROR_CODE, ERROR_MESSAGE
+        FROM SNOWFLAKE.ACCOUNT_USAGE.LOGIN_HISTORY WHERE EVENT_TIMESTAMP >= %(since)s
+  - table: NETWORK_POLICIES
+    domain: security
+    strategy: full_snapshot
+    schedule: "USING CRON 0 6 * * * UTC"
+    freshness_sla_ref: rubric.obs.freshness.security
+    live:
+      sql: >-
+        SELECT NAME, ALLOWED_IP_LIST, BLOCKED_IP_LIST, ALLOWED_NETWORK_RULE_LIST, OWNER
+        FROM SNOWFLAKE.ACCOUNT_USAGE.NETWORK_POLICIES WHERE DELETED IS NULL
+  - table: TAG_REFERENCES
+    domain: governance
+    strategy: full_snapshot
+    schedule: "USING CRON 0 6 * * * UTC"
+    freshness_sla_ref: rubric.obs.freshness.governance
+    live:
+      sql: >-
+        SELECT TAG_DATABASE, TAG_SCHEMA, TAG_NAME, TAG_VALUE, OBJECT_DATABASE, OBJECT_SCHEMA, OBJECT_NAME, COLUMN_NAME, DOMAIN
+        FROM SNOWFLAKE.ACCOUNT_USAGE.TAG_REFERENCES WHERE OBJECT_DELETED IS NULL
+  - table: POLICY_REFERENCES
+    domain: governance
+    strategy: full_snapshot
+    schedule: "USING CRON 0 6 * * * UTC"
+    freshness_sla_ref: rubric.obs.freshness.governance
+    live: {view: POLICY_REFERENCES}
+  - table: DATA_METRIC_FUNCTION_REFERENCES
+    domain: governance
+    strategy: full_snapshot
+    schedule: "USING CRON 0 6 * * * UTC"
+    freshness_sla_ref: rubric.obs.freshness.governance
+    live:
+      sql: >-
+        SELECT METRIC_DATABASE_NAME, METRIC_NAME, REF_ENTITY_DATABASE_NAME || '.' || REF_ENTITY_SCHEMA_NAME || '.' || REF_ENTITY_NAME
+        AS REF_ENTITY_NAME, REF_ENTITY_DOMAIN, SCHEDULE, SCHEDULE_STATUS FROM SNOWFLAKE.ACCOUNT_USAGE.DATA_METRIC_FUNCTION_REFERENCES
+  - table: DATA_QUALITY_MONITORING_RESULTS
+    domain: governance
+    strategy: incremental
+    watermark: MEASUREMENT_TIME
+    schedule: "USING CRON 50 * * * * UTC"
+    native_retention_days: 365
+    freshness_sla_ref: rubric.obs.freshness.governance
+    live:
+      sql: >-
+        SELECT MEASUREMENT_TIME, TABLE_DATABASE || '.' || TABLE_SCHEMA || '.' || TABLE_NAME AS TABLE_NAME, METRIC_NAME,
+        VALUE::FLOAT AS VALUE, NULL AS EXPECTATION_VIOLATED FROM SNOWFLAKE.LOCAL.DATA_QUALITY_MONITORING_RESULTS
+        WHERE MEASUREMENT_TIME >= %(since)s
+  - table: ALERTS
+    domain: reference
+    strategy: full_snapshot
+    schedule: "USING CRON 0 6 * * * UTC"
+    freshness_sla_ref: rubric.obs.freshness.reference
+    live:
+      show: "SHOW ALERTS IN ACCOUNT"
+      columns: {NAME: '"name"', DATABASE_NAME: '"database_name"', SCHEMA_NAME: '"schema_name"', STATE: '"state"',
+                CONDITION: '"condition"', ACTION: '"action"', ALERT_CLASS: 'NULL'}
+  - table: BUDGETS
+    domain: cost
+    strategy: full_snapshot
+    schedule: "USING CRON 0 6 * * * UTC"
+    freshness_sla_ref: rubric.obs.freshness.reference
+    live:
+      show: "SHOW SNOWFLAKE.CORE.BUDGET IN ACCOUNT"
+      columns: {NAME: '"name"', SCOPE: 'NULL', SPENDING_LIMIT: 'NULL', OBJECTS: 'NULL'}
+  - table: CORTEX_USAGE_HISTORY
+    domain: ai
+    strategy: incremental
+    watermark: START_TIME
+    schedule: "USING CRON 35 * * * * UTC"
+    native_retention_days: 365
+    freshness_sla_ref: rubric.obs.freshness.ai
+    live:
+      sql: >-
+        SELECT c.START_TIME, c.END_TIME, c.FUNCTION_NAME, c.MODEL_NAME, NULL AS AGENT_NAME, q.ROLE_NAME, q.USER_NAME,
+        c.TOKENS, c.TOKEN_CREDITS FROM SNOWFLAKE.ACCOUNT_USAGE.CORTEX_FUNCTIONS_QUERY_USAGE_HISTORY c
+        LEFT JOIN SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY q ON q.QUERY_ID = c.QUERY_ID WHERE c.START_TIME >= %(since)s
+  - table: SEMANTIC_VIEWS
+    domain: ai
+    strategy: full_snapshot
+    schedule: "USING CRON 0 6 * * * UTC"
+    freshness_sla_ref: rubric.obs.freshness.reference
+    live:
+      show: "SHOW SEMANTIC VIEWS IN ACCOUNT"
+      columns: {NAME: '"name"', DATABASE_NAME: '"database_name"', SCHEMA_NAME: '"schema_name"', KPI_DOMAIN: 'NULL',
+                COMMENT: '"comment"'}
+  - table: CORTEX_SEARCH_SERVICES
+    domain: ai
+    strategy: full_snapshot
+    schedule: "USING CRON 0 6 * * * UTC"
+    freshness_sla_ref: rubric.obs.freshness.reference
+    live:
+      show: "SHOW CORTEX SEARCH SERVICES IN ACCOUNT"
+      columns: {NAME: '"name"', DATABASE_NAME: '"database_name"', SCHEMA_NAME: '"schema_name"', SOURCE_TABLE: 'NULL',
+                TARGET_LAG: '"target_lag"'}
+  - table: BI_REPORTS
+    domain: usage
+    strategy: full_snapshot
+    schedule: "USING CRON 0 7 * * * UTC"
+    freshness_sla_ref: rubric.obs.freshness.reference
+    live: {origin: client_input}
+  - table: BI_MEASURES
+    domain: usage
+    strategy: full_snapshot
+    schedule: "USING CRON 0 7 * * * UTC"
+    freshness_sla_ref: rubric.obs.freshness.reference
+    live: {origin: client_input}
