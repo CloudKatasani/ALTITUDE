@@ -1,0 +1,17 @@
+# Example partner (white-label) theme used in tests: proves de-branding is configuration only.
+theme: partner_example
+tokens:
+  PRODUCT_NAME: "Summit Insight"
+  COMPANY_NAME: "Example Consulting LLP"
+  COPILOT_NAME: "Guide"
+  REVIEW_BOARD_NAME: "Design Authority"
+  PACKAGE_D_NAME: "Estate Diagnostics"
+  PACKAGE_O_NAME: "Estate Observability"
+  HEALTH_INDEX_NAME: "Estate Health Index"
+  SUPPORT_EMAIL: "help@example.org"
+  COLOR_PRIMARY: "#2B2D42"
+  COLOR_ACCENT: "#EF8354"
+  COLOR_WARN: "#E0A100"
+  COLOR_DANGER: "#C0392B"
+  COLOR_SURFACE: "#FFFFFF"
+  COLOR_TEXT: "#111111"

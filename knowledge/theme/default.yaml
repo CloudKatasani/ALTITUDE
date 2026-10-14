@@ -1,0 +1,18 @@
+# White-label tokens. Every user-facing name and brand colour comes from here.
+# A partner edition is a copy of this file with different values.
+theme: default
+tokens:
+  PRODUCT_NAME: "ALTITUDE"
+  COMPANY_NAME: "ALTITUDE Partners"
+  COPILOT_NAME: "Sherpa"
+  REVIEW_BOARD_NAME: "Architecture Review Board"
+  PACKAGE_D_NAME: "Platform Deep Diagnostics"
+  PACKAGE_O_NAME: "Platform Observability"
+  HEALTH_INDEX_NAME: "Platform Health Index"
+  SUPPORT_EMAIL: "support@example.com"
+  COLOR_PRIMARY: "#1F3A5F"
+  COLOR_ACCENT: "#3FA796"
+  COLOR_WARN: "#D98E04"
+  COLOR_DANGER: "#B23A48"
+  COLOR_SURFACE: "#F7F9FB"
+  COLOR_TEXT: "#1B1F24"
