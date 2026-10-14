@@ -88,3 +88,17 @@ def generate_board_pack(context: Any = None, snapshot_id: str = "", tier: str = 
         raise KeyError(f"no snapshot {snapshot_id}")
     out = ctx.workspace / "board_pack" / snapshot_id
     return {**build(Snapshot.open(row["location"]), out, tier), "directory": str(out)}
+
+
+def assess_marketplace(context: Any = None, snapshot_id: str = "", package_o: bool = False) -> dict:
+    from altitude.core.snapshot import Snapshot
+    from altitude.marketplace import assess
+
+    ctx = coerce(context)
+    row = ctx.store.get("snapshot", snapshot_id=snapshot_id)
+    if row is None:
+        raise KeyError(f"no snapshot {snapshot_id}")
+    r = assess(Snapshot.open(row["location"]), package_o=package_o)
+    return {"summary": r["summary"], "assessment_hash": r["assessment_hash"],
+            "products": [{k: p[k] for k in ("id", "status", "score", "blockers", "fixes", "consumers")} for p in r["products"]],
+            "agents": [{k: a[k] for k in ("id", "status", "fixes")} for a in r["agents"]]}

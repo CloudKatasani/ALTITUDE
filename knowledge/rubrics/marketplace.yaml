@@ -1,0 +1,18 @@
+namespace: marketplace
+version: 1.0.0
+description: Certification rules for data products and marketplace agents (evidence-based, Section 26).
+values:
+  product_weights:          # share of the trust score per check
+    exists: 0.15
+    contract: 0.15
+    owner: 0.10
+    documentation: 0.10
+    quality_monitors: 0.15
+    privacy: 0.20
+    freshness: 0.15
+  blocking: [exists, contract, privacy]   # a failure here blocks certification regardless of score
+  certify_min_score: 0.85
+  column_comment_min: 0.8                 # share of exposed columns with a description
+  freshness_on_time_min: 0.95             # share of days loaded before the deadline
+  agent_golden_questions_min: 15
+  adoption_window_days: 90

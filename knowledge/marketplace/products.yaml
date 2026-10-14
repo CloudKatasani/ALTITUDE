@@ -1,0 +1,61 @@
+# Data products published to the internal marketplace (Section 26). Each manifest is the contract:
+# owner, objects and columns exposed, SLAs, endpoints and classification. Certification is computed from
+# evidence in the estate snapshot (altitude.marketplace.trust), never declared.
+products:
+  - id: DP-ORDERS
+    name: Orders
+    domain: sales
+    description: "One row per order line with customer, region and net/gross amounts; the certified basis for bookings and AOV."
+    owner: sales-data@acme
+    steward: sales-steward@acme
+    objects:
+      - table: EDW.SALES.FCT_ORDERS
+        columns: [ORDER_ID, ORDER_DATE, CUSTOMER_ID, REGION, NET_AMOUNT, GROSS_AMOUNT, STATUS]
+      - table: EDW.SALES.DIM_PRODUCT
+        columns: [PRODUCT_ID, NAME, CATEGORY]
+    freshness: {loaded_by: EDW.SALES.LOAD_ORDERS_TASK, deadline_utc: "06:00"}
+    endpoints: [sql, semantic_view, mcp]
+    classification: internal
+    kpis: [Bookings, Orders, Average order value]
+    consumers_expected: [finance, sales-ops, revenue-agent]
+  - id: DP-REVENUE
+    name: Recognised Revenue
+    domain: finance
+    description: "Recognised revenue by day, product and region, net of tax; feeds month-end close and the board pack."
+    owner: finance-data@acme
+    steward: controller@acme
+    objects:
+      - table: EDW.FINANCE.FCT_REVENUE
+        columns: [REVENUE_DATE, PRODUCT_ID, REGION, NET_AMOUNT, GROSS_AMOUNT, TAX_AMOUNT, CURRENCY]
+    freshness: {loaded_by: EDW.FINANCE.LOAD_REVENUE_TASK, deadline_utc: "06:00"}
+    endpoints: [sql, semantic_view]
+    classification: confidential
+    kpis: [Revenue, Gross revenue, Tax]
+    consumers_expected: [finance, revenue-agent]
+  - id: DP-CUSTOMER-360
+    name: Customer 360
+    domain: sales
+    description: "Current customer attributes and segments with contact details masked by policy for non-privileged roles."
+    owner: crm-data@acme
+    steward: crm-steward@acme
+    objects:
+      - table: EDW.SALES.DIM_CUSTOMER
+        columns: [CUSTOMER_ID, NAME, EMAIL, PHONE, SEGMENT, REGION, IS_CURRENT]
+    endpoints: [sql, mcp]
+    classification: pii
+    kpis: [Active customers]
+    consumers_expected: [marketing, service-agent]
+  - id: DP-DIGITAL-EVENTS
+    name: Digital Engagement Events
+    domain: digital
+    description: "Web and app events by customer and type for engagement and funnel analytics."
+    owner: digital@acme
+    steward: digital-steward@acme
+    objects:
+      - table: EDW.SALES.FCT_EVENTS
+        columns: [EVENT_ID, EVENT_DATE, CUSTOMER_ID, EVENT_TYPE]
+    freshness: {loaded_by: EDW.STAGING.INGEST_EVENTS_TASK, deadline_utc: "06:00"}
+    endpoints: [sql]
+    classification: internal
+    kpis: [Daily active users, Events per customer]
+    consumers_expected: [digital, data-science]

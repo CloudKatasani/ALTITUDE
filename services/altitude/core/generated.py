@@ -43,6 +43,7 @@ GENERATOR_MODULES = [
     "altitude.etl.generate",
     "altitude_connectors.generate",
     "altitude.packaging.generate",
+    "altitude.marketplace.generate",
 ]
 
 

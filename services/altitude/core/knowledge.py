@@ -169,6 +169,7 @@ def validate_tree(root: Path | None = None) -> list[str]:
 # Module-level semantic validators: ``(module, function)`` taking the knowledge root and returning problems.
 SEMANTIC_VALIDATORS = [
     ("altitude.airready.kpi_registry", "validate_tree"),
+    ("altitude.marketplace.catalog", "validate_tree"),
 ]
 
 

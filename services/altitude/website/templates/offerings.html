@@ -29,7 +29,7 @@
       <p>{{ o.scope }}.</p>
       {% if o.next and offer.get(o.next) %}<p class="muted">Next step: <a href="#{{ o.next }}">{{ offer[o.next].name.split(" — ")[0] }}</a></p>{% endif %}
       <div class="price">{{ o|price }}</div>
-      {% set detail = {"OFF-D": "package-d.html", "OFF-D0": "package-d.html", "OFF-O": "package-o.html", "OFF-ASSESS": "migration.html", "OFF-MIG": "migration.html", "OFF-FACTORY": "migration.html", "OFF-RUN": "managed-run.html", "OFF-AI": "ai-ready.html", "OFF-FOUND": "migration.html#foundation"} %}
+      {% set detail = {"OFF-D": "package-d.html", "OFF-D0": "package-d.html", "OFF-O": "package-o.html", "OFF-ASSESS": "migration.html", "OFF-MIG": "migration.html", "OFF-FACTORY": "migration.html", "OFF-RUN": "managed-run.html", "OFF-AI": "ai-ready.html", "OFF-FOUND": "migration.html#foundation", "OFF-MKT": "marketplace.html"} %}
       {% if detail.get(o.id) %}<a href="{{ detail[o.id] }}" style="margin-top:8px">Learn more →</a>{% endif %}
     </div>
     {% endfor %}

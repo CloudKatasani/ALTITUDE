@@ -10,6 +10,7 @@ offers:
   - {id: OFF-FACTORY, name: "Migration Factory (enterprise)", package: migration_factory, duration_weeks: [26, 104], fee_usd: [500000, 5000000], buyer: "CIO / CDO", next: OFF-RUN, scope: "Multi-wave programme"}
   - {id: OFF-FOUND, name: "Snowflake Foundation (greenfield)", package: foundation, duration_weeks: [6, 10], fee_usd: [80000, 200000], buyer: "CDO", next: OFF-O, scope: "Landing zone + first data product, Package O Core from day one"}
   - {id: OFF-AI, name: "AI-Ready Programme", package: ai_ready, duration_weeks: [10, 12], fee_usd: [90000, 250000], buyer: "CDO", next: OFF-RUN, scope: "Score, fix, semantic views, Cortex agent pilot"}
+  - {id: OFF-MKT, name: "Data Product & Agent Marketplace", package: marketplace, duration_weeks: [8, 14], fee_usd: [80000, 250000], buyer: "CDO / Head of Data Products", next: OFF-RUN, scope: "Data product manifests with contracts, owners and SLAs; evidence-based certification; internal marketplace listings and secure shares; Cortex agents published on certified products"}
   - {id: OFF-RUN, name: "Managed Run Service", package: managed_run, duration_weeks: [52, 52], fee_usd: [0, 0], monthly_usd: [12000, 25000], buyer: "CIO", next: OFF-FACTORY, scope: "Package O3 + L2/L3 support + quarterly optimisation"}
 tiers:
   - {tier: D0, package: D, fee_usd: [0, 0], weeks: 1, accounts: 1, domains: [D1, D2, D3, D4, D5], top_findings: 10}

@@ -48,6 +48,21 @@
 </section>
 
 <section class="block">
+  <div class="wrap split">
+    <div>
+      <div class="eyebrow">Data Product &amp; Agent Marketplace</div>
+      <h2>Certified data products and the agents that use them</h2>
+      <p>We implement an internal marketplace where every product has a contract, an owner and an SLA, and every agent runs on certified data with its own role, budget and evaluation suite. Certification comes from evidence in your account.</p>
+      <a class="btn outline" href="marketplace.html">Explore the marketplace</a>
+    </div>
+    <div class="grid g2">
+      {% for p in s.marketplace.products[:2] %}<div class="card"><span class="chip">{{ p.domain }}</span><h3 style="margin-top:8px">{{ p.name }}</h3><p class="muted">{{ p.objects|length }} object(s) · owner {{ p.owner }}</p></div>{% endfor %}
+      {% for a in s.marketplace.agents[:2] %}<div class="card"><span class="chip accent">agent</span><h3 style="margin-top:8px">{{ a.name }}</h3><p class="muted">“{{ a.sample_questions[0] }}”</p></div>{% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="block">
   <div class="wrap">
     <div class="eyebrow">The problems we solve</div>
     <h2>Why Snowflake estates leak money and trust</h2>

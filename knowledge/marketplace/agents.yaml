@@ -1,0 +1,45 @@
+# Business-facing agents published to the internal marketplace alongside data products. Each agent runs
+# under its own role, consumes certified data products only, has a spend budget and an evaluation suite.
+# (Platform-operations agents live in knowledge/agents/catalogue.yaml.)
+marketplace_agents:
+  - id: MA-REVENUE-ANALYST
+    name: Revenue Analyst
+    description: "Answers revenue, bookings and order questions in plain English with the SQL and the certified KPI it used."
+    kind: cortex_analyst
+    products: [DP-ORDERS, DP-REVENUE]
+    semantic_view: EDW.SEMANTIC.SV_FINANCE
+    role: AGENT_ROLE
+    audience: [finance, sales-ops]
+    golden_questions: 24
+    sample_questions: ["What was net revenue by region last month?", "How did average order value trend this quarter?"]
+  - id: MA-CUSTOMER-SERVICE
+    name: Customer Service Assistant
+    description: "Looks up a customer's segment and recent engagement for service agents, never revealing masked contact details."
+    kind: cortex_analyst
+    products: [DP-CUSTOMER-360, DP-DIGITAL-EVENTS]
+    semantic_view: EDW.SEMANTIC.SV_SALES
+    role: AGENT_ROLE
+    audience: [service]
+    golden_questions: 18
+    sample_questions: ["Which segment is customer 10442 in?", "How many app sessions did they have this week?"]
+  - id: MA-POLICY-SEARCH
+    name: Policy & Procedure Search
+    description: "Finds and cites the governing policy for a data-handling question, with the paragraph it relied on."
+    kind: cortex_search
+    products: []
+    search_service: DOCS.SEARCH.CSS_POLICIES
+    role: AGENT_ROLE
+    audience: [all-staff]
+    golden_questions: 30
+    sample_questions: ["Can I share customer emails with a vendor?", "How long do we retain AMI interval data?"]
+  - id: MA-FINOPS-ADVISOR
+    name: FinOps Advisor
+    description: "Explains Snowflake spend by warehouse and cost centre and forecasts month-end, citing the KPI behind each number."
+    kind: cortex_analyst
+    products: []
+    semantic_view: OBS.SEMANTIC.SV_COST
+    provided_by: package_o
+    role: AGENT_ROLE
+    audience: [finops, platform]
+    golden_questions: 16
+    sample_questions: ["Which warehouses drove last week's spend?", "Will we stay within budget this month?"]

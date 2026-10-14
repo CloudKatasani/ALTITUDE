@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Data product manifests",
+  "x-altitude-globs": ["marketplace/products.yaml"],
+  "type": "object",
+  "required": ["products"],
+  "additionalProperties": false,
+  "properties": {"products": {"type": "array", "minItems": 1, "items": {
+    "type": "object", "required": ["id", "name", "domain", "description", "owner", "steward", "objects", "endpoints", "classification"],
+    "additionalProperties": false,
+    "properties": {
+      "id": {"type": "string", "pattern": "^DP-[A-Z0-9-]+$"}, "name": {"type": "string"}, "domain": {"type": "string"},
+      "description": {"type": "string", "minLength": 20}, "owner": {"type": "string"}, "steward": {"type": "string"},
+      "objects": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["table", "columns"], "additionalProperties": false,
+        "properties": {"table": {"type": "string", "pattern": "^[A-Z0-9_]+\\.[A-Z0-9_]+\\.[A-Z0-9_]+$"}, "columns": {"type": "array", "minItems": 1, "items": {"type": "string"}}}}},
+      "freshness": {"type": "object", "required": ["loaded_by", "deadline_utc"], "additionalProperties": false,
+        "properties": {"loaded_by": {"type": "string"}, "deadline_utc": {"type": "string", "pattern": "^\\d{2}:\\d{2}$"}}},
+      "endpoints": {"type": "array", "items": {"enum": ["sql", "semantic_view", "mcp", "rest", "share"]}},
+      "classification": {"enum": ["public", "internal", "confidential", "pii"]},
+      "kpis": {"type": "array", "items": {"type": "string"}},
+      "consumers_expected": {"type": "array", "items": {"type": "string"}}}}}}
+}

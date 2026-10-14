@@ -87,6 +87,7 @@ def collect(cache_dir: str | Path, assets_dir: str | Path | None = None) -> dict
                    for a in agents],
     }
     out["observability"] = _observability(cache, assets_dir)
+    out["marketplace"] = _marketplace(cache, snap)
     if assets_dir is not None:
         assets = Path(assets_dir)
         tmp = cache / "diag_exports"
@@ -147,3 +148,20 @@ def _dedupe_alerts(alerts: list[dict]) -> list[dict]:
                                     "route": a["ROUTE"], "runbook": a["RUNBOOK"], "days": 0})
         row["days"] += 1
     return list(seen.values())
+
+
+def _marketplace(cache: Path, seeded: Snapshot) -> dict:
+    """Certification of the sample products and agents before (seeded) and after remediation (clean estate)."""
+    from altitude.marketplace import agents, assess, products
+
+    before = assess(seeded, package_o=True)
+    after = assess(_snapshot(cache, "clean"), package_o=True)
+    a_by = {x["id"]: x for x in after["products"]}
+    ag_after = {x["id"]: x for x in after["agents"]}
+    manifests = {p["id"]: p for p in products()}
+    agent_manifests = {a["id"]: a for a in agents()}
+    return {
+        "summary_before": before["summary"], "summary_after": after["summary"],
+        "products": [{**manifests[p["id"]], "before": p, "after": a_by[p["id"]]} for p in before["products"]],
+        "agents": [{**agent_manifests[a["id"]], "before": a, "after": ag_after[a["id"]]} for a in before["agents"]],
+    }
