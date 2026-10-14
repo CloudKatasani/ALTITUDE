@@ -20,7 +20,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from altitude.core.ai import Inference, Provider, TemplateProvider, fence_untrusted
+from altitude.core.ai import Provider, TemplateProvider, fence_untrusted
 from altitude.core.rubric import RubricSet
 
 from .complexity import ComplexityResult
@@ -47,12 +47,6 @@ class Disposition:
     needs_review: bool = False
     provider: str = "template"
     model_id: str = TemplateProvider.model_id
-
-    def inference(self, inputs_ref: str | None, tenant_id: str | None = None) -> Inference:
-        return Inference(kind="disposition", subject_type="object_disposition", subject_id=self.object_id,
-                         output=self.disposition, confidence=self.confidence, rationale=self.rationale,
-                         model_id=self.model_id, prompt_template=PROMPT_TEMPLATE, provider=self.provider,
-                         inputs_ref=inputs_ref, tenant_id=tenant_id)
 
 
 def _propagate(estate: Estate, seeds: set[str], include_writers: bool = False) -> dict[str, str]:

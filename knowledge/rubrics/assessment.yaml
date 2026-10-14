@@ -61,7 +61,6 @@ values:
     large_table_bytes_min: 5000000000
     rows_per_size_unit: 100000000     # size factor for size-sensitive patterns = rows / this (at least 1)
     bytes_per_size_unit: 50000000000
-    runs_per_month_default: 30        # live object with no observed run count (e.g. called only by a job)
     usage_months: 3                   # usage_90d spans this many months
     credit_price_usd: 3.0
     wide_column_types: [xml, json, variant, clob, blob, xmltype, "nvarchar(max)", "varchar(max)", "varbinary(max)"]
