@@ -1,0 +1,146 @@
+# Agent actions as data (Section 18.1).
+#
+# action_types  — every change an agent may draft: SQL template, rollback template, the properties captured
+#                 before execution (for rollback) and whether the change is reversible. Templates take
+#                 {target}, {<param>} and {previous.<prop>}; identifiers and values are validated before rendering.
+# pre_approved  — the per-tenant PRE-APPROVED ACTION CATALOGUE. Only actions listed here may run at L3
+#                 (without a human approver), only for the listed agents, only on targets inside `scope`,
+#                 only within the blast-radius limits, and only inside the change window. A guard metric is
+#                 watched after execution; when it regresses beyond the rubric tolerance the change is
+#                 rolled back automatically and the rollback is logged.
+version: 1.0.0
+action_types:
+  - id: AT-WH-AUTO-SUSPEND
+    action_type: warehouse.set_auto_suspend
+    object_type: warehouse
+    params: {auto_suspend: integer}
+    sql_template: "ALTER WAREHOUSE {target} SET AUTO_SUSPEND = {auto_suspend}"
+    rollback_template: "ALTER WAREHOUSE {target} SET AUTO_SUSPEND = {previous.auto_suspend}"
+    capture: [auto_suspend]
+    reversible: true
+    executable: true
+
+  - id: AT-WH-RESIZE
+    action_type: warehouse.resize
+    object_type: warehouse
+    params: {warehouse_size: warehouse_size}
+    sql_template: "ALTER WAREHOUSE {target} SET WAREHOUSE_SIZE = '{warehouse_size}'"
+    rollback_template: "ALTER WAREHOUSE {target} SET WAREHOUSE_SIZE = '{previous.warehouse_size}'"
+    capture: [warehouse_size]
+    reversible: true
+    executable: true
+
+  - id: AT-WH-MAX-CLUSTERS
+    action_type: warehouse.set_max_cluster_count
+    object_type: warehouse
+    params: {max_cluster_count: integer}
+    sql_template: "ALTER WAREHOUSE {target} SET MAX_CLUSTER_COUNT = {max_cluster_count}"
+    rollback_template: "ALTER WAREHOUSE {target} SET MAX_CLUSTER_COUNT = {previous.max_cluster_count}"
+    capture: [max_cluster_count]
+    reversible: true
+    executable: true
+
+  - id: AT-TASK-RERUN
+    action_type: task.rerun
+    object_type: task
+    params: {}
+    sql_template: "EXECUTE TASK {target}"
+    capture: []
+    reversible: false
+    idempotent_required: true
+    executable: true
+
+  - id: AT-TASK-FIX-DRAFT
+    action_type: task.fix_draft
+    object_type: task
+    params: {fix: text}
+    description: Code change delivered as a pull request against the pipeline repository; never executed by an agent.
+    capture: []
+    reversible: true
+    executable: false
+
+  - id: AT-USER-DISABLE
+    action_type: user.disable
+    object_type: user
+    params: {}
+    sql_template: "ALTER USER {target} SET DISABLED = TRUE"
+    rollback_template: "ALTER USER {target} SET DISABLED = {previous.disabled}"
+    capture: [disabled]
+    reversible: true
+    executable: true
+
+  - id: AT-USER-AUTH-POLICY
+    action_type: user.set_authentication_policy
+    object_type: user
+    params: {policy: identifier}
+    sql_template: "ALTER USER {target} SET AUTHENTICATION POLICY {policy}"
+    rollback_template: "ALTER USER {target} UNSET AUTHENTICATION POLICY"
+    capture: []
+    reversible: true
+    executable: true
+
+  - id: AT-REVOKE-ROLE-FROM-USER
+    action_type: grant.revoke_role_from_user
+    object_type: user
+    params: {role: identifier}
+    sql_template: "REVOKE ROLE {role} FROM USER {target}"
+    rollback_template: "GRANT ROLE {role} TO USER {target}"
+    capture: []
+    reversible: true
+    executable: true
+
+  - id: AT-REVOKE-PRIV-FROM-ROLE
+    action_type: grant.revoke_privilege_from_role
+    object_type: role
+    params: {privilege: privilege, object_type: object_kind, object_name: identifier}
+    sql_template: "REVOKE {privilege} ON {object_type} {object_name} FROM ROLE {target}"
+    rollback_template: "GRANT {privilege} ON {object_type} {object_name} TO ROLE {target}"
+    capture: []
+    reversible: true
+    executable: true
+
+  - id: AT-TABLE-QUARANTINE
+    action_type: table.quarantine
+    object_type: table
+    params: {tag: identifier, reason: text}
+    description: Tags the table as quarantined; the tag-based row access policy hides it from consumers. Data is never deleted.
+    sql_template: "ALTER TABLE {target} SET TAG {tag} = 'QUARANTINED'"
+    rollback_template: "ALTER TABLE {target} UNSET TAG {tag}"
+    capture: []
+    reversible: true
+    executable: true
+
+pre_approved:
+  - id: PA-DEFAULT-WH-AUTO-SUSPEND
+    tenants: ["*"]
+    action_type: warehouse.set_auto_suspend
+    agents: [AG-WAREHOUSE-RIGHTSIZER]
+    max_autonomy: L3
+    scope: {include: ["WH_*"], exclude: ["WH_ELT_*"]}
+    blast_radius:
+      max_targets_per_run_threshold_ref: rubric.agents.blast_radius.auto_suspend_targets_per_run
+      max_executions_per_day_threshold_ref: rubric.agents.blast_radius.auto_suspend_executions_per_day
+      param_bounds:
+        auto_suspend:
+          min_threshold_ref: rubric.agents.blast_radius.auto_suspend_min_seconds
+          max_threshold_ref: rubric.agents.blast_radius.auto_suspend_max_seconds
+    change_window: {days: [MON, TUE, WED, THU, FRI, SAT, SUN], start_hour_utc: 0, end_hour_utc: 24}
+    guard:
+      metric: warehouse_queued_load
+      regression_threshold_ref: rubric.agents.guard.queued_load_max_increase
+      observation_hours_threshold_ref: rubric.agents.guard.observation_hours
+    rollback: automatic
+
+  - id: PA-DEFAULT-TASK-RERUN
+    tenants: ["*"]
+    action_type: task.rerun
+    agents: [AG-PIPELINE-TRIAGE]
+    max_autonomy: L3
+    scope: {include: ["*.*.*"], exclude: []}
+    requires_idempotent_flag: true
+    blast_radius:
+      max_targets_per_run_threshold_ref: rubric.agents.blast_radius.task_reruns_per_run
+      max_executions_per_day_threshold_ref: rubric.agents.blast_radius.task_reruns_per_day
+      param_bounds: {}
+    change_window: {days: [MON, TUE, WED, THU, FRI, SAT, SUN], start_hour_utc: 0, end_hour_utc: 24}
+    rollback: none_idempotent

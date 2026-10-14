@@ -1,0 +1,80 @@
+# AUTO-GENERATED — DO NOT EDIT. Source: knowledge/agents/catalogue.yaml. Regenerate with `altitude generate`.
+# Cortex Agent specification for Warehouse Rightsizer — deploy with CREATE AGENT ... FROM SPECIFICATION.
+models:
+  orchestration: auto
+instructions:
+  orchestration: 'You are the Warehouse Rightsizer (AG-WAREHOUSE-RIGHTSIZER). Recommends size/cluster/auto-suspend
+    changes from load and queue metrics. Maximum autonomy: L3. Guardrails: change_window, auto_revert_on_queueing.
+    Use only the provided read-only tools; cite evidence IDs for every claim; state confidence and rationale. Never
+    execute a change yourself: draft it for the ALTITUDE action gateway, which enforces approvals (L2) and the pre-approved
+    catalogue (L3: warehouse.set_auto_suspend).'
+  response: Lead with the decision, then evidence IDs, confidence and the drafted action.
+tools:
+- tool_spec:
+    type: generic
+    name: warehouse_config
+    description: Current warehouse settings.
+    input_schema:
+      type: object
+      properties: {}
+      required: []
+- tool_spec:
+    type: generic
+    name: warehouse_utilisation
+    description: Billed compute vs compute attributed to queries per warehouse (idle share).
+    input_schema:
+      type: object
+      properties:
+        days:
+          type: integer
+      required:
+      - days
+- tool_spec:
+    type: generic
+    name: warehouse_load
+    description: Average and peak-hour queued load per warehouse.
+    input_schema:
+      type: object
+      properties:
+        hours:
+          type: number
+        warehouse:
+          type: string
+      required:
+      - hours
+- tool_spec:
+    type: generic
+    name: warehouse_query_profile
+    description: Execution-time percentiles and spilling per warehouse.
+    input_schema:
+      type: object
+      properties:
+        days:
+          type: integer
+      required:
+      - days
+tool_resources:
+  warehouse_config:
+    type: procedure
+    identifier: ALTITUDE_AGENTS.TOOLS.WAREHOUSE_CONFIG
+    execution_environment:
+      type: warehouse
+      warehouse: WH_AGENTS
+  warehouse_utilisation:
+    type: procedure
+    identifier: ALTITUDE_AGENTS.TOOLS.WAREHOUSE_UTILISATION
+    execution_environment:
+      type: warehouse
+      warehouse: WH_AGENTS
+  warehouse_load:
+    type: procedure
+    identifier: ALTITUDE_AGENTS.TOOLS.WAREHOUSE_LOAD
+    execution_environment:
+      type: warehouse
+      warehouse: WH_AGENTS
+  warehouse_query_profile:
+    type: procedure
+    identifier: ALTITUDE_AGENTS.TOOLS.WAREHOUSE_QUERY_PROFILE
+    execution_environment:
+      type: warehouse
+      warehouse: WH_AGENTS

@@ -1,0 +1,89 @@
+# AUTO-GENERATED — DO NOT EDIT. Source: knowledge/agents/catalogue.yaml. Regenerate with `altitude generate`.
+# Cortex Agent specification for Access Hygiene Agent — deploy with CREATE AGENT ... FROM SPECIFICATION.
+models:
+  orchestration: auto
+instructions:
+  orchestration: 'You are the Access Hygiene Agent (AG-ACCESS-HYGIENE). Finds dormant users/grants, orphan roles,
+    over-privileged roles, ACCOUNTADMIN usage, MFA gaps; drafts revocations. Maximum autonomy: L2. Guardrails: owner_approval_required.
+    Use only the provided read-only tools; cite evidence IDs for every claim; state confidence and rationale. Never
+    execute a change yourself: draft it for the ALTITUDE action gateway, which enforces approvals (L2) and the pre-approved
+    catalogue (L3: none).'
+  response: Lead with the decision, then evidence IDs, confidence and the drafted action.
+tools:
+- tool_spec:
+    type: generic
+    name: users
+    description: User inventory with authentication posture and last login.
+    input_schema:
+      type: object
+      properties: {}
+      required: []
+- tool_spec:
+    type: generic
+    name: user_role_grants
+    description: Role grants to users.
+    input_schema:
+      type: object
+      properties: {}
+      required: []
+- tool_spec:
+    type: generic
+    name: role_grants
+    description: Privilege and role grants to roles.
+    input_schema:
+      type: object
+      properties: {}
+      required: []
+- tool_spec:
+    type: generic
+    name: roles
+    description: Role inventory.
+    input_schema:
+      type: object
+      properties: {}
+      required: []
+- tool_spec:
+    type: generic
+    name: privileged_usage
+    description: Statements executed under a privileged role, per user.
+    input_schema:
+      type: object
+      properties:
+        role:
+          type: string
+        days:
+          type: integer
+      required:
+      - role
+      - days
+tool_resources:
+  users:
+    type: procedure
+    identifier: ALTITUDE_AGENTS.TOOLS.USERS
+    execution_environment:
+      type: warehouse
+      warehouse: WH_AGENTS
+  user_role_grants:
+    type: procedure
+    identifier: ALTITUDE_AGENTS.TOOLS.USER_ROLE_GRANTS
+    execution_environment:
+      type: warehouse
+      warehouse: WH_AGENTS
+  role_grants:
+    type: procedure
+    identifier: ALTITUDE_AGENTS.TOOLS.ROLE_GRANTS
+    execution_environment:
+      type: warehouse
+      warehouse: WH_AGENTS
+  roles:
+    type: procedure
+    identifier: ALTITUDE_AGENTS.TOOLS.ROLES
+    execution_environment:
+      type: warehouse
+      warehouse: WH_AGENTS
+  privileged_usage:
+    type: procedure
+    identifier: ALTITUDE_AGENTS.TOOLS.PRIVILEGED_USAGE
+    execution_environment:
+      type: warehouse
+      warehouse: WH_AGENTS

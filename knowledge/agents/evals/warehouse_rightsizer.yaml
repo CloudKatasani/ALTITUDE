@@ -1,0 +1,38 @@
+# Golden incidents for the Warehouse Rightsizer.
+agent_id: AG-WAREHOUSE-RIGHTSIZER
+version: 1.0.0
+cases:
+  - id: EVAL-RS-001
+    description: Idle-heavy warehouses get a pre-approved (L3) auto-suspend change; size and cluster changes are L2 drafts.
+    telemetry:
+      synthetic: {profile: seeded}
+    expect:
+      actions:
+        - {action_type: warehouse.set_auto_suspend, target: WH_BI_PROD, autonomy: L3, params: {auto_suspend: 60}}
+        - {action_type: warehouse.set_auto_suspend, target: WH_BI_ADHOC, autonomy: L3, params: {auto_suspend: 60}}
+        - {action_type: warehouse.set_auto_suspend, target: WH_DEV, autonomy: L3, params: {auto_suspend: 60}}
+        - {action_type: warehouse.resize, target: WH_BI_ADHOC, autonomy: L2, params: {warehouse_size: MEDIUM}}
+        - {action_type: warehouse.set_max_cluster_count, target: WH_BI_PROD, autonomy: L2}
+      absent_actions:
+        - {target: WH_ELT_PROD}
+        - {target: WH_DS}
+        - {target: WH_AGENTS}
+        - {action_type: warehouse.resize, autonomy: L3}
+
+  - id: EVAL-RS-002
+    description: A well-run account produces no rightsizing changes.
+    telemetry:
+      synthetic: {profile: clean}
+    expect:
+      max_actions: 0
+
+  - id: EVAL-RS-003
+    description: For a newly onboarded tenant (capped at L2) the same auto-suspend change is only a draft.
+    tenant: cautious
+    telemetry:
+      synthetic: {profile: seeded}
+    expect:
+      actions:
+        - {action_type: warehouse.set_auto_suspend, target: WH_BI_PROD, autonomy: L2}
+      absent_actions:
+        - {autonomy: L3}

@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Agent evaluation suite (golden incidents, Section 18.3)",
+  "x-altitude-globs": ["agents/evals/*.yaml"],
+  "type": "object",
+  "required": ["agent_id", "version", "cases"],
+  "additionalProperties": false,
+  "$defs": {
+    "matchers": {"type": "array", "items": {"type": "object", "minProperties": 1}}
+  },
+  "properties": {
+    "agent_id": {"type": "string", "pattern": "^AG-[A-Z0-9-]+$"},
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "description", "telemetry", "expect"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^EVAL-[A-Z]+-\\d{3}$"},
+          "description": {"type": "string"},
+          "tenant": {"type": "string"},
+          "policy_overrides": {"type": "object"},
+          "telemetry": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "as_of": {"type": "string"},
+              "synthetic": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "profile": {"enum": ["seeded", "clean"]},
+                  "days": {"type": "integer", "minimum": 1},
+                  "seed": {"type": "integer"},
+                  "end_date": {"type": "string"},
+                  "account_name": {"type": "string"},
+                  "disabled_issues": {"type": "array", "items": {"type": "string"}},
+                  "anomalies": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["date", "warehouse", "factor"],
+                      "properties": {"date": {"type": "string"}, "warehouse": {"type": "string"}, "factor": {"type": "number"}}
+                    }
+                  }
+                }
+              },
+              "append": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "object"}}},
+              "tables": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "object"}}}
+            },
+            "oneOf": [{"required": ["synthetic"]}, {"required": ["tables"]}]
+          },
+          "expect": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": false,
+            "properties": {
+              "findings": {"$ref": "#/$defs/matchers"},
+              "absent_findings": {"$ref": "#/$defs/matchers"},
+              "actions": {"$ref": "#/$defs/matchers"},
+              "absent_actions": {"$ref": "#/$defs/matchers"},
+              "incidents": {"$ref": "#/$defs/matchers"},
+              "max_findings": {"type": "integer", "minimum": 0},
+              "max_actions": {"type": "integer", "minimum": 0}
+            }
+          }
+        }
+      }
+    }
+  }
+}

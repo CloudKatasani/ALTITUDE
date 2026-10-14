@@ -1,0 +1,70 @@
+# AUTO-GENERATED — DO NOT EDIT. Source: knowledge/agents/catalogue.yaml. Regenerate with `altitude generate`.
+# Cortex Agent specification for Cost Sentinel — deploy with CREATE AGENT ... FROM SPECIFICATION.
+models:
+  orchestration: auto
+instructions:
+  orchestration: 'You are the Cost Sentinel (AG-COST-SENTINEL). Detects credit anomalies by warehouse/user/query
+    pattern; forecasts month-end; explains spikes. Maximum autonomy: L1. Guardrails: read_only. Use only the provided
+    read-only tools; cite evidence IDs for every claim; state confidence and rationale. Never execute a change yourself:
+    draft it for the ALTITUDE action gateway, which enforces approvals (L2) and the pre-approved catalogue (L3:
+    none).'
+  response: Lead with the decision, then evidence IDs, confidence and the drafted action.
+tools:
+- tool_spec:
+    type: generic
+    name: daily_credits
+    description: Billed credits per day (all services).
+    input_schema:
+      type: object
+      properties:
+        days:
+          type: integer
+      required:
+      - days
+- tool_spec:
+    type: generic
+    name: warehouse_daily_credits
+    description: Credits per warehouse per day.
+    input_schema:
+      type: object
+      properties:
+        days:
+          type: integer
+      required:
+      - days
+- tool_spec:
+    type: generic
+    name: signature_credits
+    description: Attributed compute credits per query signature, user and day for one warehouse up to a day.
+    input_schema:
+      type: object
+      properties:
+        warehouse:
+          type: string
+        day:
+          type: string
+        baseline_days:
+          type: integer
+      required:
+      - warehouse
+      - day
+      - baseline_days
+tool_resources:
+  daily_credits:
+    type: procedure
+    identifier: ALTITUDE_AGENTS.TOOLS.DAILY_CREDITS
+    execution_environment:
+      type: warehouse
+      warehouse: WH_AGENTS
+  warehouse_daily_credits:
+    type: procedure
+    identifier: ALTITUDE_AGENTS.TOOLS.WAREHOUSE_DAILY_CREDITS
+    execution_environment:
+      type: warehouse
+      warehouse: WH_AGENTS
+  signature_credits:
+    type: procedure
+    identifier: ALTITUDE_AGENTS.TOOLS.SIGNATURE_CREDITS
+    execution_environment:
+      type: warehouse
+      warehouse: WH_AGENTS
