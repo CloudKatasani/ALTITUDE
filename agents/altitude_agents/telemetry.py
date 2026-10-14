@@ -22,7 +22,6 @@ from altitude.synthetic.schema import HARVEST_SCHEMA
 from .errors import ReadOnlyViolation
 
 _READ_NODES = (exp.Select, exp.Union, exp.Intersect, exp.Except, exp.Subquery)
-_TEXTUAL = ("JSON", "TIMESTAMP", "DATE", "VARCHAR")
 
 
 def _as_text(v: Any, t: str) -> str | None:
@@ -100,10 +99,12 @@ class Telemetry:
             arrays = {}
             for c, t in cols.items():
                 values = [r.get(c) for r in rows]
-                if t in _TEXTUAL:
+                try:
+                    if t == "JSON":
+                        raise TypeError("JSON is always serialised")
+                    arrays[c] = pa.array(values)     # native types (datetime, str, numbers) need no conversion
+                except (TypeError, pa.ArrowInvalid, pa.ArrowTypeError):
                     arrays[c] = pa.array([_as_text(v, t) for v in values], type=pa.string())
-                else:
-                    arrays[c] = pa.array(values)
             arrow_tbl = pa.table(arrays)  # noqa: F841 - referenced by DuckDB replacement scan
             select = ", ".join(f'CAST("{c}" AS {t}) AS "{c}"' for c, t in cols.items())
             con.execute(f'INSERT INTO "{name}" SELECT {select} FROM arrow_tbl')
@@ -134,6 +135,12 @@ class Telemetry:
         cur = self._con.execute(sql, params if params is not None else [])
         cols = [d[0] for d in cur.description] if cur.description else []
         return [dict(zip(cols, r)) for r in cur.fetchall()]
+
+    def arrow(self, table: str) -> Any:
+        """Whole harvest table as an Arrow table (read-only copy, e.g. to seed a simulated account)."""
+        if table not in self._tables:
+            raise KeyError(table)
+        return self._con.execute(f'SELECT * FROM "{table}"').arrow()
 
     def scalar(self, sql: str, params: Mapping[str, Any] | list | None = None) -> Any:
         rows = self.query(sql, params)

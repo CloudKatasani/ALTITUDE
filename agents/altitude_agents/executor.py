@@ -121,16 +121,8 @@ class SimulatedSnowflake:
         self.executed: list[str] = []
         self.clock = clock or (lambda: datetime.now(timezone.utc).replace(tzinfo=None))
         for t in _SIM_TABLES:
-            rows = telemetry.query(f'SELECT * FROM "{t}"')
-            cols = telemetry.query(
-                "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = ? "
-                "ORDER BY ordinal_position", [t])
-            self.con.execute(f'CREATE TABLE "{t}" (' + ", ".join(f'"{c["column_name"]}" {c["data_type"]}'
-                                                                   for c in cols) + ")")
-            if rows:
-                names = [c["column_name"] for c in cols]
-                self.con.executemany(f'INSERT INTO "{t}" VALUES (' + ", ".join("?" for _ in names) + ")",
-                                     [[r[n] for n in names] for r in rows])
+            data = telemetry.arrow(t)  # noqa: F841 - referenced by DuckDB replacement scan
+            self.con.execute(f'CREATE TABLE "{t}" AS SELECT * FROM data')
         self.con.execute('ALTER TABLE USERS ADD COLUMN AUTHENTICATION_POLICY VARCHAR')
 
     # ------------------------------------------------------------------ inspection

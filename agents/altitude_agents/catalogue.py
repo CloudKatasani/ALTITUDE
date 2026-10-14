@@ -2,14 +2,26 @@
 
 from __future__ import annotations
 
+import copy
 import fnmatch
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from altitude.core.knowledge import load_yaml
+from altitude.core.knowledge import load_yaml as _load_yaml
+from altitude.core.paths import knowledge_dir
 
 LEVELS = ("L0", "L1", "L2", "L3")
+_YAML_CACHE: dict[tuple[str, int], Any] = {}
+
+
+def load_yaml(rel: str, root: Path | None = None) -> Any:
+    """Knowledge YAML, cached per file content version (path + mtime); callers get a private copy."""
+    path = (root or knowledge_dir()) / rel
+    key = (str(path), path.stat().st_mtime_ns)
+    if key not in _YAML_CACHE:
+        _YAML_CACHE[key] = _load_yaml(rel, root)
+    return copy.deepcopy(_YAML_CACHE[key])
 
 
 def level_rank(level: str) -> int:

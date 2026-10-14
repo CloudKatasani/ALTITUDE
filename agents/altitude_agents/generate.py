@@ -134,7 +134,7 @@ def generate() -> dict[str, str]:
     out = {}
     for a in agents.values():
         if a.implemented:
-            body = yaml.safe_dump(cortex_spec(a, cat.pre_approved), sort_keys=False, width=110)
+            body = yaml.safe_dump(cortex_spec(a, cat.pre_approved), sort_keys=False, width=110, allow_unicode=True)
             out[f"agents/cortex/{_slug(a.agent_id)}.yaml"] = stamp(
                 f"# Cortex Agent specification for {a.name} — deploy with CREATE AGENT ... FROM SPECIFICATION.\n"
                 + body, ".yaml", SRC_CAT)

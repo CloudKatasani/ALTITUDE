@@ -21,18 +21,18 @@ from typing import Any
 
 from altitude.core.errors import ApprovalRequired
 from altitude.core.ids import canonical_json
-from altitude.core.knowledge import load_yaml
 from altitude.core.paths import knowledge_dir
 from altitude.core.rubric import RubricSet, default_rubrics
 from altitude.core.store import Store, json_safe
 
-from .catalogue import load_tenant_policy
+from .catalogue import load_tenant_policy, load_yaml
 from .errors import PromotionBlocked
 from .runtime import AgentRunner, BaseAgent, RunReport, registry
 from .telemetry import Telemetry
 
 PASS_RATE_REF = "rubric.agents.promotion.eval_pass_rate_min"
-_TELEMETRY_CACHE: dict[str, Telemetry] = {}
+_TELEMETRY_CACHE: dict[str, Telemetry] = {}           # fixtures are read-only, so cases can share them
+_SYNTHETIC_CACHE: dict[str, dict[str, list[dict]]] = {}
 
 
 def suite_path(agent_id: str, root: Path | None = None) -> Path:
@@ -74,7 +74,10 @@ def case_telemetry(case: dict) -> Telemetry:
         if "tables" in t:
             tables = {k: list(v) for k, v in t["tables"].items()}
         else:
-            tables = _synthetic_tables(t.get("synthetic") or {})
+            skey = canonical_json(t.get("synthetic") or {})
+            if skey not in _SYNTHETIC_CACHE:
+                _SYNTHETIC_CACHE[skey] = _synthetic_tables(t.get("synthetic") or {})
+            tables = dict(_SYNTHETIC_CACHE[skey])
             for name, rows in (t.get("append") or {}).items():
                 tables[name] = list(tables.get(name, [])) + list(rows)
         tel = Telemetry.from_tables(tables, as_of=None)
@@ -161,8 +164,9 @@ def check_case(case: dict, report: RunReport) -> list[str]:
     return problems
 
 
-def run_case(agent_id: str, case: dict, agent: BaseAgent | None = None, rubrics: RubricSet | None = None) -> CaseResult:
-    store = Store()
+def run_case(agent_id: str, case: dict, agent: BaseAgent | None = None, rubrics: RubricSet | None = None,
+             store: Store | None = None) -> CaseResult:
+    store = store or Store()   # runs are isolated by run_id; a suite may share one in-memory store
     tenant = case.get("tenant", "default")
     policy = load_tenant_policy(tenant, overrides=case.get("policy_overrides"))
     runner = AgentRunner(store, tenant_id=tenant, rubrics=rubrics, policy=policy)
@@ -180,7 +184,8 @@ def run_suite(agent_id: str, agent: BaseAgent | None = None, rubrics: RubricSet 
               root: Path | None = None) -> EvalReport:
     suite = load_suite(agent_id, root)
     impl = agent or registry()[agent_id]()
-    results = [run_case(agent_id, c, impl, rubrics) for c in suite["cases"]]
+    store = Store()
+    results = [run_case(agent_id, c, impl, rubrics, store) for c in suite["cases"]]
     return EvalReport(agent_id, impl.version, results)
 
 
