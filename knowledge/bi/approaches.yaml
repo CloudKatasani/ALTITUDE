@@ -1,0 +1,42 @@
+# BI & semantic-layer migration approaches (Section 11.3).
+best_practices:
+  - Usage-based rationalisation before migration (BI estates often contain large shares of unused content).
+  - Move business logic out of BI into Snowflake semantic views / dbt metrics.
+  - Each certified KPI has exactly one definition, enforced as data.
+  - Validate dashboards with visual + numeric regression (screenshot diff + KPI value diff).
+approaches:
+  - id: BI-TABLEAU
+    tool: Tableau
+    approach: Repoint connections; replace custom SQL with governed views/semantic views; extract-vs-live decision per workbook.
+    decisions: [extract_vs_live, custom_sql_replacement]
+    validation: [screenshot_diff, kpi_value_diff]
+  - id: BI-POWERBI
+    tool: Power BI
+    approach: Gateway/DirectQuery vs import decision; repoint; consolidate duplicated measures into certified semantic models.
+    decisions: [directquery_vs_import, measure_consolidation]
+    validation: [screenshot_diff, kpi_value_diff]
+  - id: BI-MSTR
+    tool: MicroStrategy
+    approach: Re-point warehouse catalog; VLDB settings review; consider semantic layer migration.
+    decisions: [vldb_settings, semantic_layer_migration]
+    validation: [kpi_value_diff]
+  - id: BI-COGNOS
+    tool: Cognos
+    approach: Rationalise first (often thousands of unused reports), then rebuild top-used content.
+    decisions: [rationalisation_cutoff]
+    validation: [kpi_value_diff]
+  - id: BI-BO
+    tool: Business Objects
+    approach: Rationalise first (often thousands of unused reports), then rebuild top-used content.
+    decisions: [rationalisation_cutoff, universe_to_semantic_view]
+    validation: [kpi_value_diff]
+  - id: BI-SSRS
+    tool: SSRS
+    approach: Paginated reports in Power BI or alternative; inventory subscriptions (business-critical, often forgotten).
+    decisions: [paginated_target, subscription_inventory]
+    validation: [pixel_diff, kpi_value_diff]
+  - id: BI-SHADOW
+    tool: Excel/Access shadow BI
+    approach: Identify via usage logs and access patterns; offer governed replacements.
+    decisions: [governed_replacement]
+    validation: [kpi_value_diff]

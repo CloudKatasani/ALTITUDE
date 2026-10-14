@@ -1,0 +1,27 @@
+# Source scheduler vocabularies used by the Control-M and SQL Agent parsers.
+id: scheduler-sources
+controlm:
+  job_elements: [JOB]
+  folder_elements: [FOLDER, SMART_FOLDER, TABLE, SMART_TABLE]
+  folder_name_attrs: [FOLDER_NAME, TABLE_NAME, PARENT_FOLDER]
+  calendar_attrs: [DAYSCAL, WEEKSCAL, CONFCAL]
+  add_condition_signs: ["+", ADD, A]
+  file_watch_tasktypes: [FileWatch, File Watcher]
+  # Control-M WEEKDAYS: 0=Sunday .. 6=Saturday (same as cron)
+  interval_units: {M: 1, H: 60, D: 1440}
+sqlagent:
+  # @freq_type
+  freq_types:
+    "1": once
+    "4": daily
+    "8": weekly
+    "16": monthly
+    "32": monthly_relative
+    "64": agent_start
+    "128": idle
+  # @freq_interval bitmask for weekly schedules -> cron day-of-week
+  weekday_bits: {"1": 0, "2": 1, "4": 2, "8": 3, "16": 4, "32": 5, "64": 6}
+  # @freq_subday_type
+  subday_types: {"1": once, "2": seconds, "4": minutes, "8": hours}
+  # @on_success_action / @on_fail_action
+  step_actions: {"1": quit_success, "2": quit_failure, "3": next_step, "4": goto_step}

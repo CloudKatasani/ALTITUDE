@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dbt generation conventions",
+  "x-altitude-globs": ["etl/dbt_conventions.yaml"],
+  "type": "object",
+  "required": ["id", "project", "layers", "target_prefixes", "fallback_prefix", "key_inference", "tests", "reserved_words"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {"type": "string"},
+    "project": {
+      "type": "object",
+      "required": ["profile", "config_version", "model_schema"],
+      "properties": {
+        "profile": {"type": "string"},
+        "config_version": {"type": "integer"},
+        "model_schema": {"type": "string", "pattern": "^[a-z_][a-z0-9_]*$"}
+      }
+    },
+    "layers": {
+      "type": "object",
+      "required": ["staging", "intermediate", "marts"],
+      "additionalProperties": {
+        "type": "object",
+        "required": ["folder", "materialized"],
+        "properties": {
+          "prefix": {"type": "string"},
+          "folder": {"type": "string"},
+          "materialized": {"enum": ["view", "table", "incremental", "ephemeral"]}
+        }
+      }
+    },
+    "target_prefixes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["pattern", "prefix"],
+        "additionalProperties": false,
+        "properties": {"pattern": {"type": "string"}, "prefix": {"enum": ["dim_", "fct_", "agg_", "int_"]}}
+      }
+    },
+    "fallback_prefix": {
+      "type": "object",
+      "required": ["aggregate", "with_foreign_keys", "default"],
+      "additionalProperties": {"enum": ["dim_", "fct_", "agg_"]}
+    },
+    "key_inference": {
+      "type": "object",
+      "required": ["primary", "foreign"],
+      "properties": {
+        "primary": {"type": "array", "items": {"type": "string"}},
+        "foreign": {"type": "array", "items": {"type": "string"}},
+        "table_prefixes_to_strip": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "tests": {"type": "object", "additionalProperties": {"type": "array", "items": {"enum": ["unique", "not_null", "relationships", "accepted_values"]}}},
+    "reserved_words": {"type": "array", "items": {"type": "string"}}
+  }
+}

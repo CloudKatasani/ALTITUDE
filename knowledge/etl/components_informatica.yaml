@@ -1,0 +1,164 @@
+# Informatica PowerCenter (XML export) transformation -> mapping-graph kind -> Snowflake/dbt target (Section 11.1).
+id: etl-components-informatica
+tool: informatica
+last_verified: "2026-10-01"
+verified_by: practice-lead-etl
+components:
+  - id: INF-T-SOURCE
+    class_ids: [Source Definition]
+    kind: source
+    target: "dbt source + stg_ model"
+  - id: INF-T-SQ
+    class_ids: [Source Qualifier, Application Source Qualifier]
+    kind: project
+    target: "column selection + source filter in int_ model; SQL overrides are re-engineered"
+    known_issue: ETL-INF-04
+  - id: INF-T-EXP
+    class_ids: [Expression]
+    kind: project
+    target: "column expressions in int_ model"
+    known_issue: ETL-INF-06
+  - id: INF-T-FIL
+    class_ids: [Filter]
+    kind: filter
+    target: "WHERE predicate"
+  - id: INF-T-LKP
+    class_ids: [Lookup Procedure, Lookup]
+    kind: lookup
+    target: "LEFT JOIN to deduplicated reference model (cache semantics become set-based)"
+    known_issue: ETL-INF-02
+  - id: INF-T-AGG
+    class_ids: [Aggregator]
+    kind: aggregate
+    target: "GROUP BY in agg_ / int_ model"
+  - id: INF-T-JNR
+    class_ids: [Joiner]
+    kind: join
+    target: "JOIN (master/detail outer semantics mapped explicitly)"
+  - id: INF-T-RTR
+    class_ids: [Router]
+    kind: split
+    target: "one WHERE predicate per group (a row can reach several groups)"
+    known_issue: ETL-INF-03
+  - id: INF-T-UNI
+    class_ids: [Union, Custom Transformation/Union]
+    kind: union
+    target: "UNION ALL"
+    known_issue: ETL-INF-03
+  - id: INF-T-SRT
+    class_ids: [Sorter]
+    kind: sort
+    target: "removed; DISTINCT when 'Distinct' is set"
+  - id: INF-T-SEQ
+    class_ids: [Sequence, Sequence Generator]
+    kind: sequence
+    target: "ROW_NUMBER() surrogate key (or a Snowflake sequence for incremental loads)"
+  - id: INF-T-TARGET
+    class_ids: [Target Definition]
+    kind: target
+    target: "dim_/fct_/agg_ model"
+  - id: INF-T-UPD
+    class_ids: [Update Strategy]
+    kind: unsupported
+    target: "incremental model with unique_key (MERGE)"
+    known_issue: ETL-INF-07
+  - id: INF-T-MAPPLET
+    class_ids: [Mapplet, Mapplet Input, Mapplet Output]
+    kind: unsupported
+    target: "dbt macro or ephemeral model per mapplet"
+    known_issue: ETL-INF-01
+  - id: INF-T-CODE
+    class_ids: [Java, Stored Procedure, Custom Transformation, External Procedure, Normalizer, Transaction Control, XML Parser, XML Generator, Rank, HTTP, SQL]
+    kind: unsupported
+    target: "re-engineer (Snowpark / SQL)"
+    known_issue: ETL-INF-06
+data_types:
+  string: VARCHAR({precision})
+  nstring: VARCHAR({precision})
+  text: VARCHAR
+  ntext: VARCHAR
+  char: VARCHAR({precision})
+  nchar: VARCHAR({precision})
+  varchar: VARCHAR({precision})
+  varchar2: VARCHAR({precision})
+  nvarchar2: VARCHAR({precision})
+  integer: INTEGER
+  small integer: SMALLINT
+  smallint: SMALLINT
+  bigint: BIGINT
+  decimal: DECIMAL({precision},{scale})
+  number: DECIMAL({precision},{scale})
+  "number(p,s)": DECIMAL({precision},{scale})
+  numeric: DECIMAL({precision},{scale})
+  double: DOUBLE
+  real: FLOAT
+  float: DOUBLE
+  date/time: TIMESTAMP
+  date: TIMESTAMP
+  timestamp: TIMESTAMP
+  binary: BINARY
+functions:
+  IIF: {special: iif}
+  DECODE: {special: decode}
+  ISNULL: "({0} IS NULL)"
+  IS_SPACES: "(TRIM({0}) = '')"
+  UPPER: "UPPER({0})"
+  LOWER: "LOWER({0})"
+  LTRIM: "LTRIM({0})"
+  RTRIM: "RTRIM({0})"
+  LENGTH: "LENGTH({0})"
+  SUBSTR: {special: substr}
+  INSTR: "POSITION({1} IN {0})"
+  CONCAT: "({0} || {1})"
+  LPAD: "LPAD({0}, {1}, {2})"
+  RPAD: "RPAD({0}, {1}, {2})"
+  REPLACESTR: {special: replacestr}
+  TO_CHAR: {special: to_char}
+  TO_DATE: "TO_TIMESTAMP({0}, {1})"
+  TO_INTEGER: "CAST({0} AS INTEGER)"
+  TO_BIGINT: "CAST({0} AS BIGINT)"
+  TO_DECIMAL: {special: to_decimal}
+  TO_FLOAT: "CAST({0} AS DOUBLE)"
+  ROUND: "ROUND({0}, {1})"
+  ABS: "ABS({0})"
+  MOD: "MOD({0}, {1})"
+  CEIL: "CEIL({0})"
+  FLOOR: "FLOOR({0})"
+  POWER: "POWER({0}, {1})"
+  GET_DATE_PART: {special: get_date_part}
+  ADD_TO_DATE: {special: add_to_date}
+  DATE_DIFF: {special: date_diff}
+  SYSDATE: "CURRENT_TIMESTAMP()"
+  SYSTIMESTAMP: "CURRENT_TIMESTAMP()"
+  SESSSTARTTIME: "CURRENT_TIMESTAMP()"
+  SUM: "SUM({0})"
+  COUNT: "COUNT({0})"
+  AVG: "AVG({0})"
+  MIN: "MIN({0})"
+  MAX: "MAX({0})"
+  MEDIAN: "MEDIAN({0})"
+# Identifiers that are values, not columns (no parentheses in Informatica syntax).
+keyword_values: [SYSDATE, SYSTIMESTAMP, SESSSTARTTIME]
+date_parts:
+  Y: year
+  YY: year
+  YYY: year
+  YYYY: year
+  MM: month
+  MON: month
+  MONTH: month
+  D: day
+  DD: day
+  DDD: dayofyear
+  DY: day
+  DAY: day
+  HH: hour
+  HH12: hour
+  HH24: hour
+  MI: minute
+  SS: second
+join_types:
+  Normal Join: inner
+  Master Outer Join: left
+  Detail Outer Join: right
+  Full Outer Join: full

@@ -1,0 +1,45 @@
+# Scheduler job command -> Snowflake task body. First matching rule wins (python regex, case-insensitive).
+# Templates use named groups from the pattern plus policy values: {dbt_project}, {script_stage}.
+# {tag} is the identifier-safe form of the 'name' group. Unmatched commands become a placeholder task
+# body and a SCH-07 issue so the dependency graph stays intact.
+mappings:
+  - id: CMD-SSIS-DTEXEC
+    pattern: 'dtexec(?:\.exe)?\s+/(?:F|FILE|ISSERVER|SQL)\s+"?[^"]*?(?P<name>[\w-]+)\.dtsx'
+    snowflake: "EXECUTE DBT PROJECT {dbt_project} ARGS = 'build --select tag:{tag}'"
+    note: SSIS package re-engineered as dbt models tagged with the package name.
+  - id: CMD-SSIS-CATALOG
+    pattern: '(?:/ISSERVER\s+|\\SSISDB\\)[^\n]*?(?P<name>[\w-]+)\.dtsx'
+    snowflake: "EXECUTE DBT PROJECT {dbt_project} ARGS = 'build --select tag:{tag}'"
+    note: SSIS catalog package (SQL Agent SSIS subsystem) re-engineered as tagged dbt models.
+  - id: CMD-INFA-PMCMD
+    pattern: 'pmcmd\s+start(?:workflow|task)\b.*?\s(?P<name>(?:wf|s|m)_[\w]+)\s*$'
+    snowflake: "EXECUTE DBT PROJECT {dbt_project} ARGS = 'build --select tag:{tag}'"
+    note: Informatica workflow re-engineered as tagged dbt models.
+  - id: CMD-DBT
+    pattern: '\bdbt\s+(?P<args>(?:run|build|test|seed|snapshot)\b.*)$'
+    snowflake: "EXECUTE DBT PROJECT {dbt_project} ARGS = '{args}'"
+    note: dbt CLI call mapped to dbt Projects on Snowflake.
+  - id: CMD-BTEQ
+    pattern: 'bteq\s*<\s*\S*?(?P<name>[\w-]+)\.(?:bteq|btq|sql)'
+    snowflake: "EXECUTE IMMEDIATE FROM {script_stage}/{name}.sql"
+    note: BTEQ script converted by the conversion orchestrator and staged.
+  - id: CMD-TSQL-DBMAIL
+    pattern: 'sp_send_dbmail\b.*?@recipients\s*=\s*N?''(?P<to>[^'']+)''.*?@subject\s*=\s*N?''(?P<subject>[^'']+)'''
+    snowflake: "CALL SYSTEM$SEND_EMAIL('{notification_integration}', '{to}', '{subject}', 'Sent by the task graph')"
+    note: Database Mail notification mapped to a Snowflake notification integration.
+  - id: CMD-SQLCMD-PROC
+    pattern: 'sqlcmd\b.*?-Q\s+"?EXEC(?:UTE)?\s+(?P<proc>[\w.\[\]]+)'
+    snowflake: "CALL {proc}()"
+    note: Stored procedure converted by the conversion orchestrator.
+  - id: CMD-TSQL-PROC
+    pattern: '^\s*EXEC(?:UTE)?\s+(?!msdb\.dbo\.sp_start_job)(?P<proc>[\w.\[\]]+)\s*;?\s*$'
+    snowflake: "CALL {proc}()"
+    note: T-SQL step executing a stored procedure.
+  - id: CMD-TSQL-TRUNCATE
+    pattern: '^\s*(?P<stmt>TRUNCATE\s+TABLE\s+[\w.\[\]]+)\s*;?\s*$'
+    snowflake: "{stmt}"
+    note: Truncate statement (retire if the downstream model is a full-refresh table).
+  - id: CMD-SHELL-SCRIPT
+    pattern: '(?P<name>[\w-]+)\.(?:sh|ksh|bat|cmd|ps1)\b'
+    snowflake: "EXECUTE IMMEDIATE FROM {script_stage}/{name}.sql"
+    note: Shell script whose SQL steps are staged after conversion; file-system side effects need review.
