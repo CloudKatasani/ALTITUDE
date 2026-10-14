@@ -1,7 +1,7 @@
 """Factory state machine (Section 9.2).
 
 Each object is a work item moving through ``Discovered -> Classified -> Converted -> AI-remediated ->
-Reviewed -> Unit-tested -> ...``. Every transition is an append-only ``factory_transition`` row with the
+Reviewed -> Unit-tested -> ...``. Every transition is an append-only ``conversion_lane_transition`` row with the
 actor (human or agent identity), timestamp, evidence reference and confidence. Allowed transitions are
 data (``knowledge/conversion/workflow.yaml``); anything else raises :class:`InvalidTransition`.
 """
@@ -28,7 +28,7 @@ def _now() -> datetime:
 
 def current_state(store: Any, object_id: str, lane: str = "code") -> str | None:
     rows = store.query(
-        "SELECT to_state FROM factory_transition WHERE object_id=? AND lane=? ORDER BY seq DESC LIMIT 1",
+        "SELECT to_state FROM conversion_lane_transition WHERE object_id=? AND lane=? ORDER BY seq DESC LIMIT 1",
         [object_id, lane],
     )
     return rows[0]["to_state"] if rows else None
@@ -36,7 +36,7 @@ def current_state(store: Any, object_id: str, lane: str = "code") -> str | None:
 
 def history(store: Any, object_id: str, lane: str = "code") -> list[dict]:
     return store.query(
-        "SELECT * FROM factory_transition WHERE object_id=? AND lane=? ORDER BY seq",
+        "SELECT * FROM conversion_lane_transition WHERE object_id=? AND lane=? ORDER BY seq",
         [object_id, lane],
     )
 
@@ -60,7 +60,7 @@ def transition(store: Any, *, engagement_id: str, object_id: str, to_state: str,
     if to_state not in allowed:
         raise InvalidTransition(f"{object_id}: {current or '(none)'} -> {to_state} is not an allowed transition")
     now = _now()
-    seq = int(store.scalar("SELECT count(*) FROM factory_transition WHERE object_id=? AND lane=?",
+    seq = int(store.scalar("SELECT count(*) FROM conversion_lane_transition WHERE object_id=? AND lane=?",
                            [object_id, lane]) or 0)
     row = {
         "transition_id": stable_id("FTR", object_id, lane, seq, to_state, length=10),
@@ -77,7 +77,7 @@ def transition(store: Any, *, engagement_id: str, object_id: str, to_state: str,
         "confidence": round(float(confidence), 3),
         "occurred_at": now,
     }
-    store.insert("factory_transition", row)
+    store.insert("conversion_lane_transition", row)
     status = wf["artifact_status"].get(to_state)
     if artifact_id and status:
         store.update("converted_artifact", {"artifact_id": artifact_id}, {"status": status})

@@ -177,7 +177,7 @@ def test_pr_packs_never_written_to_production(store, tmp_path, monkeypatch):
     assert_not_production(tmp_path / "drafts" / "x")
 
 
-def test_factory_transitions_are_validated_and_append_only(store):
+def test_conversion_lane_transitions_are_validated_and_append_only(store):
     with pytest.raises(InvalidTransition):
         factory.transition(store, engagement_id="E", object_id="O", to_state="Reviewed", actor="a",
                            actor_type="human", evidence_ref="x", confidence=1)
@@ -190,9 +190,9 @@ def test_factory_transitions_are_validated_and_append_only(store):
         factory.transition(store, engagement_id="E", object_id="O", to_state="AI-remediated", actor="a",
                            actor_type="agent", evidence_ref="", confidence=1)
     with pytest.raises(AppendOnlyViolation):
-        store.execute("UPDATE factory_transition SET actor='x'")
+        store.execute("UPDATE conversion_lane_transition SET actor='x'")
     with pytest.raises(AppendOnlyViolation):
-        store.execute("DELETE FROM factory_transition")
+        store.execute("DELETE FROM conversion_lane_transition")
 
 
 def test_remediation_is_idempotent(store, converted, tmp_path):

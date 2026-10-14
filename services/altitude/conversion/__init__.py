@@ -10,7 +10,7 @@
 
 from altitude.core.store import register_append_only
 
-register_append_only("factory_transition")
+register_append_only("conversion_lane_transition")
 
 from .models import ConversionOutput, ConvertedFile, Issue  # noqa: E402
 

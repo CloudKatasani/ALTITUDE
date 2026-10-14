@@ -3,7 +3,7 @@
 
 -- Factory state machine (Section 9.2): every transition records actor, timestamp, evidence and confidence.
 -- Append-only (registered in altitude.conversion and guarded by trigger in 0601 on PostgreSQL).
-CREATE TABLE factory_transition (
+CREATE TABLE conversion_lane_transition (
   transition_id    VARCHAR PRIMARY KEY,
   engagement_id    VARCHAR NOT NULL,
   object_id        VARCHAR NOT NULL,
