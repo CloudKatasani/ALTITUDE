@@ -13,6 +13,8 @@ confidence and a rationale and waits for a human when it should.
 ```bash
 make install                       # venv + editable install
 make check                         # knowledge validate, lints, generated-diff check, full test suite
+make demo                          # live server + full flow through the API; screenshots in out/demo/screenshots
+make demo-serve                    # same, then leave the portal running on :8099
 
 # A synthetic estate with 33 seeded issue types (or --profile clean)
 .venv/bin/altitude synthetic snapshot --out .altitude/snapshots --ground-truth gt.json

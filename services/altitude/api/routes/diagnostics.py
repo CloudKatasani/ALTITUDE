@@ -189,7 +189,7 @@ def get_progress(p: Principal = Depends(require("read")), ctx: Context = Depends
 
 
 def _grounding(ctx: Context) -> list:
-    from altitude.advisory.grounding import GroundingDoc, docs_from_suggestions
+    from altitude.advisory.grounding import GroundingDoc, docs_from_suggestions, format_metrics
 
     recs = []
     for r in ctx.store.query("SELECT record, status FROM diag_suggestion"):
@@ -199,7 +199,8 @@ def _grounding(ctx: Context) -> list:
     docs = docs_from_suggestions(recs)
     for e in ctx.store.query("SELECT evidence_id, check_id, object_name, kind, metrics FROM diag_evidence"):
         docs.append(GroundingDoc(e["evidence_id"], "evidence", f"{e['check_id']} evidence on {e['object_name']}",
-                                 f"{e['kind']} {e['object_name']} {e['check_id']} metrics {e['metrics']}"))
+                                 f"{e['object_name']} — {format_metrics(e['metrics'])}",
+                                 (e["check_id"], str(e["kind"]).lower())))
     return docs
 
 
