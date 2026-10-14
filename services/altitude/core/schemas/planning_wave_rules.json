@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Wave design rules (Section 9.3)",
+  "x-altitude-globs": ["planning/wave_rules.yaml"],
+  "type": "object",
+  "required": ["version", "rules"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "description": {"type": "string"},
+    "rules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "rule", "title"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^WR-[0-9]{2}$"},
+          "rule": {"type": "string", "enum": ["dependency_clusters", "thin_vertical_slice_first", "max_wave_weeks",
+                                              "quarter_end_freeze", "ends_with_business_consumable",
+                                              "dependency_order", "requires_gate"]},
+          "title": {"type": "string"},
+          "enabled": {"type": "boolean"},
+          "params": {"type": "object"},
+          "applies_to_tags": {"type": "array", "items": {"type": "string"}},
+          "weeks_threshold_ref": {"type": "string"},
+          "business_days_threshold_ref": {"type": "string"}
+        }
+      }
+    }
+  }
+}
