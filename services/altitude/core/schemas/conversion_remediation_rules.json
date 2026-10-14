@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AI remediation agent rules (issue code / pattern -> fix template)",
+  "x-altitude-globs": ["conversion/remediation_rules.yaml"],
+  "type": "object",
+  "required": ["rules"],
+  "additionalProperties": false,
+  "properties": {
+    "last_verified": {"type": "string"},
+    "verified_by": {"type": "string"},
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "codes", "scope", "fix", "confidence_ref", "rationale", "prompt", "tests"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^RR-[A-Z0-9-]+$"},
+          "codes": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+          "dialects": {"type": "array", "items": {"type": "string"}},
+          "scope": {"enum": ["line", "statement"]},
+          "when": {"type": "string"},
+          "unless": {"type": "string"},
+          "fix": {
+            "type": "object",
+            "required": ["type"],
+            "additionalProperties": false,
+            "properties": {
+              "type": {"enum": ["drop_lines", "drop_region", "regex", "ack"]},
+              "pattern": {"type": "string"},
+              "comment": {"type": "string"},
+              "steps": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["pattern", "replacement"],
+                  "additionalProperties": false,
+                  "properties": {"pattern": {"type": "string"}, "replacement": {"type": "string"}}
+                }
+              }
+            },
+            "allOf": [
+              {"if": {"properties": {"type": {"const": "regex"}}}, "then": {"required": ["steps"]}},
+              {"if": {"properties": {"type": {"const": "drop_lines"}}}, "then": {"required": ["pattern"]}},
+              {"if": {"properties": {"type": {"const": "drop_region"}}}, "then": {"required": ["comment"]}}
+            ]
+          },
+          "confidence_ref": {"type": "string", "pattern": "^rubric\\."},
+          "rationale": {"type": "string", "minLength": 10},
+          "prompt": {"type": "string"},
+          "tests": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "absent": {"type": "array", "items": {"type": "string"}},
+              "present": {"type": "array", "items": {"type": "string"}},
+              "parses": {"enum": ["snowflake"]}
+            },
+            "minProperties": 1
+          }
+        }
+      }
+    }
+  }
+}

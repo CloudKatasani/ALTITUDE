@@ -1,0 +1,34 @@
+.LOGON tdprod/etl_batch,${TD_PASSWORD};
+.SET ERRORLEVEL 3807 SEVERITY 0
+.SET WIDTH 254
+
+-- Nightly customer dimension refresh (owner: DWH team)
+CREATE SET TABLE stg.customer_delta
+(
+    customer_id   INTEGER NOT NULL,
+    customer_name VARCHAR(100) CHARACTER SET LATIN NOT CASESPECIFIC,
+    region_code   CHAR(3),
+    updated_ts    TIMESTAMP(0)
+)
+PRIMARY INDEX (customer_id);
+.IF ERRORCODE <> 0 THEN .QUIT 8;
+
+INSERT INTO stg.customer_delta
+SEL customer_id, TRIM(customer_name), region_code, updated_ts
+FROM src.customer
+WHERE updated_ts > CURRENT_DATE - 1;
+.IF ERRORCODE <> 0 THEN .QUIT 8;
+
+UPDATE dw FROM edw.dim_customer dw, stg.customer_delta d
+SET customer_name = d.customer_name, region_code = d.region_code
+WHERE dw.customer_id = d.customer_id;
+
+SELECT TOP 10 customer_id, customer_name
+FROM edw.dim_customer
+QUALIFY ROW_NUMBER() OVER (PARTITION BY region_code ORDER BY updated_ts DESC) = 1;
+
+COLLECT STATISTICS ON edw.dim_customer COLUMN (customer_id);
+.IF ERRORCODE <> 0 THEN .GOTO load_failed;
+.LABEL load_failed
+.LOGOFF
+.QUIT 0

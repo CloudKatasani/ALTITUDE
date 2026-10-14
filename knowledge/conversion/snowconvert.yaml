@@ -1,0 +1,70 @@
+# SnowConvert AI CLI integration (Section 10, M5). Re-verify against the current CLI docs at engagement start.
+id: snowconvert-cli
+last_verified: "2026-10-01"
+verified_by: practice-lead-conversion
+binary:
+  env_var: ALTITUDE_SNOWCONVERT_BIN
+  names: [snowct, snowconvert]
+  version_args: ["--version"]
+  version_pattern: '(\d+\.\d+(?:\.\d+){0,2})'
+  timeout_seconds: 3600
+dialects:
+  teradata: {command: teradata, extensions: [".sql", ".bteq", ".btq", ".ddl", ".spl"]}
+  oracle: {command: oracle, extensions: [".sql", ".pks", ".pkb", ".prc", ".fnc", ".trg"]}
+  tsql: {command: sql-server, extensions: [".sql"]}
+  redshift: {command: redshift, extensions: [".sql"]}
+invocation: ["{command}", "-i", "{input}", "-o", "{output}"]
+output_dirs: ["Output/SnowConvert", "Output", "."]
+reports:
+  issues: ["Reports/**/Issues*.csv", "**/Issues*.csv"]
+  assessment: ["Reports/**/TopLevelCodeUnits*.csv", "**/TopLevelCodeUnits*.csv"]
+# Header aliases: different CLI versions name the same column differently.
+issue_columns:
+  code: [Code, Issue Code, EWI Code, Issue]
+  severity: [Severity, Issue Severity]
+  name: [Name, Title]
+  message: [Description, Message, Issue Description]
+  file: [Parent File, ParentFile, File Name, FileName, File, Source File]
+  line: [Line, Line Number, Source Line]
+  column: [Column, Column Number]
+  snippet: [Code Snippet, Line Code, Snippet, Source Code]
+assessment_columns:
+  code_unit_id: [Code Unit Id, CodeUnitId, Id]
+  file_name: [File Name, FileName, Parent File]
+  category: [Category, Code Unit Type]
+  code_unit: [Code Unit, Name, Code Unit Name]
+  lines_of_code: [Lines of Code, LOC]
+  ewi_count: [EWI Count, EWIs]
+  fdm_count: [FDM Count, FDMs]
+  prf_count: [PRF Count, PRFs]
+  highest_ewi_severity: [Highest EWI Severity]
+  conversion_status: [Conversion Status, Status]
+# Code family -> category. EWI = early warning (needs action), FDM = functional difference,
+# PRF = performance review, OOS = out of scope.
+code_pattern: '(?i)^(?:SSC-|MSC-?|ALT-)?(EWI|FDM|PRF|OOS)'
+severity_map:
+  critical: P1
+  high: P2
+  medium: P3
+  low: P4
+  info: P4
+  informational: P4
+category_default_severity:
+  EWI: P2
+  FDM: P3
+  PRF: P4
+  OOS: P2
+# Codes whose impact is fixed regardless of the severity the tool reports.
+code_overrides:
+  - id: SC-OVR-0001
+    code: SSC-EWI-0001
+    severity: P1
+    reason: Unrecognized token - the output does not compile.
+  - id: SC-OVR-0040
+    code: SSC-EWI-0040
+    severity: P1
+    reason: Statement not supported - the output does not compile.
+  - id: SC-OVR-0073
+    code: SSC-EWI-0073
+    severity: P3
+    reason: Pending functional-equivalence review; reviewed under the AI-change workflow.

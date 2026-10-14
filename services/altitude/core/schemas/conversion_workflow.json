@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Factory state machine and convert_exit gate",
+  "x-altitude-globs": ["conversion/workflow.yaml"],
+  "type": "object",
+  "required": ["id", "factory", "gates"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {"type": "string"},
+    "factory": {
+      "type": "object",
+      "required": ["states", "entry_states", "transitions", "artifact_status"],
+      "additionalProperties": false,
+      "properties": {
+        "states": {"type": "array", "items": {"type": "string"}, "minItems": 2, "uniqueItems": true},
+        "entry_states": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "transitions": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string"}}},
+        "artifact_status": {"type": "object", "additionalProperties": {"enum": ["converted", "remediated", "reviewed", "promoted", "rejected"]}}
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "object",
+          "required": ["metric", "op"],
+          "additionalProperties": false,
+          "properties": {
+            "metric": {"type": "string"},
+            "op": {"enum": ["==", "!=", ">=", "<=", ">", "<"]},
+            "value": {},
+            "threshold_ref": {"type": "string"}
+          },
+          "oneOf": [{"required": ["value"]}, {"required": ["threshold_ref"]}]
+        }
+      }
+    }
+  }
+}

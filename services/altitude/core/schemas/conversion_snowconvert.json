@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SnowConvert AI CLI integration settings",
+  "x-altitude-globs": ["conversion/snowconvert.yaml"],
+  "type": "object",
+  "required": ["id", "binary", "dialects", "invocation", "output_dirs", "reports", "issue_columns", "code_pattern", "severity_map", "category_default_severity"],
+  "additionalProperties": false,
+  "$defs": {
+    "severity": {"type": "string", "pattern": "^P[1-4]$"},
+    "aliases": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string"}, "minItems": 1}}
+  },
+  "properties": {
+    "id": {"type": "string"},
+    "last_verified": {"type": "string"},
+    "verified_by": {"type": "string"},
+    "binary": {
+      "type": "object",
+      "required": ["env_var", "names", "version_args", "version_pattern"],
+      "additionalProperties": false,
+      "properties": {
+        "env_var": {"type": "string"},
+        "names": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "version_args": {"type": "array", "items": {"type": "string"}},
+        "version_pattern": {"type": "string"},
+        "timeout_seconds": {"type": "integer", "minimum": 1}
+      }
+    },
+    "dialects": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["command", "extensions"],
+        "additionalProperties": false,
+        "properties": {
+          "command": {"type": "string"},
+          "extensions": {"type": "array", "items": {"type": "string", "pattern": "^\\."}}
+        }
+      }
+    },
+    "invocation": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "output_dirs": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "reports": {
+      "type": "object",
+      "required": ["issues"],
+      "properties": {
+        "issues": {"type": "array", "items": {"type": "string"}},
+        "assessment": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+    },
+    "issue_columns": {"$ref": "#/$defs/aliases"},
+    "assessment_columns": {"$ref": "#/$defs/aliases"},
+    "code_pattern": {"type": "string"},
+    "severity_map": {"type": "object", "additionalProperties": {"$ref": "#/$defs/severity"}},
+    "category_default_severity": {"type": "object", "additionalProperties": {"$ref": "#/$defs/severity"}},
+    "code_overrides": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "code", "severity", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string"},
+          "code": {"type": "string"},
+          "severity": {"$ref": "#/$defs/severity"},
+          "reason": {"type": "string"}
+        }
+      }
+    }
+  }
+}

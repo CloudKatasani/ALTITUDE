@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Conversion agent prompt templates",
+  "x-altitude-globs": ["conversion/prompts.yaml"],
+  "type": "object",
+  "required": ["prompts"],
+  "additionalProperties": false,
+  "properties": {
+    "prompts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "version", "purpose", "system"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z][a-z0-9_.]*$"},
+          "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+          "purpose": {"type": "string"},
+          "system": {"type": "string", "minLength": 20}
+        }
+      }
+    }
+  }
+}

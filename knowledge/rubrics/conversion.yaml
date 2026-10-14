@@ -1,0 +1,21 @@
+namespace: conversion
+version: 1.0.0
+description: >
+  Conversion orchestrator (M5): converter baseline confidence, remediation confidence tiers and the
+  convert_exit gate thresholds (Appendix C). The review floor for AI changes is rubric.ai.review_confidence_min.
+calibration:
+  - date: "2026-10-14"
+    note: Initial values; calibrate against golden-test corpus outcomes per dialect after the first engagements.
+values:
+  tool_confidence:
+    snowconvert: 0.90          # baseline confidence of a SnowConvert AI conversion before remediation
+    sqlglot: 0.70              # baseline confidence of the sqlglot fallback transpiler
+  remediation_confidence:
+    deterministic: 0.97        # syntax-only rewrite with no semantic choice (e.g. drop COLLECT STATISTICS)
+    pattern: 0.85              # well-understood pattern rewrite (e.g. @@ROWCOUNT -> SQLROWCOUNT)
+    heuristic: 0.65            # rewrite that assumes intent; below the review floor, always reviewed
+    llm: 0.60                  # free-form LLM proposal; always reviewed
+  gates:
+    unit_test_min: 1.0         # convert_exit: share of generated unit tests that must pass
+    open_p1_max: 0             # convert_exit: open P1 issues allowed
+  blocking_severities: [P1]

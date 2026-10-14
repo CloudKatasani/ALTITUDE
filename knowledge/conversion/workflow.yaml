@@ -1,0 +1,45 @@
+# Factory state machine (Section 9.2) for the conversion lanes and the convert_exit gate (Appendix C).
+id: conversion-workflow
+factory:
+  states:
+    - Discovered
+    - Classified
+    - Converted
+    - AI-remediated
+    - Reviewed
+    - Unit-tested
+    - Loaded
+    - Reconciled
+    - Performance-tested
+    - UAT-passed
+    - Cut over
+    - Legacy retired
+  # States an object may enter without a prior recorded state (first sighting by this module).
+  entry_states: [Discovered, Converted]
+  # Allowed transitions; anything else is refused. Rework loops return an object to AI-remediated;
+  # a new conversion run returns it to Converted.
+  transitions:
+    Discovered: [Classified]
+    Classified: [Converted]
+    Converted: [AI-remediated, Converted]
+    AI-remediated: [Reviewed, AI-remediated, Converted]
+    Reviewed: [Unit-tested, AI-remediated, Converted]
+    Unit-tested: [Loaded, AI-remediated, Converted]
+    Loaded: [Reconciled]
+    Reconciled: [Performance-tested]
+    Performance-tested: [UAT-passed]
+    UAT-passed: [Cut over]
+    Cut over: [Legacy retired]
+  # converted_artifact.status that accompanies each conversion-lane state.
+  artifact_status:
+    Converted: converted
+    AI-remediated: remediated
+    Reviewed: reviewed
+    Unit-tested: reviewed
+gates:
+  convert_exit:
+    - {metric: open_p1_ewis, op: "<=", threshold_ref: rubric.conversion.gates.open_p1_max}
+    - {metric: ai_changes_unreviewed, op: "==", value: 0}
+    - {metric: low_confidence_changes_unreviewed, op: "==", value: 0}
+    - {metric: artifact_review_approved, op: "==", value: true}
+    - {metric: unit_test_pass_rate, op: ">=", threshold_ref: rubric.conversion.gates.unit_test_min}
