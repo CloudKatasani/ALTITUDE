@@ -1,18 +1,48 @@
-<!doctype html>
+{% if not bare %}<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% if page != "index.html" %}{{ title }} · {% endif %}{{ theme.PRODUCT_NAME }} — {{ site.hero.eyebrow }}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+{% endif %}<title>{% if page == "index.html" %}{{ theme.PRODUCT_NAME }}{% else %}{{ title }} · {{ theme.PRODUCT_NAME }}{% endif %}</title>
+<meta name="claude:viewport-fit-sides" content="cover">
 <meta name="description" content="{{ site.pitch[:155] }}">
+{% set f_display = theme.get("FONT_DISPLAY", "Manrope") %}{% set f_body = theme.get("FONT_BODY", "Lato") %}{% set f_mono = theme.get("FONT_MONO", "JetBrains Mono") %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family={{ f_display|replace(' ', '+') }}:wght@600;700;800&family={{ f_body|replace(' ', '+') }}:ital,wght@0,400;0,700;1,400&family={{ f_mono|replace(' ', '+') }}:wght@400;600&display=swap">
 <style>
-:root { --primary: {{ theme.COLOR_PRIMARY }}; --accent: {{ theme.COLOR_ACCENT }}; --warn: {{ theme.COLOR_WARN }};
-        --danger: {{ theme.COLOR_DANGER }}; --surface: {{ theme.COLOR_SURFACE }}; --text: {{ theme.COLOR_TEXT }}; }
+/* Layout: sticky bar, full-width colour bands, 1160px content column; brand colours from theme tokens. */
+:root {
+  --primary: {{ theme.COLOR_PRIMARY }}; --accent: {{ theme.COLOR_ACCENT }}; --warn: {{ theme.COLOR_WARN }};
+  --danger: {{ theme.COLOR_DANGER }}; --surface: {{ theme.COLOR_SURFACE }}; --fg: {{ theme.COLOR_TEXT }};
+  --bg: rgb(255, 255, 255); --card: rgb(255, 255, 255); --brand: {{ theme.COLOR_PRIMARY }}; --link: {{ theme.COLOR_PRIMARY }};
+  --line: rgba(0, 0, 0, .08); --line-strong: rgba(0, 0, 0, .2); --shadow: rgba(0, 0, 0, .04);
+  --header-bg: rgba(255, 255, 255, .96); --on-color: rgb(255, 255, 255);
+  --footer-bg: rgb(8, 30, 46); --footer-fg: rgb(207, 214, 221); --footer-line: rgba(255, 255, 255, .1);
+  --code-bg: rgb(8, 30, 46); --code-fg: rgb(230, 237, 243);
+  --eyebrow: {{ theme.COLOR_PRIMARY }};
+  --on-accent: {{ theme.get("COLOR_ACCENT_INK", "rgb(255, 255, 255)") }}; --highlight: {{ theme.get("COLOR_HIGHLIGHT", theme.COLOR_ACCENT) }};
+  --font-display: "{{ f_display }}", "Segoe UI", system-ui, sans-serif;
+  --font-body: "{{ f_body }}", "Helvetica Neue", Arial, system-ui, sans-serif;
+  --font-mono: "{{ f_mono }}", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: rgb(7, 22, 34); --card: rgb(13, 34, 51); --surface: rgb(10, 28, 42); --fg: rgb(225, 236, 244);
+  --brand: rgb(225, 236, 244); --link: {{ theme.get("COLOR_HIGHLIGHT", theme.COLOR_ACCENT) }}; --line: rgba(255, 255, 255, .1);
+  --line-strong: rgba(255, 255, 255, .24); --shadow: rgba(0, 0, 0, .35); --header-bg: rgba(7, 22, 34, .94);
+  --eyebrow: {{ theme.get("COLOR_HIGHLIGHT", theme.COLOR_ACCENT) }};
+  --footer-bg: rgb(3, 13, 21); --code-bg: rgb(3, 13, 21); color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: rgb(7, 22, 34); --card: rgb(13, 34, 51); --surface: rgb(10, 28, 42); --fg: rgb(225, 236, 244);
+  --brand: rgb(225, 236, 244); --link: {{ theme.get("COLOR_HIGHLIGHT", theme.COLOR_ACCENT) }}; --line: rgba(255, 255, 255, .1);
+  --line-strong: rgba(255, 255, 255, .24); --shadow: rgba(0, 0, 0, .35); --header-bg: rgba(7, 22, 34, .94);
+  --eyebrow: {{ theme.get("COLOR_HIGHLIGHT", theme.COLOR_ACCENT) }};
+  --footer-bg: rgb(3, 13, 21); --code-bg: rgb(3, 13, 21); color-scheme: dark; }
 </style>
 <link rel="stylesheet" href="assets/site.css">
-</head>
+{% if not bare %}</head>
 <body>
-<a class="skip" href="#main">Skip to content</a>
+{% endif %}<a class="skip" href="#main">Skip to content</a>
 <header class="site">
   <div class="wrap bar">
     <a class="brand" href="index.html">{{ theme.PRODUCT_NAME }}</a>
@@ -34,5 +64,6 @@
   </div>
   <div class="wrap fine muted">Sample figures on this site are computed by our platform from a <b>synthetic</b> Snowflake estate ({{ s.snapshot_id }}) — they illustrate the deliverables, not a client's results. Indicative prices are hypotheses to validate. Snowflake is a trademark of Snowflake Inc.; we are an independent partner.</div>
 </footer>
-</body>
+{% if not bare %}</body>
 </html>
+{% endif %}

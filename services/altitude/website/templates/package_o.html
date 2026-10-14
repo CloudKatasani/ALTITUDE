@@ -28,10 +28,10 @@
   </div>
   <div class="grid g2" style="margin-top:22px">
     <div class="card"><h3>Alerts that fired</h3>
-      <div class="scroll"><table><thead><tr><th>Alert</th><th>Object</th><th>Route</th></tr></thead><tbody>
+      <table><thead><tr><th>Alert</th><th>Object</th><th>Route</th></tr></thead><tbody>
       {% for a in s.observability.alerts %}<tr><td><span class="chip {{ 'warn' if a.severity == 'high' else '' }}">{{ a.severity }}</span> <b>{{ a.alert|replace("ALR-", "")|replace("-", " ")|lower|capitalize }}</b><br><span class="muted">runbook <code>{{ a.runbook }}</code></span></td>
       <td class="wrap-any">{{ a.object or "account" }}</td><td>#{{ a.route }}</td></tr>{% endfor %}
-      </tbody></table></div></div>
+      </tbody></table></div>
     <div class="card"><h3>Ask the platform</h3>
       <p><b>Q:</b> {{ s.observability.ask.question }}</p>
       <p><b>A:</b> {{ s.observability.ask.answer }}</p>

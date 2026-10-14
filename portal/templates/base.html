@@ -4,8 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}{{ theme.PRODUCT_NAME }}{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family={{ theme.get('FONT_DISPLAY', 'Manrope')|replace(' ', '+') }}:wght@700;800&family={{ theme.get('FONT_BODY', 'Lato')|replace(' ', '+') }}:wght@400;700&display=swap">
 <style>
 :root {
+  --font-display: "{{ theme.get('FONT_DISPLAY', 'Manrope') }}", "Segoe UI", system-ui, sans-serif;
+  --font-body: "{{ theme.get('FONT_BODY', 'Lato') }}", "Helvetica Neue", Arial, system-ui, sans-serif;
   --primary: {{ theme.COLOR_PRIMARY }};
   --accent: {{ theme.COLOR_ACCENT }};
   --warn: {{ theme.COLOR_WARN }};
