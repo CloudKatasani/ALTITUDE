@@ -1,0 +1,189 @@
+# D8 Consumption & BI Layer checks (Section 6.4). BI metadata comes from tool APIs/exports (BI_REPORTS, BI_MEASURES).
+version: 1.0.0
+checks:
+  - id: DX-BI-01
+    title: Duplicate reports
+    description: Reports sharing the same structure and query signature; the most-used copy is retained and the rest merged or retired.
+    domain: D8
+    waf_pillar: cost_optimization
+    severity: medium
+    confidence_class: medium
+    detector:
+      requires: [BI_REPORTS, QUERY_ATTRIBUTION_HISTORY]
+      inputs: [contract_price_per_credit]
+      cluster_by: dashboard
+      params:
+        retire_view_share_max: {threshold_ref: rubric.diagnostics.checks.bi_01.retire_view_share_max}
+      signals: |
+        WITH sig AS (
+          SELECT QUERY_PARAMETERIZED_HASH, sum(CREDITS_ATTRIBUTED_COMPUTE) / count(*) AS CREDITS_PER_EXECUTION
+          FROM QUERY_ATTRIBUTION_HISTORY GROUP BY QUERY_PARAMETERIZED_HASH),
+        r AS (
+          SELECT b.*,
+                 row_number() OVER (PARTITION BY STRUCTURE_HASH, QUERY_PARAMETERIZED_HASH ORDER BY VIEWS_90D DESC, REPORT_ID) AS RN,
+                 count(*) OVER (PARTITION BY STRUCTURE_HASH, QUERY_PARAMETERIZED_HASH) AS GROUP_SIZE,
+                 first_value(REPORT_ID) OVER (PARTITION BY STRUCTURE_HASH, QUERY_PARAMETERIZED_HASH ORDER BY VIEWS_90D DESC, REPORT_ID) AS KEEP_REPORT,
+                 sum(VIEWS_90D) OVER (PARTITION BY STRUCTURE_HASH, QUERY_PARAMETERIZED_HASH) AS GROUP_VIEWS
+          FROM BI_REPORTS b)
+        SELECT r.REPORT_ID AS OBJECT_NAME, r.STRUCTURE_HASH AS CLUSTER_KEY, r.TOOL, r.NAME, r.WORKSPACE, r.OWNER,
+               r.VIEWS_90D, r.REFRESHES_PER_DAY, r.KEEP_REPORT, r.GROUP_SIZE, r.RN,
+               CASE WHEN r.GROUP_VIEWS > 0 THEN r.VIEWS_90D / r.GROUP_VIEWS ELSE 0 END AS VIEW_SHARE,
+               r.QUERY_PARAMETERIZED_HASH,
+               r.REFRESHES_PER_DAY * $window_days * coalesce(sig.CREDITS_PER_EXECUTION, 0) AS REFRESH_CREDITS
+        FROM r LEFT JOIN sig ON sig.QUERY_PARAMETERIZED_HASH = r.QUERY_PARAMETERIZED_HASH
+      rule: GROUP_SIZE > 1 AND RN > 1
+    evidence:
+      kind: RPT
+      fields: [TOOL, NAME, WORKSPACE, VIEWS_90D, REFRESHES_PER_DAY, KEEP_REPORT, VIEW_SHARE, REFRESH_CREDITS]
+    value:
+      method: "refresh compute (refreshes × credits per execution of the shared signature) × contract price, annualised, plus support cost per retired report (rubric); conservative counts refresh compute only"
+      p50: REFRESH_CREDITS * price_per_credit * annualise + support_cost_per_report_usd
+      conservative: REFRESH_CREDITS * price_per_credit * annualise * conservative_factor
+      factors:
+        support_cost_per_report_usd: rubric.diagnostics.checks.bi_01.support_cost_per_report_usd
+        conservative_factor: rubric.diagnostics.checks.bi_01.conservative_factor
+    effort: {size: S}
+    title_template: "Rationalise {{ n + 1 }} copies of report {{ rows[0].KEEP_REPORT }}"
+    rationale_template: >-
+      {% for r in rows %}{{ r.OBJECT_NAME }} '{{ r.NAME }}' ({{ r.WORKSPACE }}) duplicates {{ r.KEEP_REPORT }} (same structure {{ cluster_key }} and query signature);
+      {{ r.VIEWS_90D }} views ({{ pct(r.VIEW_SHARE) }} of the group) → {{ 'retire' if r.VIEW_SHARE <= params.retire_view_share_max else 'merge' }}{{ '; ' if not loop.last }}{% endfor %}.
+    remediation:
+      type: sql
+      autonomy: L1
+      template: |
+        -- BI actions ({{ rows[0].TOOL }}): retain {{ rows[0].KEEP_REPORT }};
+        {% for r in rows %}--   {{ 'retire' if r.VIEW_SHARE <= params.retire_view_share_max else 'merge into ' ~ r.KEEP_REPORT }}: {{ r.OBJECT_NAME }} '{{ r.NAME }}' (owner {{ r.OWNER }})
+        {% endfor %}-- Verification view: refresh traffic of the shared signature should fall after retirement.
+        CREATE SCHEMA IF NOT EXISTS ALTITUDE_OPS.BI;
+        CREATE OR REPLACE VIEW ALTITUDE_OPS.BI.V_RETIREMENT_WATCH_{{ cluster_key | upper }} AS
+          SELECT DATE_TRUNC('day', START_TIME) AS DAY, COUNT(*) AS EXECUTIONS
+          FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+          WHERE QUERY_PARAMETERIZED_HASH = '{{ rows[0].QUERY_PARAMETERIZED_HASH }}'
+          GROUP BY 1;
+      rollback: |
+        DROP VIEW IF EXISTS ALTITUDE_OPS.BI.V_RETIREMENT_WATCH_{{ cluster_key | upper }};
+        -- Restore retired reports from the BI tool's recycle bin / version history if required.
+    kpis_to_watch: [KPI-USE-002, KPI-COST-006]
+    last_verified: "2026-10-01"
+
+  - id: DX-BI-02
+    title: Conflicting KPI definitions
+    description: The same KPI name computed with different logic across reports.
+    domain: D8
+    waf_pillar: security_governance
+    severity: high
+    confidence_class: low
+    detector:
+      requires: [BI_MEASURES, TABLES]
+      inputs: []
+      cluster_by: object
+      params:
+        semantic_schema: {value: EDW.SEMANTIC}
+      signals: |
+        WITH m AS (
+          SELECT KPI_NAME, REPORT_ID, EXPRESSION, SOURCE_COLUMNS,
+                 upper(regexp_replace(EXPRESSION, '\s+', '', 'g')) AS NORM_EXPR
+          FROM BI_MEASURES),
+        votes AS (
+          SELECT KPI_NAME, NORM_EXPR, min(EXPRESSION) AS EXPRESSION, count(DISTINCT REPORT_ID) AS REPORTS,
+                 min(SOURCE_COLUMNS) AS SOURCE_COLUMNS,
+                 row_number() OVER (PARTITION BY KPI_NAME ORDER BY count(DISTINCT REPORT_ID) DESC, NORM_EXPR) AS RN
+          FROM m GROUP BY KPI_NAME, NORM_EXPR)
+        SELECT m.KPI_NAME AS OBJECT_NAME, m.KPI_NAME AS CLUSTER_KEY,
+               count(DISTINCT m.NORM_EXPR) AS DEFINITIONS,
+               count(DISTINCT m.REPORT_ID) AS REPORTS,
+               string_agg(DISTINCT m.EXPRESSION, ' | ' ORDER BY m.EXPRESSION) AS VARIANTS,
+               string_agg(DISTINCT m.REPORT_ID, ', ' ORDER BY m.REPORT_ID) AS REPORT_IDS,
+               min(v.EXPRESSION) AS CERTIFIED_EXPRESSION,
+               (SELECT min(t.FQ_NAME) FROM TABLES t WHERE t.TABLE_NAME = split_part(min(v.SOURCE_COLUMNS), '.', 1)) AS CERTIFIED_TABLE
+        FROM m JOIN votes v ON v.KPI_NAME = m.KPI_NAME AND v.RN = 1
+        GROUP BY m.KPI_NAME
+      rule: DEFINITIONS > 1
+    evidence:
+      kind: KPI
+      fields: [DEFINITIONS, REPORTS, VARIANTS, REPORT_IDS, CERTIFIED_EXPRESSION, CERTIFIED_TABLE]
+    value:
+      method: "decision risk = likelihood × impact (rubric) of executives acting on conflicting numbers"
+    risk:
+      likelihood_ref: rubric.diagnostics.risk_model.bi_02.likelihood
+      impact_ref: rubric.diagnostics.risk_model.bi_02.impact
+      method: "The same KPI name returns different numbers in different reports (likelihood × impact, 1–5 each)"
+    effort: {size: M}
+    title_template: "Certify one definition of KPI '{{ cluster_key }}'"
+    rationale_template: >-
+      '{{ cluster_key }}' has {{ rows[0].DEFINITIONS }} definitions across {{ rows[0].REPORTS }} reports ({{ rows[0].REPORT_IDS }}): {{ rows[0].VARIANTS }};
+      majority definition {{ rows[0].CERTIFIED_EXPRESSION }}.
+    remediation:
+      type: sql
+      autonomy: L1
+      template: |
+        -- Single certified definition in a semantic view; the KPI owner confirms before BI models are repointed.
+        CREATE OR REPLACE SEMANTIC VIEW {{ params.semantic_schema }}.SV_KPI_{{ cluster_key | upper | replace(' ', '_') }}
+          TABLES ( src AS {{ rows[0].CERTIFIED_TABLE or '<SOURCE_TABLE>' }} )
+          METRICS ( src.{{ cluster_key | lower | replace(' ', '_') }} AS {{ rows[0].CERTIFIED_EXPRESSION }} COMMENT = 'Certified definition' )
+          COMMENT = 'Certified KPI: {{ cluster_key }}';
+      rollback: |
+        DROP SEMANTIC VIEW IF EXISTS {{ params.semantic_schema }}.SV_KPI_{{ cluster_key | upper | replace(' ', '_') }};
+    kpis_to_watch: [KPI-USE-002]
+    last_verified: "2026-10-01"
+
+  - id: DX-BI-03
+    title: Dashboards whose refresh cost exceeds their use
+    description: Reports whose refresh compute per view is above the rubric maximum.
+    domain: D8
+    waf_pillar: cost_optimization
+    severity: medium
+    confidence_class: high
+    detector:
+      requires: [BI_REPORTS, QUERY_ATTRIBUTION_HISTORY]
+      inputs: [contract_price_per_credit]
+      cluster_by: dashboard
+      params:
+        max_cost_per_view_usd: {threshold_ref: rubric.diagnostics.checks.bi_03.max_cost_per_view_usd}
+      signals: |
+        WITH sig AS (
+          SELECT QUERY_PARAMETERIZED_HASH, sum(CREDITS_ATTRIBUTED_COMPUTE) AS CREDITS
+          FROM QUERY_ATTRIBUTION_HISTORY GROUP BY QUERY_PARAMETERIZED_HASH),
+        r AS (
+          SELECT b.*,
+                 CASE WHEN sum(b.REFRESHES_PER_DAY) OVER (PARTITION BY b.QUERY_PARAMETERIZED_HASH) > 0
+                      THEN b.REFRESHES_PER_DAY / sum(b.REFRESHES_PER_DAY) OVER (PARTITION BY b.QUERY_PARAMETERIZED_HASH)
+                      ELSE 0 END AS REFRESH_SHARE
+          FROM BI_REPORTS b)
+        SELECT r.REPORT_ID AS OBJECT_NAME, r.REPORT_ID AS CLUSTER_KEY, r.TOOL, r.NAME, r.OWNER, r.VIEWS_90D, r.REFRESHES_PER_DAY,
+               r.QUERY_PARAMETERIZED_HASH,
+               coalesce(sig.CREDITS, 0) * r.REFRESH_SHARE AS REPORT_CREDITS,
+               coalesce(sig.CREDITS, 0) * r.REFRESH_SHARE * $price_per_credit / greatest(r.VIEWS_90D, 1) AS COST_PER_VIEW_USD
+        FROM r LEFT JOIN sig ON sig.QUERY_PARAMETERIZED_HASH = r.QUERY_PARAMETERIZED_HASH
+      rule: COST_PER_VIEW_USD >= $max_cost_per_view_usd
+    evidence:
+      kind: RPT
+      fields: [TOOL, NAME, VIEWS_90D, REFRESHES_PER_DAY, REPORT_CREDITS, COST_PER_VIEW_USD]
+    value:
+      method: "report refresh credits (signature credits × this report's refresh share) × achievable refresh reduction × contract price, annualised"
+      p50: REPORT_CREDITS * refresh_reduction_share * price_per_credit * annualise
+      conservative: REPORT_CREDITS * refresh_reduction_share * conservative_factor * price_per_credit * annualise
+      factors:
+        refresh_reduction_share: rubric.diagnostics.checks.bi_03.refresh_reduction_share
+        conservative_factor: rubric.diagnostics.checks.bi_03.conservative_factor
+    effort: {size: XS}
+    title_template: "Cut the refresh cadence of '{{ rows[0].NAME }}' or retire it"
+    rationale_template: >-
+      {{ rows[0].OBJECT_NAME }} '{{ rows[0].NAME }}' refreshes {{ rows[0].REFRESHES_PER_DAY }} times a day for {{ rows[0].VIEWS_90D }} views in 90 days:
+      {{ usd(rows[0].COST_PER_VIEW_USD) }} per view (rubric max {{ usd(params.max_cost_per_view_usd) }}).
+    remediation:
+      type: sql
+      autonomy: L1
+      template: |
+        -- BI action ({{ rows[0].TOOL }}): reduce the refresh schedule of {{ rows[0].OBJECT_NAME }} '{{ rows[0].NAME }}' (owner {{ rows[0].OWNER }})
+        -- to on-demand or daily, or retire it. The view below tracks refresh credits per day for the realised-value check.
+        CREATE SCHEMA IF NOT EXISTS ALTITUDE_OPS.BI;
+        CREATE OR REPLACE VIEW ALTITUDE_OPS.BI.V_REFRESH_COST_{{ rows[0].OBJECT_NAME | replace('-', '_') }} AS
+          SELECT DATE_TRUNC('day', a.START_TIME) AS DAY, SUM(a.CREDITS_ATTRIBUTED_COMPUTE) AS CREDITS
+          FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_ATTRIBUTION_HISTORY a
+          WHERE a.QUERY_PARAMETERIZED_HASH = '{{ rows[0].QUERY_PARAMETERIZED_HASH }}'
+          GROUP BY 1;
+      rollback: |
+        DROP VIEW IF EXISTS ALTITUDE_OPS.BI.V_REFRESH_COST_{{ rows[0].OBJECT_NAME | replace('-', '_') }};
+    kpis_to_watch: [KPI-COST-006, KPI-USE-002]
+    last_verified: "2026-10-01"

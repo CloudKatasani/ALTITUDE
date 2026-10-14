@@ -1,0 +1,42 @@
+# Next-package recommender (Section 6.13): dominant finding patterns -> recommended next package.
+# A rule fires when ALL of its conditions hold. Counts and scores are rubric references.
+version: 1.0.0
+recommendations:
+  - id: NXT-FINOPS
+    pattern: High untagged spend, no monitors, idle-heavy warehouses
+    package: FinOps remediation sprint + Package O
+    when:
+      checks_any: [DX-COST-01, DX-COST-07, DX-OPS-02, DX-COST-02, DX-COST-05]
+      min_checks_ref: rubric.diagnostics.recommender.finops_min_checks
+  - id: NXT-SECURITY
+    pattern: Critical security findings
+    package: Security hardening sprint
+    when:
+      domains_any: [D4]
+      severity: critical
+      min_checks_ref: rubric.diagnostics.recommender.security_min_critical
+  - id: NXT-BI
+    pattern: Heavy BI duplication, conflicting KPIs
+    package: BI rationalisation programme
+    when:
+      checks_any: [DX-BI-01, DX-BI-02, DX-BI-03]
+      min_checks_ref: rubric.diagnostics.recommender.bi_min_checks
+  - id: NXT-MIGRATION
+    pattern: Brittle legacy ETL or sources still on appliances
+    package: Migration assessment (Part III)
+    when:
+      client_input_list: legacy_sources
+      min_items_ref: rubric.diagnostics.recommender.legacy_min_sources
+  - id: NXT-AIREADY
+    pattern: Low AI-readiness score
+    package: AI-Ready programme (Section 19)
+    when:
+      domain_score_max:
+        domain: D9
+        score_ref: rubric.diagnostics.recommender.ai_domain_score_max
+  - id: NXT-MANAGED-RUN
+    pattern: Recurring pipeline failures, no on-call
+    package: Managed Run (Package O3)
+    when:
+      checks_any: [DX-REL-01, DX-REL-02, DX-OPS-02, DX-REL-03]
+      min_checks_ref: rubric.diagnostics.recommender.reliability_min_checks

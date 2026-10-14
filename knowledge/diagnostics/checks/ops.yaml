@@ -1,0 +1,135 @@
+# D6 Operational Excellence & DataOps checks (Section 6.4).
+version: 1.0.0
+checks:
+  - id: DX-OPS-01
+    title: Production DDL outside IaC/CI
+    description: DDL against production databases executed by identities and tools outside the infrastructure-as-code pipeline.
+    domain: D6
+    waf_pillar: operational_excellence
+    severity: medium
+    confidence_class: low
+    detector:
+      requires: [QUERY_HISTORY, CLIENT_INPUTS]
+      inputs: [production_databases]
+      cluster_by: owner
+      params:
+        min_iac_share: {threshold_ref: rubric.diagnostics.checks.ops_01.min_iac_share}
+        min_ddl_statements: {threshold_ref: rubric.diagnostics.checks.ops_01.min_ddl_statements}
+        ddl_query_type_pattern: {value: "^(CREATE|ALTER|DROP|RENAME)_"}
+        non_ddl_query_types: {value: [CREATE_TABLE_AS_SELECT]}
+        iac_pattern: {value: "(?i)(terraform|schemachange|dbt|flyway|liquibase|github|gitlab|azure ?devops|ci)"}
+        alert_schedule_minutes: {ref: rubric.diagnostics.alerts.schedule_minutes}
+      signals: |
+        WITH prod AS (
+          SELECT unnest(from_json(VALUE, '["VARCHAR"]')) AS DB FROM CLIENT_INPUTS WHERE KEY = 'production_databases')
+        SELECT q.USER_NAME AS OBJECT_NAME, q.USER_NAME AS CLUSTER_KEY,
+               count(*) AS DDL_STATEMENTS,
+               count(DISTINCT CAST(q.START_TIME AS DATE)) AS DDL_DAYS,
+               avg(CASE WHEN regexp_matches(coalesce(q.QUERY_TAG, '') || ' ' || coalesce(q.CLIENT_APPLICATION_ID, ''), $iac_pattern)
+                        THEN 1 ELSE 0 END) AS IAC_SHARE,
+               string_agg(DISTINCT q.QUERY_TYPE, ', ' ORDER BY q.QUERY_TYPE) AS DDL_TYPES,
+               string_agg(DISTINCT q.CLIENT_APPLICATION_ID, ', ' ORDER BY q.CLIENT_APPLICATION_ID) AS CLIENT_APPS
+        FROM QUERY_HISTORY q
+        WHERE regexp_matches(q.QUERY_TYPE, $ddl_query_type_pattern)
+          AND NOT list_contains($non_ddl_query_types, q.QUERY_TYPE)
+          AND (q.DATABASE_NAME IN (SELECT DB FROM prod) OR NOT EXISTS (SELECT 1 FROM prod))
+        GROUP BY q.USER_NAME
+      rule: IAC_SHARE < $min_iac_share AND DDL_STATEMENTS >= $min_ddl_statements
+    evidence:
+      kind: USR
+      fields: [DDL_STATEMENTS, DDL_DAYS, IAC_SHARE, DDL_TYPES, CLIENT_APPS]
+    value:
+      method: "change-failure risk = likelihood × impact (rubric); manual production DDL counts reported as evidence"
+    risk:
+      likelihood_ref: rubric.diagnostics.risk_model.ops_01.likelihood
+      impact_ref: rubric.diagnostics.risk_model.ops_01.impact
+      method: "Untracked production changes drift from code and fail without review (likelihood × impact, 1–5 each)"
+    effort: {size: L}
+    title_template: "Route {{ rows[0].OBJECT_NAME }}'s production DDL through the DataOps pipeline"
+    rationale_template: >-
+      {{ rows[0].OBJECT_NAME }} ran {{ rows[0].DDL_STATEMENTS }} production DDL statements ({{ rows[0].DDL_TYPES }}) on {{ rows[0].DDL_DAYS }} days
+      via {{ rows[0].CLIENT_APPS }}; {{ pct(rows[0].IAC_SHARE) }} came from IaC/CI tooling (rubric min {{ pct(params.min_iac_share) }}).
+    remediation:
+      type: sql
+      autonomy: L1
+      template: |
+        -- Detect manual production DDL while the change is moved into the IaC pipeline (Terraform/schemachange + CI).
+        CREATE OR REPLACE ALERT ALTITUDE_OPS.ALERTS.ALERT_NON_IAC_DDL_{{ rows[0].OBJECT_NAME }}
+          WAREHOUSE = ALTITUDE_OPS_WH SCHEDULE = '{{ params.alert_schedule_minutes }} MINUTE'
+          IF (EXISTS (SELECT 1 FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+                      WHERE USER_NAME = '{{ rows[0].OBJECT_NAME }}' AND REGEXP_LIKE(QUERY_TYPE, '{{ params.ddl_query_type_pattern }}.*')
+                        AND START_TIME > DATEADD(minute, -{{ params.alert_schedule_minutes }}, CURRENT_TIMESTAMP())))
+          THEN CALL SYSTEM$SEND_EMAIL('ALTITUDE_OPS_EMAIL', 'platform-oncall@example.com', 'Manual production DDL by {{ rows[0].OBJECT_NAME }}', 'Route DDL through IaC');
+        ALTER ALERT ALTITUDE_OPS.ALERTS.ALERT_NON_IAC_DDL_{{ rows[0].OBJECT_NAME }} RESUME;
+      rollback: |
+        DROP ALERT IF EXISTS ALTITUDE_OPS.ALERTS.ALERT_NON_IAC_DDL_{{ rows[0].OBJECT_NAME }};
+    kpis_to_watch: [KPI-PHI-001]
+    last_verified: "2026-10-01"
+
+  - id: DX-OPS-02
+    title: No alerting for credit spikes or failed Tier-1 tasks
+    description: Required alert classes are missing, or there is no account-level resource monitor.
+    domain: D6
+    waf_pillar: operational_excellence
+    severity: high
+    confidence_class: high
+    detector:
+      requires: [ALERTS, RESOURCE_MONITORS, WAREHOUSES]
+      inputs: []
+      cluster_by: object
+      params:
+        required_alert_classes: {value: [credit_anomaly, task_failure]}
+        credit_spike_factor: {threshold_ref: rubric.diagnostics.checks.ops_02.credit_spike_factor}
+        baseline_days: {ref: rubric.diagnostics.checks.ops_02.baseline_days}
+        alert_schedule_minutes: {ref: rubric.diagnostics.alerts.schedule_minutes}
+      signals: |
+        WITH req AS (SELECT unnest($required_alert_classes) AS ALERT_CLASS),
+        have AS (SELECT DISTINCT ALERT_CLASS FROM ALERTS WHERE lower(coalesce(STATE, 'started')) = 'started')
+        SELECT 'ACCOUNT' AS OBJECT_NAME, 'alerting' AS CLUSTER_KEY,
+               (SELECT count(*) FROM req WHERE ALERT_CLASS NOT IN (SELECT ALERT_CLASS FROM have)) AS MISSING_ALERT_CLASSES,
+               (SELECT string_agg(ALERT_CLASS, ',' ORDER BY ALERT_CLASS) FROM req WHERE ALERT_CLASS NOT IN (SELECT ALERT_CLASS FROM have)) AS MISSING_LIST,
+               (SELECT count(*) FROM RESOURCE_MONITORS WHERE upper(LEVEL) = 'ACCOUNT') AS ACCOUNT_MONITORS,
+               (SELECT count(*) FROM WAREHOUSES WHERE RESOURCE_MONITOR IS NULL) AS UNMONITORED_WAREHOUSES,
+               (SELECT count(*) FROM WAREHOUSES) AS WAREHOUSES
+      rule: MISSING_ALERT_CLASSES > 0 OR ACCOUNT_MONITORS = 0
+    evidence:
+      kind: ACCT
+      fields: [MISSING_ALERT_CLASSES, MISSING_LIST, ACCOUNT_MONITORS, UNMONITORED_WAREHOUSES, WAREHOUSES]
+    value:
+      method: "detection lead time: risk = likelihood × impact (rubric) of spikes and failures going unnoticed"
+    risk:
+      likelihood_ref: rubric.diagnostics.risk_model.ops_02.likelihood
+      impact_ref: rubric.diagnostics.risk_model.ops_02.impact
+      method: "Credit spikes and Tier-1 failures are found by consumers, not operators (likelihood × impact, 1–5 each)"
+    effort: {size: S}
+    title_template: "Install the alert pack ({{ rows[0].MISSING_LIST or 'account monitor' }})"
+    rationale_template: >-
+      Missing alert classes: {{ rows[0].MISSING_LIST or 'none' }}; account-level resource monitors: {{ rows[0].ACCOUNT_MONITORS }};
+      {{ rows[0].UNMONITORED_WAREHOUSES }} of {{ rows[0].WAREHOUSES }} warehouses have no resource monitor.
+    remediation:
+      type: sql
+      autonomy: L2
+      template: |
+        -- Alert pack (Package O provides the full catalogue with routes and runbooks).
+        CREATE SCHEMA IF NOT EXISTS ALTITUDE_OPS.ALERTS;
+        {% for cls in (rows[0].MISSING_LIST or '').split(',') if cls %}{% if cls == 'credit_anomaly' %}CREATE OR REPLACE ALERT ALTITUDE_OPS.ALERTS.ALERT_CREDIT_SPIKE
+          WAREHOUSE = ALTITUDE_OPS_WH SCHEDULE = 'USING CRON 0 7 * * * UTC'
+          IF (EXISTS (SELECT 1 FROM SNOWFLAKE.ACCOUNT_USAGE.METERING_DAILY_HISTORY d
+                      WHERE d.USAGE_DATE = DATEADD(day, -1, CURRENT_DATE())
+                        AND d.CREDITS_BILLED > (SELECT AVG(CREDITS_BILLED) * {{ params.credit_spike_factor }} FROM SNOWFLAKE.ACCOUNT_USAGE.METERING_DAILY_HISTORY
+                                                WHERE USAGE_DATE >= DATEADD(day, -{{ params.baseline_days }}, CURRENT_DATE()))))
+          THEN CALL SYSTEM$SEND_EMAIL('ALTITUDE_OPS_EMAIL', 'finops@example.com', 'Credit spike', 'Yesterday exceeded the {{ params.baseline_days }}-day baseline');
+        ALTER ALERT ALTITUDE_OPS.ALERTS.ALERT_CREDIT_SPIKE RESUME;
+        {% elif cls == 'task_failure' %}CREATE OR REPLACE ALERT ALTITUDE_OPS.ALERTS.ALERT_TIER1_TASK_FAILED
+          WAREHOUSE = ALTITUDE_OPS_WH SCHEDULE = '{{ params.alert_schedule_minutes }} MINUTE'
+          IF (EXISTS (SELECT 1 FROM SNOWFLAKE.ACCOUNT_USAGE.TASK_HISTORY
+                      WHERE STATE = 'FAILED' AND COMPLETED_TIME > DATEADD(minute, -{{ params.alert_schedule_minutes }}, CURRENT_TIMESTAMP())))
+          THEN CALL SYSTEM$SEND_EMAIL('ALTITUDE_OPS_EMAIL', 'platform-oncall@example.com', 'Task failed', 'See TASK_HISTORY');
+        ALTER ALERT ALTITUDE_OPS.ALERTS.ALERT_TIER1_TASK_FAILED RESUME;
+        {% else %}-- Alert class {{ cls }}: install from the Package O alert catalogue.
+        {% endif %}{% endfor %}
+      rollback: |
+        DROP ALERT IF EXISTS ALTITUDE_OPS.ALERTS.ALERT_CREDIT_SPIKE;
+        DROP ALERT IF EXISTS ALTITUDE_OPS.ALERTS.ALERT_TIER1_TASK_FAILED;
+    kpis_to_watch: [KPI-COST-005, KPI-REL-002]
+    last_verified: "2026-10-01"
