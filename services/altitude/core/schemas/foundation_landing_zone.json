@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Snowflake Foundation landing zone (Section 15.2)",
+  "x-altitude-globs": ["foundation/*.yaml"],
+  "type": "object",
+  "required": ["id", "name", "version", "provider", "naming", "environments", "layers", "domains", "schemas",
+               "access_levels", "functional_roles", "users", "warehouses", "account_monitor", "network", "governance",
+               "budgets", "agents"],
+  "additionalProperties": false,
+  "$defs": {
+    "ident": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"},
+    "monitor": {
+      "type": "object",
+      "required": ["credit_quota", "frequency", "notify_at", "suspend_at"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"$ref": "#/$defs/ident"},
+        "credit_quota": {"type": "number", "exclusiveMinimum": 0},
+        "frequency": {"enum": ["DAILY", "WEEKLY", "MONTHLY", "YEARLY", "NEVER"]},
+        "notify_at": {"type": "array", "items": {"type": "integer", "minimum": 1}},
+        "suspend_at": {"type": "integer", "minimum": 1}
+      }
+    },
+    "grant": {
+      "type": "object",
+      "required": ["env", "domain", "layer", "level"],
+      "additionalProperties": false,
+      "properties": {
+        "env": {"type": "string"}, "domain": {"type": "string"}, "layer": {"type": "string"},
+        "level": {"enum": ["RO", "RW"]}
+      }
+    },
+    "privileges": {"type": "array", "items": {"type": "string", "pattern": "^[A-Z][A-Z ]*$"}}
+  },
+  "properties": {
+    "id": {"type": "string", "pattern": "^LZ-[A-Z0-9-]+$"},
+    "name": {"type": "string"},
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "provider": {
+      "type": "object", "required": ["source", "version"], "additionalProperties": false,
+      "properties": {"source": {"type": "string"}, "version": {"type": "string"}}
+    },
+    "naming": {
+      "type": "object", "required": ["database_pattern", "database_regex", "access_role_pattern"],
+      "additionalProperties": false,
+      "properties": {"database_pattern": {"type": "string"}, "database_regex": {"type": "string"},
+                     "access_role_pattern": {"type": "string"}}
+    },
+    "environments": {
+      "type": "array", "minItems": 1,
+      "items": {"type": "object", "required": ["name", "managed_access"], "additionalProperties": false,
+                "properties": {"name": {"$ref": "#/$defs/ident"}, "managed_access": {"type": "boolean"}}}
+    },
+    "layers": {
+      "type": "array", "minItems": 1,
+      "items": {"type": "object", "required": ["name", "retention_days", "description"], "additionalProperties": false,
+                "properties": {"name": {"$ref": "#/$defs/ident"}, "retention_days": {"type": "integer", "minimum": 0},
+                               "description": {"type": "string"}}}
+    },
+    "domains": {
+      "type": "array", "minItems": 1,
+      "items": {"type": "object", "required": ["name", "owner", "cost_center"], "additionalProperties": false,
+                "properties": {"name": {"$ref": "#/$defs/ident"}, "owner": {"type": "string"},
+                               "cost_center": {"$ref": "#/$defs/ident"}}}
+    },
+    "schemas": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/ident"}},
+    "access_levels": {
+      "type": "object", "required": ["RO", "RW"], "additionalProperties": false,
+      "patternProperties": {"^(RO|RW)$": {
+        "type": "object", "required": ["database", "schema", "future_objects"], "additionalProperties": false,
+        "properties": {"database": {"$ref": "#/$defs/privileges"}, "schema": {"$ref": "#/$defs/privileges"},
+                       "future_objects": {"type": "object", "additionalProperties": {"$ref": "#/$defs/privileges"}}}}}
+    },
+    "functional_roles": {
+      "type": "array", "minItems": 1,
+      "items": {"type": "object", "required": ["name", "description", "access", "warehouses"], "additionalProperties": false,
+                "properties": {"name": {"type": "string", "pattern": "^FR_[A-Z0-9_]+$"}, "description": {"type": "string"},
+                               "access": {"type": "array", "items": {"$ref": "#/$defs/grant"}},
+                               "warehouses": {"type": "array", "items": {"$ref": "#/$defs/ident"}}}}
+    },
+    "users": {
+      "type": "array",
+      "items": {"type": "object", "required": ["name", "type", "functional_roles"], "additionalProperties": false,
+                "properties": {"name": {"$ref": "#/$defs/ident"}, "type": {"enum": ["PERSON", "SERVICE"]},
+                               "functional_roles": {"type": "array", "minItems": 1,
+                                                    "items": {"type": "string", "pattern": "^FR_[A-Z0-9_]+$"}},
+                               "default_warehouse": {"$ref": "#/$defs/ident"},
+                               "network_policy": {"$ref": "#/$defs/ident"}}}
+    },
+    "warehouses": {
+      "type": "array", "minItems": 1,
+      "items": {"type": "object",
+                "required": ["name", "workload_class", "size", "auto_suspend", "min_clusters", "max_clusters",
+                             "scaling_policy", "statement_timeout_seconds", "cost_center", "monitor"],
+                "additionalProperties": false,
+                "properties": {"name": {"type": "string", "pattern": "^WH_[A-Z0-9_]+$"},
+                               "workload_class": {"type": "string"},
+                               "size": {"enum": ["XSMALL", "SMALL", "MEDIUM", "LARGE", "XLARGE", "XXLARGE", "XXXLARGE", "X4LARGE"]},
+                               "auto_suspend": {"type": "integer", "minimum": 1},
+                               "min_clusters": {"type": "integer", "minimum": 1},
+                               "max_clusters": {"type": "integer", "minimum": 1},
+                               "scaling_policy": {"enum": ["STANDARD", "ECONOMY"]},
+                               "statement_timeout_seconds": {"type": "integer", "minimum": 1},
+                               "cost_center": {"$ref": "#/$defs/ident"},
+                               "monitor": {"$ref": "#/$defs/monitor"}}}
+    },
+    "account_monitor": {"$ref": "#/$defs/monitor"},
+    "network": {
+      "type": "object", "required": ["database", "schema", "rules", "policies"], "additionalProperties": false,
+      "properties": {
+        "database": {"$ref": "#/$defs/ident"}, "schema": {"$ref": "#/$defs/ident"},
+        "rules": {"type": "array", "items": {"type": "object", "required": ["name", "type", "mode", "values"],
+                  "additionalProperties": false,
+                  "properties": {"name": {"$ref": "#/$defs/ident"}, "type": {"enum": ["IPV4", "HOST_PORT", "PRIVATE_HOST_PORT", "AWSVPCEID", "AZURELINKID"]},
+                                 "mode": {"enum": ["INGRESS", "EGRESS", "INTERNAL_STAGE"]},
+                                 "values": {"type": "array", "minItems": 1, "items": {"type": "string"}}}}},
+        "policies": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["name", "allowed_rules", "account_default"],
+                     "additionalProperties": false,
+                     "properties": {"name": {"$ref": "#/$defs/ident"}, "allowed_rules": {"type": "array", "items": {"$ref": "#/$defs/ident"}},
+                                    "account_default": {"type": "boolean"}}}}
+      }
+    },
+    "governance": {
+      "type": "object", "required": ["database", "tag_schema", "policy_schema", "admin_role", "tags", "masking"],
+      "additionalProperties": false,
+      "properties": {
+        "database": {"$ref": "#/$defs/ident"}, "tag_schema": {"$ref": "#/$defs/ident"},
+        "policy_schema": {"$ref": "#/$defs/ident"}, "admin_role": {"type": "string", "pattern": "^FR_[A-Z0-9_]+$"},
+        "tags": {"type": "array", "items": {"type": "object", "required": ["name"], "additionalProperties": false,
+                 "properties": {"name": {"$ref": "#/$defs/ident"}, "allowed_values": {"type": "array", "items": {"type": "string"}}}}},
+        "masking": {"type": "array", "items": {"type": "object",
+                    "required": ["name", "tag", "data_type", "unmasked_roles", "masked_value"], "additionalProperties": false,
+                    "properties": {"name": {"$ref": "#/$defs/ident"}, "tag": {"$ref": "#/$defs/ident"},
+                                   "data_type": {"enum": ["VARCHAR", "NUMBER", "DATE", "TIMESTAMP_NTZ"]},
+                                   "unmasked_roles": {"type": "array", "items": {"type": "string"}},
+                                   "masked_value": {"type": "string"}}}}
+      }
+    },
+    "budgets": {
+      "type": "array",
+      "items": {"type": "object", "required": ["name", "scope", "monthly_limit_credits"], "additionalProperties": false,
+                "properties": {"name": {"$ref": "#/$defs/ident"}, "scope": {"enum": ["ACCOUNT", "CORTEX", "CUSTOM"]},
+                               "monthly_limit_credits": {"type": "number", "exclusiveMinimum": 0},
+                               "objects": {"type": "array", "items": {"$ref": "#/$defs/ident"}}}}
+    },
+    "agents": {
+      "type": "object", "required": ["source", "include", "warehouse"], "additionalProperties": false,
+      "properties": {"source": {"type": "string"}, "include": {"enum": ["implemented", "all"]},
+                     "warehouse": {"$ref": "#/$defs/ident"}}
+    }
+  }
+}

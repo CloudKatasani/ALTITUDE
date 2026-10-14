@@ -1,0 +1,11 @@
+# AUTO-GENERATED — DO NOT EDIT. Source: knowledge/foundation/landing_zone.yaml. Regenerate with `altitude generate`.
+resource "snowflake_execute" "budget_account" {
+  execute = "CALL SNOWFLAKE.LOCAL.ACCOUNT_ROOT_BUDGET!ACTIVATE(); CALL SNOWFLAKE.LOCAL.ACCOUNT_ROOT_BUDGET!SET_SPENDING_LIMIT(6000)"
+  revert  = "CALL SNOWFLAKE.LOCAL.ACCOUNT_ROOT_BUDGET!DEACTIVATE()"
+}
+
+resource "snowflake_execute" "budget_cortex" {
+  execute    = "CREATE SNOWFLAKE.CORE.BUDGET IF NOT EXISTS GOVERNANCE.POLICIES.BUDGET_CORTEX(); CALL GOVERNANCE.POLICIES.BUDGET_CORTEX!SET_SPENDING_LIMIT(500); CALL GOVERNANCE.POLICIES.BUDGET_CORTEX!ADD_RESOURCE(SYSTEM$REFERENCE('WAREHOUSE', 'WH_AGENTS', 'SESSION', 'APPLYBUDGET'))"
+  revert     = "DROP SNOWFLAKE.CORE.BUDGET IF EXISTS GOVERNANCE.POLICIES.BUDGET_CORTEX"
+  depends_on = [snowflake_schema.governance_policies, snowflake_warehouse.wh_agents]
+}
