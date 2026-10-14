@@ -166,3 +166,34 @@ def load_known_issue_docs() -> list[GroundingDoc]:
     for i in issues:
         i.setdefault("source_dialect", i.get("_source", "").split("/")[1] if "/" in i.get("_source", "") else "")
     return docs_from_known_issues(issues)
+
+
+def format_metrics(metrics: Any) -> str:
+    """Readable ``Label value`` pairs for evidence metrics (shares as %, counts with separators)."""
+    import json
+
+    if isinstance(metrics, str):
+        try:
+            metrics = json.loads(metrics)
+        except ValueError:
+            return metrics
+    if not isinstance(metrics, dict):
+        return str(metrics)
+    parts = []
+    for key, v in metrics.items():
+        if v is None or v == "":
+            continue
+        label = key.replace("_", " ").lower()
+        label = label[0].upper() + label[1:]
+        if isinstance(v, bool):
+            text = "yes" if v else "no"
+        elif isinstance(v, (int, float)) and any(t in key.upper() for t in ("SHARE", "PCT", "RATIO", "RATE")):
+            text = f"{float(v):.0%}"
+        elif isinstance(v, int):
+            text = f"{v:,}"
+        elif isinstance(v, float):
+            text = f"{v:,.2f}" if abs(v) < 100 else f"{v:,.0f}"  # threshold-ok: display precision
+        else:
+            text = str(v).replace(",", ", ") if isinstance(v, str) and "," in v and " " not in v else str(v)
+        parts.append(f"{label} {text}")
+    return "; ".join(parts)

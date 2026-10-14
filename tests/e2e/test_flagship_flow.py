@@ -82,3 +82,38 @@ def test_board_pack_skill(flow):
     c, _, snap, _ = flow
     out = c.post("/api/v1/skills/generate_board_pack", headers=H(), json={"snapshot_id": snap["snapshot_id"]}).json()
     assert out["snapshot_id"] == snap["snapshot_id"] and "board_pack.pdf" in out["files"]
+
+
+def test_engagement_facts_drive_home_page_challenges(flow):
+    c, eng, *_ = flow
+    facts = {"pattern": "lift_and_shift", "procedural_object_count": 4200, "test_harness": False}
+    assert c.put(f"/api/v1/engagements/{eng['engagement_id']}/facts", headers=H(role="client_viewer"),
+                 json={"facts": facts}).status_code == 403
+    stored = c.put(f"/api/v1/engagements/{eng['engagement_id']}/facts", headers=H(), json={"facts": facts}).json()
+    assert stored == facts
+    c.post("/login", data={"user": "lead@acme", "role": "delivery_lead"})
+    home = c.get("/").text
+    assert "SH-CH-001" in home and "4200 procedural scripts" in home
+    c.put(f"/api/v1/engagements/{eng['engagement_id']}/facts", headers=H(), json={"facts": {"test_harness": True}})
+    assert "SH-CH-001" not in c.get("/").text  # latest value wins
+
+
+def test_sherpa_evidence_is_readable_not_raw_json(flow):
+    c, *_ = flow
+    ans = c.post("/api/v1/sherpa/ask", headers=H(), json={"question": "idle share of WH_DEV warehouse"}).json()
+    assert ans["grounded"]
+    ev_lines = [l for l in ans["answer"].splitlines() if l.startswith("- [EV-")]
+    assert ev_lines and all("{" not in l and '"' not in l for l in ev_lines)
+    assert any("Idle share" in l and "%" in l for l in ev_lines)
+
+
+def test_agents_page_separates_approvals_from_advice(flow):
+    c, _, snap, _ = flow
+    c.post("/api/v1/agents/AG-ACCESS-HYGIENE/evals?promote=true", headers=H())
+    c.post("/api/v1/agents/AG-ACCESS-HYGIENE/runs", headers=H(), json={"snapshot_id": snap["snapshot_id"]})
+    c.post("/login", data={"user": "lead@acme", "role": "delivery_lead"})
+    html = c.get("/agents").text
+    approvals, rest = html.split("Recommendations (advice only", 1)
+    advice = rest.split("Action log", 1)[0]
+    assert "grant.revoke_role_from_user" in approvals and ">L1<" not in approvals
+    assert "orphan_role:ROLE_LEGACY_MKTG" in advice and ">L1<" in advice

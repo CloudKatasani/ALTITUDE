@@ -81,7 +81,7 @@ def mount(app: FastAPI) -> None:
         engagements = ctx.store.query("SELECT * FROM engagement ORDER BY created_at")
         eng = engagements[0] if engagements else None
         phase = (eng or {}).get("current_phase") or "diagnose"
-        facts = _facts(ctx)
+        facts = _facts(ctx, eng)
         sherpa = Sherpa(ctx.extras["grounding"](ctx))
         return page(env, "home.html", request, p, engagement=eng, engagements=engagements, path=outcome_path(),
                     phase=phase, actions=sherpa.next_actions(phase, facts), challenges=sherpa.challenges(facts))
@@ -135,7 +135,9 @@ def mount(app: FastAPI) -> None:
             return RedirectResponse("/login", status_code=303)
         from altitude.advisory import Sherpa
 
-        answer = Sherpa(ctx.extras["grounding"](ctx), store=ctx.store).ask(q, _facts(ctx)) if q else None
+        engs = ctx.store.query("SELECT * FROM engagement ORDER BY created_at LIMIT 1")
+        answer = (Sherpa(ctx.extras["grounding"](ctx), store=ctx.store).ask(q, _facts(ctx, engs[0] if engs else None))
+                  if q else None)
         return page(env, "sherpa.html", request, p, q=q, answer=answer)
 
     @app.get("/decisions", response_class=HTMLResponse)
@@ -168,12 +170,17 @@ def _register(app: FastAPI, env: Environment, ctx: Any, path: str, perm: str, ha
         return page(env, template, request, p, **data)
 
 
-def _facts(ctx: Any) -> dict:
+def _facts(ctx: Any, engagement: dict | None = None) -> dict:
+    """Derived facts (review queue, snapshots, module providers) overlaid with facts recorded on the engagement."""
     facts: dict = {"review_items_open": len(ctx.store.query("SELECT 1 FROM review_item WHERE status='open'")),
                    "access_confirmed": True,
                    "snapshot_sealed": bool(ctx.store.query("SELECT 1 FROM snapshot LIMIT 1"))}
     for provider in ctx.extras.get("fact_providers", []):
         facts.update(provider(ctx))
+    if engagement:
+        from .routes.engagement import current_facts
+
+        facts.update(current_facts(ctx.store, engagement["engagement_id"]))
     return facts
 
 

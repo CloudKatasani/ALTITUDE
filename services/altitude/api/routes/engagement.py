@@ -30,6 +30,23 @@ class PhaseIn(BaseModel):
     phase: str
 
 
+class FactsIn(BaseModel):
+    facts: dict
+
+
+def current_facts(store, engagement_id: str) -> dict:
+    """Latest value per fact key for an engagement."""
+    import json
+
+    rows = store.query("SELECT fact_key, value FROM engagement_fact WHERE engagement_id = ? ORDER BY set_at",
+                       [engagement_id])
+    out = {}
+    for r in rows:
+        v = json.loads(r["value"]) if isinstance(r["value"], str) else r["value"]
+        out[r["fact_key"]] = v["v"] if isinstance(v, dict) and "v" in v else v
+    return out
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
@@ -83,3 +100,21 @@ def set_phase(engagement_id: str, body: PhaseIn, p: Principal = Depends(require(
     audit.record(ctx.store, p.user, "engagement.phase", subject_type="engagement", subject_id=engagement_id,
                  details={"phase": body.phase})
     return json_safe(ctx.store.get("engagement", engagement_id=engagement_id))
+
+
+@router.get("/engagements/{engagement_id}/facts")
+def get_facts(engagement_id: str, p: Principal = Depends(require("read")), ctx: Context = Depends(get_ctx)) -> dict:
+    return json_safe(current_facts(ctx.store, engagement_id))
+
+
+@router.put("/engagements/{engagement_id}/facts")
+def put_facts(engagement_id: str, body: FactsIn, p: Principal = Depends(require("run")),
+              ctx: Context = Depends(get_ctx)) -> dict:
+    if not ctx.store.get("engagement", engagement_id=engagement_id):
+        raise HTTPException(404, f"no engagement {engagement_id}")
+    now = _now()
+    ctx.store.insert("engagement_fact", [{"engagement_id": engagement_id, "fact_key": k, "value": {"v": v},
+                                          "set_by": p.user, "set_at": now} for k, v in sorted(body.facts.items())])
+    audit.record(ctx.store, p.user, "engagement.facts", subject_type="engagement", subject_id=engagement_id,
+                 details={"keys": sorted(body.facts)})
+    return json_safe(current_facts(ctx.store, engagement_id))

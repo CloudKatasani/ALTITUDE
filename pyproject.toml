@@ -26,6 +26,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 snowflake = ["snowflake-connector-python>=3.10"]
+demo = ["playwright>=1.40"]
 
 [project.scripts]
 altitude = "altitude.cli:main"

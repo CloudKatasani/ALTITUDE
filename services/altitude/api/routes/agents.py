@@ -110,11 +110,14 @@ def decide(action_id: str, body: DecisionIn, p: Principal = Depends(require("app
 
 
 def _agents_page(request: Request, p: Principal, ctx: Context):
-    pending = ctx.store.query(
+    latest = ctx.store.query(
         "SELECT * FROM agent_action a WHERE seq = (SELECT max(seq) FROM agent_action b WHERE b.action_id = a.action_id) "
         "AND status = 'proposed' ORDER BY recorded_at DESC")
+    # Only changes (L2 drafts, or L3 actions refused back to L2) need an approver; L0/L1 output is advice.
+    pending = [a for a in latest if a["autonomy"] in ("L2", "L3") and a["action_type"] != "recommendation"]
+    advice = [a for a in latest if a not in pending]
     recent = ctx.store.query("SELECT * FROM agent_action ORDER BY recorded_at DESC, seq DESC LIMIT 50")
-    return "agents.html", {"pending": pending, "recent": recent}
+    return "agents.html", {"pending": pending, "advice": advice, "recent": recent}
 
 
 def init(ctx: Context) -> None:

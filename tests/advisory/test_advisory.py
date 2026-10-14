@@ -102,3 +102,12 @@ def test_review_board_records_dissent_and_requires_human_decision():
     again = board.review("Re-platform wave 2", {"pattern": "re_platform", "modernise_backlog": True,
                                                 "annual_value_usd": 900000, "annual_cost_usd": 300000})
     assert again.to_dict() == ok.to_dict()
+
+
+def test_format_metrics_is_human_readable():
+    from altitude.advisory.grounding import format_metrics
+
+    out = format_metrics('{"IDLE_SHARE": 0.92, "BILLED_CREDITS": 1024.0, "AUTO_SUSPEND": 3600, "X": null, '
+                         '"MISSING_LIST": "credit_anomaly,task_failure", "HAS_MFA": false}')
+    assert out == ("Idle share 92%; Billed credits 1,024; Auto suspend 3,600; "
+                   "Missing list credit_anomaly, task_failure; Has mfa no")
