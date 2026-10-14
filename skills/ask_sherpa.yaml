@@ -1,0 +1,12 @@
+name: ask_sherpa
+description: Ask the grounded delivery partner (or a specialist advisor) a question; answers cite evidence IDs or refuse.
+permission: read
+entrypoint: altitude.skills.impl:ask_sherpa
+input_schema:
+  type: object
+  properties:
+    question: {type: string, minLength: 3}
+    facts: {type: object, description: "engagement facts used for challenges"}
+    advisor: {type: string, pattern: "^ADV-[A-Z]+$"}
+  required: [question]
+  additionalProperties: false

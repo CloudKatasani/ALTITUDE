@@ -73,7 +73,7 @@ def _rs256_verify(signing_input: bytes, signature: bytes, n: int, e: int) -> boo
     m = pow(int.from_bytes(signature, "big"), e, n).to_bytes(k, "big")
     digest_info = _SHA256_PREFIX + hashlib.sha256(signing_input).digest()
     pad_len = k - len(digest_info) - 3
-    if pad_len < 8:
+    if pad_len < 8:  # threshold-ok: RFC 8017 minimum PS length
         return False
     expected = b"\x00\x01" + b"\xff" * pad_len + b"\x00" + digest_info
     return hmac.compare_digest(m, expected)

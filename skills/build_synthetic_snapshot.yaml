@@ -1,0 +1,11 @@
+name: build_synthetic_snapshot
+description: Build and seal a synthetic Snowflake estate snapshot (seeded issues or clean) for demos and dry runs.
+permission: run
+entrypoint: altitude.skills.impl:build_synthetic_snapshot
+input_schema:
+  type: object
+  properties:
+    profile: {enum: [seeded, clean]}
+    days: {type: integer, minimum: 7, maximum: 365}
+    account_name: {type: string, pattern: "^[A-Z][A-Z0-9_]*$"}
+  additionalProperties: false

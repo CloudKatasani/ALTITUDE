@@ -18,9 +18,12 @@ from .paths import knowledge_dir
 _PLACEHOLDER = re.compile(r"\{\{\s*([A-Z][A-Z0-9_]*)\s*\}\}")
 
 
-@lru_cache(maxsize=8)
 def tokens(theme: str | None = None) -> dict[str, str]:
-    theme = theme or os.environ.get("ALTITUDE_THEME", "default")
+    return dict(_load(theme or os.environ.get("ALTITUDE_THEME", "default")))
+
+
+@lru_cache(maxsize=8)
+def _load(theme: str) -> dict[str, str]:
     path = knowledge_dir() / "theme" / f"{theme}.yaml"
     return dict(yaml.safe_load(path.read_text())["tokens"])
 

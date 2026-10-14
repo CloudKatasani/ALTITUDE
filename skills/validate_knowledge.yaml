@@ -1,0 +1,5 @@
+name: validate_knowledge
+description: Validate every knowledge-base file (schemas, rubric references, unique IDs) and list precise problems.
+permission: read
+entrypoint: altitude.skills.impl:validate_knowledge
+input_schema: {type: object, properties: {}, additionalProperties: false}

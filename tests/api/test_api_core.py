@@ -138,3 +138,13 @@ def test_portal_pages_render_with_theme(client):
     assert "ALTITUDE" in home.text  # from the theme token, not the template
     for path in ("/review", "/sherpa?q=idle+warehouses", "/decisions"):
         assert c.get(path).status_code == 200
+
+
+def test_white_label_partner_theme_is_configuration_only(tmp_path, monkeypatch):
+    monkeypatch.setenv("ALTITUDE_AUTH", "dev")
+    monkeypatch.setenv("ALTITUDE_THEME", "partner_example")
+    c = TestClient(create_app(store=Store(), workspace=tmp_path))
+    c.post("/login", data={"user": "p@x", "role": "partner_admin"})
+    for path in ("/", "/review", "/sherpa", "/decisions", "/login"):
+        html = c.get(path).text
+        assert "Summit Insight" in html and "ALTITUDE" not in html and "Sherpa" not in html, path

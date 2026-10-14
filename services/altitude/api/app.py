@@ -132,7 +132,7 @@ def core_router() -> APIRouter:
         return {"item_id": item_id, "decision": body.decision, "reviewer": p.user}
 
     @r.get("/audit")
-    def audit_events(subject_type: str | None = None, subject_id: str | None = None, limit: int = 200,
+    def audit_events(subject_type: str | None = None, subject_id: str | None = None, limit: int = 200,  # threshold-ok: page size
                      p: Principal = Depends(require("read")), ctx: Context = Depends(get_ctx)) -> list[dict]:
         if subject_type and subject_id:
             return json_safe(audit.trail(ctx.store, subject_type, subject_id))
