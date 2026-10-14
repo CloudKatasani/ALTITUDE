@@ -1,7 +1,7 @@
 -- AUTO-GENERATED — DO NOT EDIT. Source: knowledge/semantic/kpi_registry.yaml. Regenerate with `altitude generate`.
 CREATE OR REPLACE SEMANTIC VIEW EDW.SEMANTIC.SV_SALES
   TABLES (
-    orders AS EDW.SALES.FCT_ORDERS PRIMARY KEY (ORDER_ID) WITH SYNONYMS = ('order lines', 'sales orders') COMMENT = 'Order facts',
+    orders AS EDW.SALES.FCT_ORDERS PRIMARY KEY (ORDER_ID) WITH SYNONYMS = ('order lines', 'sales orders') COMMENT = 'Order facts, one row per order line',
     customers AS EDW.SALES.DIM_CUSTOMER PRIMARY KEY (CUSTOMER_ID) WITH SYNONYMS = ('clients') COMMENT = 'Current and historical customer attributes'
   )
   RELATIONSHIPS (

@@ -218,3 +218,16 @@ def semantic_views(registry: Registry | None = None) -> dict[str, str]:
     """{domain: DDL}. Loading the registry enforces one definition per KPI first."""
     registry = registry or load()
     return {name: render_semantic_view(registry, name) for name in sorted(registry.domains)}
+
+
+def validate_tree(root: Path) -> list[str]:
+    """Hook for ``altitude knowledge validate``: one definition per KPI across the registry."""
+    path = root / REL
+    if not path.exists():
+        return []
+    text = path.read_text()
+    try:
+        doc = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return []  # reported by the schema pass
+    return validate(doc or {}, text, REL)

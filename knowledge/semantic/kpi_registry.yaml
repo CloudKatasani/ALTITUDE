@@ -10,7 +10,7 @@ domains:
     owner: sales-data@example.com
     tables:
       - {alias: orders, table: EDW.SALES.FCT_ORDERS, primary_key: [ORDER_ID], synonyms: [order lines, sales orders],
-         description: Order facts, one row per order line}
+         description: "Order facts, one row per order line"}
       - {alias: customers, table: EDW.SALES.DIM_CUSTOMER, primary_key: [CUSTOMER_ID], synonyms: [clients],
          description: Current and historical customer attributes}
     relationships:

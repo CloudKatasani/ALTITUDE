@@ -162,6 +162,28 @@ def validate_tree(root: Path | None = None) -> list[str]:
     for path in files:
         problems.extend(validate_file(path, root, rubrics))
     problems.extend(_cross_file_checks(root))
+    problems.extend(_semantic_checks(root))
+    return problems
+
+
+# Module-level semantic validators: ``(module, function)`` taking the knowledge root and returning problems.
+SEMANTIC_VALIDATORS = [
+    ("altitude.airready.kpi_registry", "validate_tree"),
+]
+
+
+def _semantic_checks(root: Path) -> list[str]:
+    import importlib
+
+    problems: list[str] = []
+    for mod_name, fn in SEMANTIC_VALIDATORS:
+        try:
+            mod = importlib.import_module(mod_name)
+        except ModuleNotFoundError as e:
+            if e.name and mod_name.startswith(e.name):
+                continue
+            raise
+        problems.extend(getattr(mod, fn)(root))
     return problems
 
 

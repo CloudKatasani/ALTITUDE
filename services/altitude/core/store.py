@@ -36,6 +36,10 @@ APPEND_ONLY: set[str] = {
     "agent_action",
     "validation_run",
     "gate",
+    # agent fleet logs (M10)
+    "agent_run_log",
+    "agent_tool_call",
+    "agent_eval_result",
 }
 
 
