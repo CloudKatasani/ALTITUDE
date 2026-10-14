@@ -13,11 +13,13 @@ import json
 
 from altitude.core.generated import stamp
 from altitude.core.ids import canonical_json
-from altitude.core.rubric import default_rubrics
+from altitude.core.rubric import RubricSet, default_rubrics
 from altitude.patterns.library import DIALECTS, default_library
 from altitude.patterns.model import CHECKLIST, SEVERITY_ORDER
 
-SOURCE = "knowledge/dialects/**, knowledge/rubrics/*.yaml"
+PUBLISHED_RUBRICS = ("patterns", "validation")
+
+SOURCE = "knowledge/dialects/**, knowledge/rubrics/{patterns,validation}.yaml"
 
 
 def _cell(s) -> str:
@@ -112,7 +114,10 @@ def _json(obj) -> str:
 
 def pattern_library_sql() -> str:
     lib = default_library()
-    rs = default_rubrics()
+    full = default_rubrics()
+    # Only the Pattern Library's own rubrics ship with it, so other modules' rubric changes don't churn this file.
+    rs = RubricSet({ns: full.namespaces[ns] for ns in PUBLISHED_RUBRICS if ns in full.namespaces},
+                   {ns: full.versions[ns] for ns in PUBLISHED_RUBRICS if ns in full.versions})
     out = [
         "-- Pattern Library for the native edition: run inside the client account (no data leaves it).",
         f"-- Pattern Library version {lib.version}; rubric set {rs.version}.",

@@ -80,7 +80,7 @@ def test_generated_renderings_are_stamped_deterministic_and_valid():
     lib = default_library()
     inserts = [s for s in statements if s.key == "insert"]
     assert len(inserts) == (len(lib.mappings) + len(lib.issues) + len(lib.tests) +
-                            sum(len(i.fix_patterns) for i in lib.issues.values()) + 3)
+                            sum(len(i.fix_patterns) for i in lib.issues.values()) + 2)
     md = out["knowledge_publish/known_issues.md"]
     for iid in ("TD-01", "OR-11", "MS-10", "NZ-04", "RS-05", "XD-07"):
         assert f"### {iid} " in md

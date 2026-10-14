@@ -1,4 +1,4 @@
-<!-- AUTO-GENERATED — DO NOT EDIT. Source: knowledge/dialects/**, knowledge/rubrics/*.yaml. Regenerate with `altitude generate`. -->
+<!-- AUTO-GENERATED — DO NOT EDIT. Source: knowledge/dialects/**, knowledge/rubrics/{patterns,validation}.yaml. Regenerate with `altitude generate`. -->
 # Known-issues catalogue
 
 Pattern Library `patterns:ed7676ba9852` — 47 issues (S1: 19, S2: 15, S3: 8, S4: 5). Severity: S1 silent wrong answers · S2 failure/rewrite · S3 performance/cost · S4 cosmetic/operational.
