@@ -1,0 +1,22 @@
+# Load and CDC option selection (Section 12.1, 12.2) as data. Rules are evaluated in order; first match wins.
+historical_load:
+  - {band: small, approach: "Extract to compressed Parquet -> cloud stage -> COPY INTO; parallelise by table/partition"}
+  - {band: medium, approach: "Partitioned parallel unload, multiple extract agents, ~100-250 MB files, load-wave warehouse then suspend"}
+  - {band: large, approach: "Offline transfer appliance -> object storage -> COPY INTO"}
+cdc_rules:
+  - {when: "not log_access", option: batch_watermark, rationale: "No log access on the source: batch watermark extracts."}
+  - {when: "files_land_in_object_storage", option: snowpipe, rationale: "Files already land in object storage."}
+  - {when: "openflow_supported and prefer_native", option: openflow, rationale: "Supported source and Snowflake-native management preferred."}
+  - {when: "streaming_first and open_source_preference", option: debezium_kafka, rationale: "Streaming-first, open-source preference."}
+  - {when: "existing_cdc_licence", option: enterprise_cdc, rationale: "Existing enterprise CDC licence or broad source coverage."}
+  - {when: "true", option: openflow, rationale: "Default to managed connectors where the source is supported; verify current availability."}
+cdc_known_issues:
+  - {id: CDC-01, title: "Tables without primary keys", check: "tables_without_pk > 0"}
+  - {id: CDC-02, title: "LOB columns in CDC streams", check: "lob_columns > 0"}
+  - {id: CDC-03, title: "Source log retention shorter than outage windows", check: "log_retention_hours < max_outage_hours"}
+  - {id: CDC-04, title: "Hard deletes need tombstone handling", check: "hard_deletes"}
+lineage_columns:
+  - {name: _SOURCE_SYSTEM, type: VARCHAR}
+  - {name: _EXTRACT_TS, type: TIMESTAMP_NTZ}
+  - {name: _BATCH_ID, type: VARCHAR}
+  - {name: _ROW_HASH, type: VARCHAR}

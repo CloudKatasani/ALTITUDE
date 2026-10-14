@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Data movement options",
+  "x-altitude-globs": ["movement/*.yaml"],
+  "type": "object",
+  "required": ["historical_load", "cdc_rules", "cdc_known_issues", "lineage_columns"],
+  "additionalProperties": false,
+  "properties": {
+    "historical_load": {"type": "array", "items": {"type": "object", "required": ["band", "approach"]}},
+    "cdc_rules": {"type": "array", "items": {"type": "object", "required": ["when", "option", "rationale"], "additionalProperties": false,
+      "properties": {"when": {"type": "string"}, "option": {"enum": ["batch_watermark", "snowpipe", "openflow", "debezium_kafka", "enterprise_cdc"]}, "rationale": {"type": "string"}}}},
+    "cdc_known_issues": {"type": "array", "items": {"type": "object", "required": ["id", "title", "check"]}},
+    "lineage_columns": {"type": "array", "items": {"type": "object", "required": ["name", "type"]}}
+  }
+}
