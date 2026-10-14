@@ -1,0 +1,21 @@
+namespace: foundation
+version: 1.0.0
+description: >
+  Snowflake Foundation (Section 15) and Well-Architected baseline (Section 14): policy thresholds for checks,
+  severity weights for pillar scores and landing-zone lint limits.
+values:
+  severity_weights: {critical: 10, high: 5, medium: 3, low: 1}
+  max_evidence_rows: 25                 # evidence rows kept per finding in the report
+  accountadmin_max_holders: 2
+  dormant_user_days: 90
+  staging_retention_max_days: 1
+  stale_clone_retained_gb_max: 100
+  personal_pipeline_min_days: 5         # DML by a person on at least this many days => pipeline under personal credentials
+  task_failure_ratio_max: 0.05
+  tier1_column_comment_coverage_min: 0.8
+  monitor_suspend_at_max_pct: 100       # every resource monitor must suspend at or before 100% of quota
+  monitor_notify_min_triggers: 1
+  data_retention_max_days: 90
+  pillar_rating_bands:                  # score >= band => rating
+    strong: 85
+    adequate: 65

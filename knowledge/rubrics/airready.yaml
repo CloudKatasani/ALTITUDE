@@ -1,0 +1,54 @@
+namespace: airready
+version: 1.0.0
+description: >
+  AI-Ready module (Section 19): EAIRN 8-pillar weights, per-check pass marks, maturity bands and the
+  evaluation-harness pass rate. Scores are reproducible per sealed snapshot + this rubric version.
+values:
+  pillar_weights:
+    data_quality: 1.0
+    governance: 1.0
+    metadata: 1.0
+    security: 1.0
+    ai_engineering: 1.0
+    semantic_layer: 1.5
+    agent_readiness: 1.0
+    rag_readiness: 1.0
+  check_weights:
+    default: 1.0
+    critical: 2.0
+  pass_marks:
+    dmf_coverage_min: 1.0
+    freshness_on_time_min: 0.95
+    dmf_pass_rate_min: 0.99
+    owner_tag_coverage_min: 1.0
+    cost_center_coverage_min: 1.0
+    tier_tag_coverage_min: 1.0
+    column_comment_coverage_min: 0.8
+    table_comment_coverage_min: 1.0
+    glossary_linkage_min: 0.8
+    masking_coverage_min: 1.0
+    mfa_coverage_min: 1.0
+    row_access_coverage_min: 0.5
+    network_policy_min: 1.0
+    cortex_budget_min: 1.0
+    agent_attribution_min: 0.95
+    agent_warehouse_min: 1.0
+    semantic_domain_coverage_min: 1.0
+    single_definition_min: 1.0
+    semantic_documented_min: 1.0
+    agent_read_only_min: 1.0
+    agent_keypair_min: 1.0
+    agent_tagged_min: 0.95
+    search_services_min: 1.0
+    search_lag_min: 1.0
+    search_governed_min: 1.0
+  rag_target_lag_max_hours: 24
+  maturity_bands:             # overall score >= min => level
+    - {level: 5, min: 90, label: AI-ready}
+    - {level: 4, min: 75, label: Managed}
+    - {level: 3, min: 60, label: Defined}
+    - {level: 2, min: 40, label: Developing}
+    - {level: 1, min: 0, label: Initial}
+  eval:
+    pass_rate_min: 0.9
+    numeric_tolerance: 0.000001

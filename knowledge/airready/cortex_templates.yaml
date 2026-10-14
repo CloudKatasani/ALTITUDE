@@ -1,0 +1,46 @@
+# Cortex Search service and Cortex Agent templates (Section 15.2 AI pack, Section 19.2 step 4).
+# Rendered by `altitude generate` into generated/airready/. Search services reflect source ACLs as filterable
+# attributes; agents combine Cortex Analyst over generated semantic views with Cortex Search, run under a
+# dedicated least-privilege role on the agents warehouse, and are gated by the golden-question harness.
+version: 1.0.0
+search_services:
+  - id: CSS-POLICY-DOCS
+    name: CSS_POLICY_DOCS
+    database: DOCS
+    schema: SEARCH
+    source_table: DOCS.CURATED.POLICY_CHUNKS
+    search_column: CHUNK_TEXT
+    attributes: [DOC_ID, DOC_TYPE, REGION, ACL_GROUP, EFFECTIVE_DATE]
+    acl_attribute: ACL_GROUP
+    warehouse: WH_AGENTS
+    target_lag: 1 hour
+    embedding_model: snowflake-arctic-embed-l-v2.0
+    description: Governed policy and procedure documents, chunked; ACL group per chunk mirrors the source system.
+
+  - id: CSS-ASSET-MANUALS
+    name: CSS_ASSET_MANUALS
+    database: DOCS
+    schema: SEARCH
+    source_table: DOCS.CURATED.ASSET_MANUAL_CHUNKS
+    search_column: CHUNK_TEXT
+    attributes: [ASSET_CLASS, MANUFACTURER, ACL_GROUP]
+    acl_attribute: ACL_GROUP
+    warehouse: WH_AGENTS
+    target_lag: 1 day
+    embedding_model: snowflake-arctic-embed-l-v2.0
+    description: Asset maintenance manuals for field operations (utilities use-case pack).
+
+agents:
+  - id: CAG-REVENUE-ASSISTANT
+    name: REVENUE_ASSISTANT
+    database: EDW
+    schema: AGENTS
+    role: ALT_AGENT_REVENUE_ASSISTANT
+    warehouse: WH_AGENTS
+    semantic_domains: [sales, finance]
+    search_services: [CSS-POLICY-DOCS]
+    instructions: >
+      Answer questions about bookings, orders, customers and recognised revenue using only the certified
+      semantic views; cite the KPI definition used. Use policy search only for definitions and procedures,
+      filtered to the user's ACL group. If a question cannot be answered from these sources, say so.
+    sample_questions: [GQ-001, GQ-003, GQ-004]

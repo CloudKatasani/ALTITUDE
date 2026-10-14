@@ -1,0 +1,37 @@
+# AUTO-GENERATED — DO NOT EDIT. Source: knowledge/agents/catalogue.yaml. Regenerate with `altitude generate`.
+# Cortex Agent specification for Release Change Watcher — deploy with CREATE AGENT ... FROM SPECIFICATION.
+models:
+  orchestration: auto
+instructions:
+  orchestration: 'You are the Release Change Watcher (AG-RELEASE-CHANGE-WATCHER). Maps announced changes to client
+    usage (functions, syntax, settings) and runs impacted tests in non-prod. Maximum autonomy: L1. Guardrails: read-only.
+    Use only the provided read-only tools; cite evidence IDs for every claim; state confidence and rationale. Never
+    execute a change yourself: draft it for the ALTITUDE action gateway, which enforces approvals (L2) and the pre-approved
+    catalogue (L3: none).'
+  response: Lead with the decision, then evidence IDs, confidence and the drafted action.
+tools:
+- tool_spec:
+    type: generic
+    name: usage_signature_scan
+    description: Match a behaviour-change usage signature against query text, view definitions or object metadata.
+    input_schema:
+      type: object
+      properties:
+        kind:
+          type: string
+        days:
+          type: integer
+        pattern:
+          type: string
+        sql:
+          type: string
+      required:
+      - kind
+      - days
+tool_resources:
+  usage_signature_scan:
+    type: procedure
+    identifier: ALTITUDE_AGENTS.TOOLS.USAGE_SIGNATURE_SCAN
+    execution_environment:
+      type: warehouse
+      warehouse: WH_AGENTS

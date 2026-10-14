@@ -1,0 +1,229 @@
+# Agent fleet catalogue (Section 18.2). One entry per agent: trigger, maximum autonomy, guardrails, KPI,
+# minimal read-only tool scope and a distinct service identity (user + role). Agents with
+# `implemented: true` ship in fleet v1 (M10) and have eval suites under knowledge/agents/evals/.
+version: 1.0.0
+agents:
+  - id: AG-COST-SENTINEL
+    number: 1
+    name: Cost Sentinel
+    implemented: true
+    version: 1.0.0
+    prompt_template: agents/cost_sentinel@1
+    trigger: {type: schedule, cron: "7 * * * *", description: Hourly}
+    purpose: Detects credit anomalies by warehouse/user/query pattern; forecasts month-end; explains spikes.
+    max_autonomy: L1
+    guardrails: [read_only]
+    kpi: Forecast error; anomalies caught before invoice
+    tool_scope: [daily_credits, warehouse_daily_credits, signature_credits]
+    action_types: []
+    service_identity: {user: SVC_ALT_COST_SENTINEL, role: ALT_AGENT_COST_SENTINEL, warehouse: WH_AGENTS}
+
+  - id: AG-WAREHOUSE-RIGHTSIZER
+    number: 2
+    name: Warehouse Rightsizer
+    implemented: true
+    version: 1.0.0
+    prompt_template: agents/warehouse_rightsizer@1
+    trigger: {type: schedule, cron: "15 6 * * *", description: Daily}
+    purpose: Recommends size/cluster/auto-suspend changes from load and queue metrics.
+    max_autonomy: L3
+    autonomy_by_action: {warehouse.set_auto_suspend: L3, warehouse.resize: L2, warehouse.set_max_cluster_count: L2}
+    guardrails: [change_window, auto_revert_on_queueing]
+    kpi: Credits saved; SLA breaches = 0
+    tool_scope: [warehouse_config, warehouse_utilisation, warehouse_load, warehouse_query_profile]
+    action_types: [warehouse.set_auto_suspend, warehouse.resize, warehouse.set_max_cluster_count]
+    service_identity: {user: SVC_ALT_RIGHTSIZER, role: ALT_AGENT_RIGHTSIZER, warehouse: WH_AGENTS}
+
+  - id: AG-QUERY-PERF-DOCTOR
+    number: 3
+    name: Query Performance Doctor
+    implemented: false
+    trigger: {type: event, event: query_regression, description: On regression}
+    purpose: Detects plan/runtime regressions on top queries; suggests rewrite, clustering, QAS, search optimization.
+    max_autonomy: L2
+    guardrails: [test_on_clone_before_proposing]
+    kpi: p95 runtime trend
+    tool_scope: [signature_runtime_trend, table_pruning_profile]
+    action_types: []
+    service_identity: {user: SVC_ALT_QUERY_DOCTOR, role: ALT_AGENT_QUERY_DOCTOR, warehouse: WH_AGENTS}
+
+  - id: AG-PIPELINE-TRIAGE
+    number: 4
+    name: Pipeline Triage
+    implemented: true
+    version: 1.0.0
+    prompt_template: agents/pipeline_triage@1
+    trigger: {type: event, event: task_failure, description: Task/dbt failure}
+    purpose: Reads error, logs, recent changes; classifies root cause; drafts fix or reruns idempotent jobs.
+    max_autonomy: L3
+    autonomy_by_action: {task.rerun: L3, task.fix_draft: L2}
+    guardrails: [idempotency_flag_as_data]
+    kpi: MTTR
+    tool_scope: [task_failures, task_definitions, task_idempotency, recent_ddl]
+    action_types: [task.rerun, task.fix_draft]
+    service_identity: {user: SVC_ALT_PIPELINE_TRIAGE, role: ALT_AGENT_PIPELINE_TRIAGE, warehouse: WH_AGENTS}
+
+  - id: AG-SCHEMA-DRIFT-GUARD
+    number: 5
+    name: Schema Drift Guard
+    implemented: false
+    trigger: {type: event, event: source_schema_change, description: Source change}
+    purpose: Detects upstream schema changes via CDC/metadata; assesses downstream impact via lineage; drafts contract update.
+    max_autonomy: L2
+    guardrails: [contract_rules]
+    kpi: Breaks prevented
+    tool_scope: [column_changes, table_lineage]
+    action_types: []
+    service_identity: {user: SVC_ALT_SCHEMA_DRIFT, role: ALT_AGENT_SCHEMA_DRIFT, warehouse: WH_AGENTS}
+
+  - id: AG-DQ-INCIDENT
+    number: 6
+    name: DQ Incident Agent
+    implemented: true
+    version: 1.0.0
+    prompt_template: agents/dq_incident@1
+    trigger: {type: event, event: dmf_failure, description: DMF/rule failure}
+    purpose: Clusters failures, finds probable cause, notifies owner, opens incident, drafts quarantine.
+    max_autonomy: L2
+    autonomy_by_action: {table.quarantine: L2}
+    guardrails: [never_deletes_data]
+    forbidden_statements: [DELETE, TRUNCATE, DROP, INSERT OVERWRITE, CREATE OR REPLACE TABLE, MERGE, UPDATE]
+    kpi: Detection lead time vs consumer discovery
+    tool_scope: [dq_violations, table_lineage, task_failures, load_errors, recent_ddl, table_owners, tier1_tables]
+    action_types: [table.quarantine]
+    service_identity: {user: SVC_ALT_DQ_INCIDENT, role: ALT_AGENT_DQ_INCIDENT, warehouse: WH_AGENTS}
+
+  - id: AG-ACCESS-HYGIENE
+    number: 7
+    name: Access Hygiene Agent
+    implemented: true
+    version: 1.0.0
+    prompt_template: agents/access_hygiene@1
+    trigger: {type: schedule, cron: "20 5 * * 1", description: Weekly}
+    purpose: Finds dormant users/grants, orphan roles, over-privileged roles, ACCOUNTADMIN usage, MFA gaps; drafts revocations.
+    max_autonomy: L2
+    autonomy_by_action: {user.disable: L2, grant.revoke_role_from_user: L2, grant.revoke_privilege_from_role: L2, user.set_authentication_policy: L2}
+    guardrails: [owner_approval_required]
+    kpi: Dormant grants; review completion
+    tool_scope: [users, user_role_grants, role_grants, roles, privileged_usage]
+    action_types: [user.disable, grant.revoke_role_from_user, grant.revoke_privilege_from_role, user.set_authentication_policy]
+    service_identity: {user: SVC_ALT_ACCESS_HYGIENE, role: ALT_AGENT_ACCESS_HYGIENE, warehouse: WH_AGENTS}
+
+  - id: AG-SECURITY-POSTURE
+    number: 8
+    name: Security Posture Agent
+    implemented: false
+    trigger: {type: schedule, cron: "40 6 * * *", description: Daily}
+    purpose: Tracks Trust Center/CIS findings, MFA gaps, network policy gaps, unusual login patterns.
+    max_autonomy: L1
+    guardrails: [escalates_to_soc]
+    kpi: Open critical findings
+    tool_scope: [users, login_anomalies, network_policies]
+    action_types: []
+    service_identity: {user: SVC_ALT_SECURITY_POSTURE, role: ALT_AGENT_SECURITY_POSTURE, warehouse: WH_AGENTS}
+
+  - id: AG-STORAGE-PRUNER
+    number: 9
+    name: Storage & Object Pruner
+    implemented: false
+    trigger: {type: schedule, cron: "50 4 * * 0", description: Weekly}
+    purpose: Finds unused tables, stale clones, excessive Time Travel, orphaned stages.
+    max_autonomy: L2
+    guardrails: [archive_before_drop, legal_hold_check]
+    kpi: Storage TB/cost reduced
+    tool_scope: [table_storage, table_access_recency]
+    action_types: []
+    service_identity: {user: SVC_ALT_STORAGE_PRUNER, role: ALT_AGENT_STORAGE_PRUNER, warehouse: WH_AGENTS}
+
+  - id: AG-RELEASE-CHANGE-WATCHER
+    number: 10
+    name: Release Change Watcher
+    implemented: true
+    version: 1.0.0
+    prompt_template: agents/release_change_watcher@1
+    trigger: {type: event, event: behaviour_change_bundle, description: On new behaviour-change bundle / release notes}
+    purpose: Maps announced changes to client usage (functions, syntax, settings) and runs impacted tests in non-prod.
+    max_autonomy: L1
+    guardrails: []
+    kpi: Upgrade incidents = 0
+    tool_scope: [usage_signature_scan]
+    action_types: []
+    service_identity: {user: SVC_ALT_RELEASE_WATCHER, role: ALT_AGENT_RELEASE_WATCHER, warehouse: WH_AGENTS}
+
+  - id: AG-DOC-CATALOG
+    number: 11
+    name: Documentation & Catalog Agent
+    implemented: false
+    trigger: {type: event, event: object_change, description: On object create/change}
+    purpose: Drafts table/column descriptions, glossary links, ownership suggestions.
+    max_autonomy: L2
+    guardrails: [steward_approval]
+    kpi: Description coverage on Tier-1
+    tool_scope: [column_metadata, tier1_tables]
+    action_types: []
+    service_identity: {user: SVC_ALT_DOC_CATALOG, role: ALT_AGENT_DOC_CATALOG, warehouse: WH_AGENTS}
+
+  - id: AG-CLASSIFICATION
+    number: 12
+    name: Classification Agent
+    implemented: false
+    trigger: {type: event, event: new_columns, description: On new columns}
+    purpose: Proposes sensitivity tags; verifies tag propagation through lineage; flags unmasked PII.
+    max_autonomy: L2
+    guardrails: [privacy_approval]
+    kpi: Unprotected classified columns = 0
+    tool_scope: [column_metadata, column_tags, masking_policies]
+    action_types: []
+    service_identity: {user: SVC_ALT_CLASSIFICATION, role: ALT_AGENT_CLASSIFICATION, warehouse: WH_AGENTS}
+
+  - id: AG-LINEAGE-GAP
+    number: 13
+    name: Lineage Gap Agent
+    implemented: false
+    trigger: {type: schedule, cron: "30 5 * * 2", description: Weekly}
+    purpose: Finds Tier-1 objects without resolvable upstream lineage.
+    max_autonomy: L1
+    guardrails: []
+    kpi: Lineage coverage %
+    tool_scope: [table_lineage, tier1_tables]
+    action_types: []
+    service_identity: {user: SVC_ALT_LINEAGE_GAP, role: ALT_AGENT_LINEAGE_GAP, warehouse: WH_AGENTS}
+
+  - id: AG-SLA-FORECASTER
+    number: 14
+    name: SLA Forecaster
+    implemented: false
+    trigger: {type: continuous, description: Continuous}
+    purpose: Predicts late data deliveries from upstream timings.
+    max_autonomy: L1
+    guardrails: []
+    kpi: Late deliveries warned
+    tool_scope: [task_timings, freshness_slas]
+    action_types: []
+    service_identity: {user: SVC_ALT_SLA_FORECASTER, role: ALT_AGENT_SLA_FORECASTER, warehouse: WH_AGENTS}
+
+  - id: AG-CORTEX-MONITOR
+    number: 15
+    name: Cortex Cost & Quality Monitor
+    implemented: false
+    trigger: {type: schedule, cron: "10 7 * * *", description: Daily}
+    purpose: Tracks AI function/agent spend, latency, groundedness and eval drift.
+    max_autonomy: L1
+    guardrails: []
+    kpi: Cost per accepted answer
+    tool_scope: [cortex_usage]
+    action_types: []
+    service_identity: {user: SVC_ALT_CORTEX_MONITOR, role: ALT_AGENT_CORTEX_MONITOR, warehouse: WH_AGENTS}
+
+  - id: AG-SEMANTIC-STEWARD
+    number: 16
+    name: Semantic Model Steward
+    implemented: false
+    trigger: {type: event, event: kpi_change, description: On dbt/KPI change}
+    purpose: Keeps semantic views in sync with certified KPI definitions; detects duplicate KPI definitions.
+    max_autonomy: L2
+    guardrails: [owner_approval_required]
+    kpi: KPI definition conflicts
+    tool_scope: [bi_measures, semantic_views]
+    action_types: []
+    service_identity: {user: SVC_ALT_SEMANTIC_STEWARD, role: ALT_AGENT_SEMANTIC_STEWARD, warehouse: WH_AGENTS}

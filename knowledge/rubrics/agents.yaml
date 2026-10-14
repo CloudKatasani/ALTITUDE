@@ -1,0 +1,71 @@
+namespace: agents
+version: 1.0.0
+description: >
+  Agent fleet (Section 18): detection thresholds, confidence calibration, blast-radius limits,
+  guard-metric tolerances and promotion gates. Tenants override per engagement via RubricSet.with_overrides.
+values:
+  promotion:
+    eval_pass_rate_min: 1.0            # every golden incident must pass before a version is promoted
+  cost_sentinel:
+    baseline_days: 28                  # trailing window used for the forecast band
+    min_history_days: 14               # fewer days than this => no band (insufficient evidence)
+    evaluation_days: 7                 # most recent days checked for anomalies
+    band_sigma: 3.0                    # anomaly when credits exceed mean + band_sigma * stddev
+    min_increase_pct: 0.25             # ...and exceed the mean by at least this share
+    min_daily_credits: 1.0             # ignore warehouses/days below this noise floor
+    top_contributors: 3                # query signatures / users reported per spike
+    confidence_base: 0.75
+    confidence_per_sigma: 0.04         # added per sigma above the band
+    confidence_cap: 0.97
+    forecast_confidence_full_history: 0.9
+    forecast_confidence_short_history: 0.7
+  rightsizer:
+    window_days: 28
+    auto_suspend_target_seconds: 60
+    idle_ratio_min: 0.25               # share of billed compute with no attributed query work
+    downsize_min_credits_per_hour: 8   # only warehouses at or above this size are downsize candidates
+    downsize_p90_exec_ms_max: 60000
+    downsize_queued_load_max: 0.05
+    scale_out_queued_load_min: 0.5     # peak-hour queueing that warrants multi-cluster
+    scale_out_max_clusters: 3
+    confidence_auto_suspend: 0.9
+    confidence_downsize: 0.82
+    confidence_scale_out: 0.85
+  pipeline_triage:
+    lookback_days: 7
+    recent_change_hours: 48            # DDL on the task's target within this window before failure
+    confidence_unclassified: 0.4
+    confidence_recent_change_bonus: 0.05
+    confidence_cap: 0.98
+  access_hygiene:
+    dormant_days: 90
+    accountadmin_max_holders: 2
+    confidence_dormant: 0.93
+    confidence_orphan_role: 0.88
+    confidence_accountadmin: 0.9
+    confidence_mfa: 0.95
+    confidence_service_password: 0.92
+  dq_incident:
+    lookback_days: 2
+    lineage_days: 14                   # access-history window used to build read -> write lineage
+    cause_window_hours: 24            # candidate causes must precede the first violation by at most this
+    confidence_with_cause: 0.86
+    confidence_lineage_only: 0.72
+    confidence_no_cause: 0.55
+    severity_tier1: SEV2
+    severity_default: SEV3
+  release_watcher:
+    lookback_days: 30
+    min_matches: 1
+    confidence_direct_match: 0.9
+    confidence_property_match: 0.85
+  guard:
+    queued_load_max_increase: 0.2      # absolute rise in avg queued load (queries) that triggers auto-revert
+    observation_hours: 24
+  blast_radius:
+    auto_suspend_targets_per_run: 5
+    auto_suspend_executions_per_day: 10
+    auto_suspend_min_seconds: 60
+    auto_suspend_max_seconds: 600
+    task_reruns_per_run: 3
+    task_reruns_per_day: 6

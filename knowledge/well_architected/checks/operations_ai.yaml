@@ -1,0 +1,166 @@
+# Well-Architected baseline — 14.6 Data Engineering, 14.7 Observability & Operations, 14.8 AI Readiness.
+# Format per Section 14.9.
+version: 1.0.0
+checks:
+  - id: WA-ENG-001
+    pillar: engineering
+    waf_pillar: reliability
+    section: "14.6"
+    title: Tier-1 table without data metric functions
+    query: |
+      WITH t1 AS (SELECT unnest(from_json("VALUE", '["VARCHAR"]')) AS FQ FROM CLIENT_INPUTS WHERE "KEY" = 'tier1_tables')
+      SELECT FQ AS OBJECT_NAME, 'no DMF attached' AS DETAIL FROM t1
+      WHERE NOT EXISTS (SELECT 1 FROM DATA_METRIC_FUNCTION_REFERENCES d WHERE d.REF_ENTITY_NAME = t1.FQ) ORDER BY 1
+    severity: medium
+    rationale: DMFs on Tier-1 tables detect bad data before consumers do.
+    remediation: {auto_fix_available: true, autonomy: L2, playbook: PB-ENG-DMF}
+
+  - id: WA-ENG-002
+    pillar: engineering
+    waf_pillar: operational_excellence
+    section: "14.6"
+    title: Production DDL executed outside IaC/CI
+    query: |
+      SELECT USER_NAME AS OBJECT_NAME, count(*) AS OBSERVED FROM QUERY_HISTORY
+      WHERE (QUERY_TYPE LIKE 'CREATE%' OR QUERY_TYPE LIKE 'ALTER%' OR QUERY_TYPE LIKE 'DROP%')
+        AND QUERY_TYPE NOT IN ('CREATE_TABLE_AS_SELECT')
+        AND coalesce(QUERY_TAG, '') NOT IN ('terraform', 'dbt', 'schemachange')
+      GROUP BY 1 ORDER BY 1
+    severity: medium
+    rationale: Schema change through IaC (Terraform, schemachange/DCM, dbt) is reviewable, repeatable and reversible.
+    remediation: {auto_fix_available: false, autonomy: L1, playbook: PB-ENG-IAC}
+
+  - id: WA-ENG-003
+    pillar: engineering
+    waf_pillar: reliability
+    section: "14.6"
+    title: Pipeline runs under a personal user
+    query: |
+      SELECT q.USER_NAME AS OBJECT_NAME, count(DISTINCT CAST(q.START_TIME AS DATE)) AS OBSERVED FROM QUERY_HISTORY q
+      JOIN USERS u ON u.NAME = q.USER_NAME
+      WHERE u.TYPE = 'PERSON' AND q.QUERY_TYPE IN ('INSERT', 'MERGE', 'CREATE_TABLE_AS_SELECT', 'COPY', 'UPDATE', 'DELETE')
+      GROUP BY 1 HAVING count(DISTINCT CAST(q.START_TIME AS DATE)) >= $threshold ORDER BY 1
+    threshold_ref: rubric.foundation.personal_pipeline_min_days
+    severity: high
+    rationale: Scheduled loads under personal credentials fail when the person leaves and hide accountability.
+    remediation: {auto_fix_available: false, autonomy: L1, playbook: PB-ENG-SERVICE-IDENTITY}
+
+  - id: WA-ENG-004
+    pillar: engineering
+    waf_pillar: operational_excellence
+    section: "14.6"
+    title: Tier-1 table without owner tag or description
+    query: |
+      WITH t1 AS (SELECT unnest(from_json("VALUE", '["VARCHAR"]')) AS FQ FROM CLIENT_INPUTS WHERE "KEY" = 'tier1_tables')
+      SELECT t.FQ_NAME AS OBJECT_NAME,
+             CASE WHEN t.COMMENT IS NULL THEN 'no comment' ELSE 'no owner tag' END AS DETAIL
+      FROM TABLES t JOIN t1 ON t1.FQ = t.FQ_NAME
+      WHERE t.COMMENT IS NULL OR NOT EXISTS (
+        SELECT 1 FROM TAG_REFERENCES r WHERE r.TAG_NAME = 'DATA_OWNER' AND r.DOMAIN = 'TABLE'
+          AND r.OBJECT_DATABASE = t.TABLE_CATALOG AND r.OBJECT_SCHEMA = t.TABLE_SCHEMA AND r.OBJECT_NAME = t.TABLE_NAME)
+      ORDER BY 1
+    severity: medium
+    rationale: Data contracts at product boundaries need a named owner and a description.
+    remediation: {auto_fix_available: true, autonomy: L2, playbook: PB-ENG-OWNERSHIP}
+
+  - id: WA-OPS-001
+    pillar: observability
+    waf_pillar: operational_excellence
+    section: "14.7"
+    title: No alert for failed tasks
+    query: |
+      SELECT ACCOUNT_NAME AS OBJECT_NAME, 'task_failure' AS DETAIL FROM ACCOUNT_INFO
+      WHERE NOT EXISTS (SELECT 1 FROM ALERTS WHERE ALERT_CLASS = 'task_failure' AND STATE = 'started')
+    severity: high
+    rationale: Failed Tier-1 tasks must page someone before consumers notice stale data.
+    remediation: {auto_fix_available: true, autonomy: L2, playbook: PB-OPS-ALERT-PACK}
+
+  - id: WA-OPS-002
+    pillar: observability
+    waf_pillar: operational_excellence
+    section: "14.7"
+    title: No alert for credit spikes
+    query: |
+      SELECT ACCOUNT_NAME AS OBJECT_NAME, 'credit_anomaly' AS DETAIL FROM ACCOUNT_INFO
+      WHERE NOT EXISTS (SELECT 1 FROM ALERTS WHERE ALERT_CLASS = 'credit_anomaly' AND STATE = 'started')
+    severity: medium
+    rationale: Credit spikes caught the same day cost a fraction of those found on the invoice.
+    remediation: {auto_fix_available: true, autonomy: L2, playbook: PB-OPS-ALERT-PACK}
+
+  - id: WA-OPS-003
+    pillar: observability
+    waf_pillar: security_governance
+    section: "14.7"
+    title: No alert on privileged-role use
+    query: |
+      SELECT ACCOUNT_NAME AS OBJECT_NAME, 'privileged_use' AS DETAIL FROM ACCOUNT_INFO
+      WHERE NOT EXISTS (SELECT 1 FROM ALERTS WHERE ALERT_CLASS = 'privileged_use' AND STATE = 'started')
+    severity: medium
+    rationale: Break-glass ACCOUNTADMIN use must be visible the moment it happens.
+    remediation: {auto_fix_available: true, autonomy: L2, playbook: PB-OPS-ALERT-PACK}
+
+  - id: WA-OPS-004
+    pillar: observability
+    waf_pillar: reliability
+    section: "14.7"
+    title: Task failure rate above policy
+    query: |
+      SELECT FQ_NAME AS OBJECT_NAME, round(avg(CASE WHEN STATE = 'FAILED' THEN 1.0 ELSE 0.0 END), 3) AS OBSERVED
+      FROM TASK_HISTORY WHERE STATE IN ('FAILED', 'SUCCEEDED') GROUP BY 1
+      HAVING avg(CASE WHEN STATE = 'FAILED' THEN 1.0 ELSE 0.0 END) > $threshold ORDER BY 1
+    threshold_ref: rubric.foundation.task_failure_ratio_max
+    severity: high
+    rationale: Recurring task failures are a reliability debt and the leading cause of freshness SLA misses.
+    remediation: {auto_fix_available: false, autonomy: L2, playbook: PB-OPS-PIPELINE-TRIAGE}
+
+  - id: WA-AI-001
+    pillar: ai
+    waf_pillar: operational_excellence
+    section: "14.8"
+    title: Tier-1 column comment coverage below policy
+    query: |
+      WITH t1 AS (SELECT unnest(from_json("VALUE", '["VARCHAR"]')) AS FQ FROM CLIENT_INPUTS WHERE "KEY" = 'tier1_tables')
+      SELECT c.FQ_NAME AS OBJECT_NAME, round(avg(CASE WHEN c.COMMENT IS NOT NULL THEN 1.0 ELSE 0.0 END), 3) AS OBSERVED
+      FROM COLUMNS c JOIN t1 ON t1.FQ = c.FQ_NAME GROUP BY 1
+      HAVING avg(CASE WHEN c.COMMENT IS NOT NULL THEN 1.0 ELSE 0.0 END) < $threshold ORDER BY 1
+    threshold_ref: rubric.foundation.tier1_column_comment_coverage_min
+    severity: medium
+    rationale: Cortex Analyst and agents answer from metadata; undocumented Tier-1 columns produce wrong answers.
+    remediation: {auto_fix_available: true, autonomy: L2, playbook: PB-AI-DOCUMENTATION}
+
+  - id: WA-AI-002
+    pillar: ai
+    waf_pillar: operational_excellence
+    section: "14.8"
+    title: Top KPI domain without a semantic view
+    query: |
+      WITH d AS (SELECT unnest(from_json("VALUE", '["VARCHAR"]')) AS DOMAIN FROM CLIENT_INPUTS WHERE "KEY" = 'top_kpi_domains')
+      SELECT DOMAIN AS OBJECT_NAME, 'no semantic view' AS DETAIL FROM d
+      WHERE NOT EXISTS (SELECT 1 FROM SEMANTIC_VIEWS s WHERE lower(s.KPI_DOMAIN) = lower(d.DOMAIN)) ORDER BY 1
+    severity: medium
+    rationale: Certified KPI definitions in semantic views are the foundation for trustworthy natural-language answers.
+    remediation: {auto_fix_available: true, autonomy: L2, playbook: PB-AI-SEMANTIC-VIEWS}
+
+  - id: WA-AI-003
+    pillar: ai
+    waf_pillar: cost_optimization
+    section: "14.8"
+    title: Cortex usage without a budget
+    query: |
+      SELECT 'CORTEX' AS OBJECT_NAME, round(sum(TOKEN_CREDITS), 2) AS OBSERVED FROM CORTEX_USAGE_HISTORY
+      HAVING count(*) > 0 AND NOT EXISTS (SELECT 1 FROM BUDGETS WHERE SCOPE = 'CORTEX')
+    severity: medium
+    rationale: AI spend grows with adoption; a Cortex budget makes it visible and bounded.
+    remediation: {auto_fix_available: true, autonomy: L2, playbook: PB-AI-AGENT-CONTROLS}
+
+  - id: WA-AI-004
+    pillar: ai
+    waf_pillar: security_governance
+    section: "14.8"
+    title: AI usage under human or functional roles instead of a dedicated agent role
+    query: |
+      SELECT ROLE_NAME AS OBJECT_NAME, count(*) AS OBSERVED FROM CORTEX_USAGE_HISTORY
+      WHERE AGENT_NAME IS NULL OR ROLE_NAME NOT LIKE '%AGENT%' GROUP BY 1 ORDER BY 1
+    severity: medium
+    rationale: Agents run under distinct, least-privilege roles so their access and spend are attributable.
+    remediation: {auto_fix_available: false, autonomy: L2, playbook: PB-AI-AGENT-CONTROLS}

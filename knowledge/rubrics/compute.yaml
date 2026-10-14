@@ -1,0 +1,10 @@
+namespace: compute
+version: 1.0.0
+description: Compute & performance policy (Section 14.4) used by the Well-Architected checks and the landing-zone linter.
+values:
+  auto_suspend_max_seconds: 60          # most workloads gain little cache benefit beyond 60s
+  auto_suspend_max_seconds_cache_justified: 600   # upper bound where a measured cache benefit is documented
+  statement_timeout_max_seconds: 14400  # 4h; the Snowflake default (48h) lets runaway queries burn credits
+  peak_queued_load_max: 0.5             # hourly average queued load on a single-cluster warehouse
+  remote_spill_max_gb: 1                # remote spilling above this (window total) signals undersizing or bad SQL
+  allowed_workload_classes: [elt, bi, data_science, adhoc, agents, dev]

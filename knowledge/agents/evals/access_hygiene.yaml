@@ -1,0 +1,46 @@
+# Golden incidents for the Access Hygiene Agent.
+agent_id: AG-ACCESS-HYGIENE
+version: 1.0.0
+cases:
+  - id: EVAL-AH-001
+    description: Seeded access issues are found and every revocation is an L2 draft; look-alike controls are untouched.
+    telemetry:
+      synthetic: {profile: seeded}
+    expect:
+      findings:
+        - {kind: dormant_user, subject: OLD_ANALYST}
+        - {kind: orphan_role, subject: ROLE_LEGACY_MKTG}
+        - {kind: accountadmin_holder, subject: JSMITH}
+        - {kind: accountadmin_holder, subject: TEMP_CONTRACTOR}
+        - {kind: accountadmin_holder, subject: OPS_LEAD}
+        - {kind: mfa_gap, subject: JSMITH}
+        - {kind: mfa_gap, subject: TEMP_CONTRACTOR}
+        - {kind: service_password, subject: SVC_FIVETRAN}
+      absent_findings:
+        - {subject: ANALYST_01}
+        - {subject: ADMIN_1}
+        - {subject: ADMIN_2}
+        - {subject: FR_ANALYST}
+        - {subject: SVC_DBT}
+        - {subject: AR_EDW_READ}
+      actions:
+        - {action_type: user.disable, target: OLD_ANALYST, autonomy: L2}
+        - {action_type: grant.revoke_role_from_user, target: OLD_ANALYST, autonomy: L2, params: {role: FR_ANALYST}}
+        - {action_type: grant.revoke_role_from_user, target: JSMITH, autonomy: L2, params: {role: ACCOUNTADMIN}}
+        - {action_type: user.set_authentication_policy, target: TEMP_CONTRACTOR, autonomy: L2}
+        - action_type: grant.revoke_privilege_from_role
+          target: ROLE_LEGACY_MKTG
+          autonomy: L2
+          params: {privilege: SELECT, object_type: TABLE, object_name: EDW.LEGACY.CAMPAIGN_2019}
+      absent_actions:
+        - {autonomy: L3}
+        - {target: ADMIN_1}
+        - {target: SVC_FIVETRAN}
+
+  - id: EVAL-AH-002
+    description: A well-run account produces no access findings.
+    telemetry:
+      synthetic: {profile: clean}
+    expect:
+      max_findings: 0
+      max_actions: 0

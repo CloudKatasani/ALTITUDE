@@ -1,0 +1,123 @@
+# Golden incidents for Pipeline Triage.
+agent_id: AG-PIPELINE-TRIAGE
+version: 1.0.0
+cases:
+  - id: EVAL-PT-001
+    description: Seeded ingest failures are bad source values (type conversion) — draft a fix, never rerun.
+    telemetry:
+      synthetic: {profile: seeded}
+    expect:
+      findings:
+        - kind: root_cause
+          subject: EDW.STAGING.INGEST_EVENTS_TASK
+          detail: {root_cause: data_quality_type_conversion, retryable: false, downstream_impact: [EDW.SALES.BUILD_EVENTS_AGG]}
+      actions:
+        - {action_type: task.fix_draft, target: EDW.STAGING.INGEST_EVENTS_TASK, autonomy: L2}
+      absent_actions:
+        - {action_type: task.rerun}
+
+  - id: EVAL-PT-002
+    description: A transient network failure of an idempotent task is rerun automatically (L3).
+    telemetry:
+      as_of: "2026-10-02T08:00:00"
+      tables:
+        TASKS:
+          - {TASK_NAME: LOAD_ORDERS_TASK, DATABASE_NAME: EDW, SCHEMA_NAME: SALES, FQ_NAME: EDW.SALES.LOAD_ORDERS_TASK, OWNER: FR_ENGINEER, WAREHOUSE: WH_ELT_PROD, SCHEDULE: "USING CRON 0 1 * * * UTC", STATE: started, TARGET_TABLE: EDW.SALES.FCT_ORDERS}
+          - {TASK_NAME: LOAD_REVENUE_TASK, DATABASE_NAME: EDW, SCHEMA_NAME: FINANCE, FQ_NAME: EDW.FINANCE.LOAD_REVENUE_TASK, OWNER: FR_ENGINEER, WAREHOUSE: WH_ELT_PROD, PREDECESSORS: EDW.SALES.LOAD_ORDERS_TASK, STATE: started, TARGET_TABLE: EDW.FINANCE.FCT_REVENUE}
+        TASK_HISTORY:
+          - {NAME: LOAD_ORDERS_TASK, DATABASE_NAME: EDW, SCHEMA_NAME: SALES, FQ_NAME: EDW.SALES.LOAD_ORDERS_TASK, STATE: FAILED, ERROR_CODE: "253003", ERROR_MESSAGE: "JDBC driver encountered communication error. Message: HTTP 503 Service Unavailable.", SCHEDULED_TIME: "2026-10-02 01:00:00", QUERY_START_TIME: "2026-10-02 01:01:00", COMPLETED_TIME: "2026-10-02 01:02:00", ROOT_TASK_ID: EDW.SALES.LOAD_ORDERS_TASK, RUN_ID: pt002a, ATTEMPT_NUMBER: 1}
+          - {NAME: LOAD_REVENUE_TASK, DATABASE_NAME: EDW, SCHEMA_NAME: FINANCE, FQ_NAME: EDW.FINANCE.LOAD_REVENUE_TASK, STATE: SKIPPED, SCHEDULED_TIME: "2026-10-02 03:00:00", COMPLETED_TIME: "2026-10-02 03:00:00", ROOT_TASK_ID: EDW.SALES.LOAD_ORDERS_TASK, RUN_ID: pt002b, ATTEMPT_NUMBER: 1}
+    expect:
+      findings:
+        - kind: root_cause
+          subject: EDW.SALES.LOAD_ORDERS_TASK
+          detail: {root_cause: transient_infrastructure, idempotent: true, downstream_impact: [EDW.FINANCE.LOAD_REVENUE_TASK]}
+      actions:
+        - {action_type: task.rerun, target: EDW.SALES.LOAD_ORDERS_TASK, autonomy: L3}
+
+  - id: EVAL-PT-003
+    description: A timeout on a task NOT flagged idempotent is only drafted for approval (L2).
+    telemetry:
+      as_of: "2026-10-02T08:00:00"
+      tables:
+        TASKS:
+          - {TASK_NAME: LOAD_REVENUE_TASK, DATABASE_NAME: EDW, SCHEMA_NAME: FINANCE, FQ_NAME: EDW.FINANCE.LOAD_REVENUE_TASK, OWNER: FR_ENGINEER, WAREHOUSE: WH_ELT_PROD, STATE: started, TARGET_TABLE: EDW.FINANCE.FCT_REVENUE}
+        TASK_HISTORY:
+          - {NAME: LOAD_REVENUE_TASK, DATABASE_NAME: EDW, SCHEMA_NAME: FINANCE, FQ_NAME: EDW.FINANCE.LOAD_REVENUE_TASK, STATE: FAILED, ERROR_CODE: "000630", ERROR_MESSAGE: "Statement reached its statement or warehouse timeout of 3,600 second(s) and was canceled.", SCHEDULED_TIME: "2026-10-02 03:00:00", COMPLETED_TIME: "2026-10-02 04:00:00", RUN_ID: pt003, ATTEMPT_NUMBER: 1}
+    expect:
+      findings:
+        - {kind: root_cause, subject: EDW.FINANCE.LOAD_REVENUE_TASK, detail: {root_cause: timeout, idempotent: false}}
+      actions:
+        - {action_type: task.rerun, target: EDW.FINANCE.LOAD_REVENUE_TASK, autonomy: L2}
+      absent_actions:
+        - {autonomy: L3}
+
+  - id: EVAL-PT-004
+    description: Schema drift after a recent column rename is classified with the DDL as evidence; fix drafted, no rerun.
+    telemetry:
+      as_of: "2026-10-02T08:00:00"
+      tables:
+        TASKS:
+          - {TASK_NAME: LOAD_REVENUE_TASK, DATABASE_NAME: EDW, SCHEMA_NAME: FINANCE, FQ_NAME: EDW.FINANCE.LOAD_REVENUE_TASK, OWNER: FR_ENGINEER, WAREHOUSE: WH_ELT_PROD, STATE: started, TARGET_TABLE: EDW.FINANCE.FCT_REVENUE}
+        TASK_HISTORY:
+          - {NAME: LOAD_REVENUE_TASK, DATABASE_NAME: EDW, SCHEMA_NAME: FINANCE, FQ_NAME: EDW.FINANCE.LOAD_REVENUE_TASK, STATE: FAILED, ERROR_CODE: "000904", ERROR_MESSAGE: "SQL compilation error: error line 3 at position 7 invalid identifier 'NET_AMT'", SCHEDULED_TIME: "2026-10-02 03:00:00", COMPLETED_TIME: "2026-10-02 03:01:00", RUN_ID: pt004, ATTEMPT_NUMBER: 1}
+        QUERY_HISTORY:
+          - {QUERY_ID: q-pt004-ddl, QUERY_TEXT: "ALTER TABLE EDW.FINANCE.FCT_REVENUE RENAME COLUMN NET_AMT TO NET_AMOUNT", QUERY_TYPE: ALTER_TABLE_RENAME_COLUMN, USER_NAME: JSMITH, ROLE_NAME: SYSADMIN, EXECUTION_STATUS: SUCCESS, START_TIME: "2026-10-01 18:00:00", END_TIME: "2026-10-01 18:00:01"}
+    expect:
+      findings:
+        - kind: root_cause
+          subject: EDW.FINANCE.LOAD_REVENUE_TASK
+          detail: {root_cause: schema_drift, recent_changes: [q-pt004-ddl]}
+      actions:
+        - {action_type: task.fix_draft, target: EDW.FINANCE.LOAD_REVENUE_TASK, autonomy: L2}
+      absent_actions:
+        - {action_type: task.rerun}
+
+  - id: EVAL-PT-005
+    description: Idempotency can be flagged in the account itself (IDEMPOTENT tag on the task).
+    telemetry:
+      as_of: "2026-10-02T08:00:00"
+      tables:
+        TASKS:
+          - {TASK_NAME: REFRESH_TASK, DATABASE_NAME: EDW, SCHEMA_NAME: OPS, FQ_NAME: EDW.OPS.REFRESH_TASK, OWNER: FR_ENGINEER, WAREHOUSE: WH_ELT_PROD, STATE: started}
+        TAG_REFERENCES:
+          - {TAG_DATABASE: GOVERNANCE, TAG_SCHEMA: TAGS, TAG_NAME: IDEMPOTENT, TAG_VALUE: "true", OBJECT_DATABASE: EDW, OBJECT_SCHEMA: OPS, OBJECT_NAME: REFRESH_TASK, DOMAIN: TASK}
+        TASK_HISTORY:
+          - {NAME: REFRESH_TASK, DATABASE_NAME: EDW, SCHEMA_NAME: OPS, FQ_NAME: EDW.OPS.REFRESH_TASK, STATE: FAILED, ERROR_MESSAGE: "Warehouse 'WH_ELT_PROD' cannot be resumed because resource monitor 'RM_WH_ELT_PROD' has exceeded its quota.", SCHEDULED_TIME: "2026-10-02 05:00:00", COMPLETED_TIME: "2026-10-02 05:00:01", RUN_ID: pt005, ATTEMPT_NUMBER: 1}
+    expect:
+      findings:
+        - {kind: root_cause, subject: EDW.OPS.REFRESH_TASK, detail: {root_cause: warehouse_unavailable, idempotent: true}}
+      actions:
+        - {action_type: task.rerun, target: EDW.OPS.REFRESH_TASK, autonomy: L3}
+
+  - id: EVAL-PT-006
+    description: An unrecognised error is low-confidence (human review queue) and gets a draft, never a rerun.
+    telemetry:
+      as_of: "2026-10-02T08:00:00"
+      tables:
+        TASKS:
+          - {TASK_NAME: LOAD_ORDERS_TASK, DATABASE_NAME: EDW, SCHEMA_NAME: SALES, FQ_NAME: EDW.SALES.LOAD_ORDERS_TASK, OWNER: FR_ENGINEER, WAREHOUSE: WH_ELT_PROD, STATE: started}
+        TASK_HISTORY:
+          - {NAME: LOAD_ORDERS_TASK, DATABASE_NAME: EDW, SCHEMA_NAME: SALES, FQ_NAME: EDW.SALES.LOAD_ORDERS_TASK, STATE: FAILED, ERROR_MESSAGE: "Stored procedure LOAD_ORDERS_TASK_PROC raised: unexpected state 7", SCHEDULED_TIME: "2026-10-02 01:00:00", COMPLETED_TIME: "2026-10-02 01:00:05", RUN_ID: pt006, ATTEMPT_NUMBER: 1}
+    expect:
+      findings:
+        - {kind: root_cause, subject: EDW.SALES.LOAD_ORDERS_TASK, needs_review: true, detail: {root_cause: unclassified}}
+      actions:
+        - {action_type: task.fix_draft, target: EDW.SALES.LOAD_ORDERS_TASK, autonomy: L2}
+      absent_actions:
+        - {action_type: task.rerun}
+
+  - id: EVAL-PT-007
+    description: A task that failed transiently but has since succeeded is reported, not rerun.
+    telemetry:
+      as_of: "2026-10-02T08:00:00"
+      tables:
+        TASKS:
+          - {TASK_NAME: LOAD_ORDERS_TASK, DATABASE_NAME: EDW, SCHEMA_NAME: SALES, FQ_NAME: EDW.SALES.LOAD_ORDERS_TASK, OWNER: FR_ENGINEER, WAREHOUSE: WH_ELT_PROD, STATE: started}
+        TASK_HISTORY:
+          - {NAME: LOAD_ORDERS_TASK, DATABASE_NAME: EDW, SCHEMA_NAME: SALES, FQ_NAME: EDW.SALES.LOAD_ORDERS_TASK, STATE: FAILED, ERROR_MESSAGE: "connection reset by peer", SCHEDULED_TIME: "2026-10-01 01:00:00", COMPLETED_TIME: "2026-10-01 01:00:05", RUN_ID: pt007a, ATTEMPT_NUMBER: 1}
+          - {NAME: LOAD_ORDERS_TASK, DATABASE_NAME: EDW, SCHEMA_NAME: SALES, FQ_NAME: EDW.SALES.LOAD_ORDERS_TASK, STATE: SUCCEEDED, SCHEDULED_TIME: "2026-10-02 01:00:00", COMPLETED_TIME: "2026-10-02 01:20:00", RUN_ID: pt007b, ATTEMPT_NUMBER: 1}
+    expect:
+      findings:
+        - {kind: root_cause, subject: EDW.SALES.LOAD_ORDERS_TASK, detail: {root_cause: transient_infrastructure, latest_state: SUCCEEDED}}
+      max_actions: 0

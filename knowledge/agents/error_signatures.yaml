@@ -1,0 +1,53 @@
+# Pipeline Triage root-cause classifier (Section 18.2 #4): error-text signatures as data.
+# `retryable` means a rerun can succeed without a code or data change (transient causes).
+# Signatures are tried in order; the first match wins.
+version: 1.0.0
+signatures:
+  - id: ERR-TRANSIENT-NETWORK
+    root_cause: transient_infrastructure
+    pattern: "(communication error|connection (reset|refused|timed out)|service unavailable|HTTP 50[234]|network error)"
+    retryable: true
+    confidence: 0.9
+    fix: Transient infrastructure error; rerun the task. Add retry with back-off if it recurs.
+  - id: ERR-WAREHOUSE-UNAVAILABLE
+    root_cause: warehouse_unavailable
+    pattern: "(cannot be resumed|warehouse .* is suspended|no active warehouse|resource monitor .* (suspend|quota))"
+    retryable: true
+    confidence: 0.88
+    fix: Warehouse could not run the task (suspended, quota or provisioning). Rerun after capacity returns; review the resource monitor quota.
+  - id: ERR-STATEMENT-TIMEOUT
+    root_cause: timeout
+    pattern: "(statement reached its statement or warehouse timeout|exceeded .*timeout|was cancell?ed|canceled)"
+    retryable: true
+    confidence: 0.82
+    fix: Statement timed out or was cancelled. Rerun; if it recurs, profile the query and right-size the warehouse.
+  - id: ERR-TYPE-CONVERSION
+    root_cause: data_quality_type_conversion
+    pattern: "(Numeric value '.*' is not recognized|Timestamp '.*' is not recognized|Date '.*' is not recognized|Boolean value '.*' is not recognized|^100038|^100040)"
+    retryable: false
+    confidence: 0.94
+    fix: "Source data contains values that do not convert to the target type. Use TRY_TO_NUMBER / TRY_TO_TIMESTAMP in the load, route rejected rows to an error table and agree a data contract with the producer."
+  - id: ERR-PERMISSION
+    root_cause: permission_denied
+    pattern: "(Insufficient privileges|^003001)"
+    retryable: false
+    confidence: 0.88
+    fix: The task owner role lacks a privilege. Grant the required privilege to the pipeline access role via IaC.
+  - id: ERR-OBJECT-MISSING
+    root_cause: object_missing_or_unauthorized
+    pattern: "(does not exist or not authorized|^002003)"
+    retryable: false
+    confidence: 0.9
+    fix: A referenced object is missing or the task owner lost privileges on it. Check recent DDL and grants on the referenced objects.
+  - id: ERR-SCHEMA-DRIFT
+    root_cause: schema_drift
+    pattern: "(invalid identifier|ambiguous column name|Number of columns in file .* does not match|^000904|^002025)"
+    retryable: false
+    confidence: 0.9
+    fix: The column set changed (schema drift). Align the pipeline with the new contract or version the change upstream.
+  - id: ERR-DUPLICATE-KEY
+    root_cause: duplicate_rows
+    pattern: "(Duplicate row detected during DML action|^100090)"
+    retryable: false
+    confidence: 0.9
+    fix: The MERGE source has duplicate keys. Deduplicate the source with QUALIFY ROW_NUMBER() before merging.

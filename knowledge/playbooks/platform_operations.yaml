@@ -1,0 +1,164 @@
+# Remediation playbooks for compute, cost, data engineering and operations Well-Architected checks.
+version: 1.0.0
+playbooks:
+  - id: PB-COMP-WORKLOAD-CLASS
+    title: Organise warehouses by workload class
+    summary: Consolidate team warehouses into ELT, BI, data-science, ad-hoc and agent classes with tags.
+    steps:
+      - Classify each warehouse from its query mix (QUERY_HISTORY by tag/application).
+      - Record the class in the warehouse comment/tag via IaC; merge warehouses with identical profiles.
+    verification: WA-COMP-001 passes.
+    risk: low
+    effort_hours: 4
+
+  - id: PB-COMP-AUTOSUSPEND
+    title: Set warehouse auto-suspend to policy
+    summary: Shorten AUTO_SUSPEND to the rubric value with AUTO_RESUME on; revert automatically if queueing rises.
+    steps:
+      - Confirm no measured cache benefit justifies a longer auto-suspend for this warehouse.
+      - Apply via the Warehouse Rightsizer (L3 where pre-approved, otherwise an L2 draft) or IaC.
+      - Watch the guard metric (queued load) for the observation window; the agent reverts on regression.
+    remediation_sql: "ALTER WAREHOUSE {object} SET AUTO_SUSPEND = 60 AUTO_RESUME = TRUE"
+    rollback_sql: "ALTER WAREHOUSE {object} SET AUTO_SUSPEND = <previous>"
+    verification: WA-COMP-003 passes; idle credits fall in WAREHOUSE_METERING_HISTORY.
+    agent: {agent_id: AG-WAREHOUSE-RIGHTSIZER, action_type: warehouse.set_auto_suspend}
+    risk: low
+    effort_hours: 1
+
+  - id: PB-COMP-TIMEOUTS
+    title: Set statement and queue timeouts per warehouse
+    summary: Replace the 48-hour default with per-class statement timeouts from the landing zone.
+    steps:
+      - Check p99 execution time per warehouse to avoid cutting legitimate long jobs.
+      - Set STATEMENT_TIMEOUT_IN_SECONDS and STATEMENT_QUEUED_TIMEOUT_IN_SECONDS via IaC.
+    remediation_sql: "ALTER WAREHOUSE {object} SET STATEMENT_TIMEOUT_IN_SECONDS = 14400"
+    rollback_sql: "ALTER WAREHOUSE {object} UNSET STATEMENT_TIMEOUT_IN_SECONDS"
+    verification: WA-COMP-005 passes.
+    risk: low
+    effort_hours: 1
+
+  - id: PB-COMP-SCALE-OUT
+    title: Multi-cluster scaling for concurrency
+    summary: Raise MAX_CLUSTER_COUNT on single-cluster warehouses that queue at peak.
+    steps:
+      - Confirm queueing is concurrency (many short queries), not one heavy query.
+      - Set MIN 1 / MAX 3 clusters with STANDARD scaling; review credits after two weeks.
+    remediation_sql: "ALTER WAREHOUSE {object} SET MAX_CLUSTER_COUNT = 3 SCALING_POLICY = 'STANDARD'"
+    rollback_sql: "ALTER WAREHOUSE {object} SET MAX_CLUSTER_COUNT = 1"
+    verification: WA-COMP-006 passes; QUEUED_OVERLOAD_TIME drops at peak.
+    agent: {agent_id: AG-WAREHOUSE-RIGHTSIZER, action_type: warehouse.set_max_cluster_count}
+    risk: low
+    effort_hours: 1
+
+  - id: PB-COMP-SPILL
+    title: Eliminate remote spilling
+    summary: Rewrite the spilling query signatures or move them to a larger warehouse.
+    steps:
+      - Identify spilling signatures (QUERY_HISTORY by QUERY_PARAMETERIZED_HASH).
+      - Rewrite (reduce join fan-out, aggregate earlier) and test on a clone; else scale up for that job only.
+    verification: WA-COMP-007 passes.
+    risk: medium
+    effort_hours: 8
+
+  - id: PB-COST-MONITORS
+    title: Resource monitors on every warehouse and the account
+    summary: Create monitors with notify and suspend triggers from the landing zone and attach them.
+    steps:
+      - Size quotas from the trailing three months of WAREHOUSE_METERING_HISTORY plus headroom.
+      - Create monitors (notify 75/90%, suspend at 100%) and attach them via IaC.
+      - Create the account-level monitor.
+    remediation_sql: "CREATE RESOURCE MONITOR IF NOT EXISTS RM_{object} WITH CREDIT_QUOTA = <quota> TRIGGERS ON 75 PERCENT DO NOTIFY ON 100 PERCENT DO SUSPEND; ALTER WAREHOUSE {object} SET RESOURCE_MONITOR = RM_{object}"
+    rollback_sql: "ALTER WAREHOUSE {object} UNSET RESOURCE_MONITOR"
+    verification: WA-COST-001 and WA-COST-002 pass.
+    risk: low
+    effort_hours: 2
+
+  - id: PB-COST-TAGGING
+    title: Cost-centre tagging for chargeback
+    summary: Tag every warehouse with COST_CENTER and enforce it in IaC.
+    steps:
+      - Agree the cost-centre taxonomy (landing-zone tag allowed values).
+      - Tag warehouses; add a CI check that rejects untagged warehouses.
+    remediation_sql: "ALTER WAREHOUSE {object} SET TAG GOVERNANCE.TAGS.COST_CENTER = '<cost_center>'"
+    rollback_sql: "ALTER WAREHOUSE {object} UNSET TAG GOVERNANCE.TAGS.COST_CENTER"
+    verification: WA-COST-003 passes; QUERY_ATTRIBUTION_HISTORY credits fully attributable.
+    risk: low
+    effort_hours: 2
+
+  - id: PB-COST-STORAGE
+    title: Storage hygiene — transient staging, retention, stale clones
+    summary: Make re-creatable staging transient with minimal Time Travel; archive then drop stale clones.
+    steps:
+      - Recreate staging tables as TRANSIENT (or set DATA_RETENTION_TIME_IN_DAYS = 0) via the pipeline repo.
+      - For stale clones, confirm no consumers in ACCESS_HISTORY and no legal hold; archive, then drop.
+    remediation_sql: "ALTER TABLE {object} SET DATA_RETENTION_TIME_IN_DAYS = 0"
+    rollback_sql: "ALTER TABLE {object} SET DATA_RETENTION_TIME_IN_DAYS = 1"
+    verification: WA-COST-004 and WA-COST-005 pass; TIME_TRAVEL_BYTES and RETAINED_FOR_CLONE_BYTES fall.
+    risk: medium
+    effort_hours: 4
+
+  - id: PB-ENG-DMF
+    title: Data metric functions on Tier-1 tables
+    summary: Attach NULL/duplicate/freshness DMFs (rules as data) to every Tier-1 table.
+    steps:
+      - Generate the DQ rule pack for the table from profiling metadata.
+      - ALTER TABLE ... SET DATA_METRIC_SCHEDULE and ADD DATA METRIC FUNCTION for each rule.
+      - Route failures to the DQ Incident agent.
+    remediation_sql: "ALTER TABLE {object} ADD DATA METRIC FUNCTION SNOWFLAKE.CORE.NULL_COUNT ON (<key_column>)"
+    rollback_sql: "ALTER TABLE {object} DROP DATA METRIC FUNCTION SNOWFLAKE.CORE.NULL_COUNT ON (<key_column>)"
+    verification: WA-ENG-001 passes.
+    risk: low
+    effort_hours: 3
+
+  - id: PB-ENG-IAC
+    title: Route production DDL through IaC/CI
+    summary: Revoke ad-hoc DDL rights in production; changes flow through Terraform / schemachange / dbt with review.
+    steps:
+      - Identify DDL authors (WA-ENG-002) and the changes they made.
+      - Capture those objects in IaC; remove CREATE/ALTER privileges from human functional roles in PROD.
+      - Use managed-access schemas so only owners grant.
+    verification: WA-ENG-002 passes; DDL in QUERY_HISTORY is tagged by the pipeline.
+    risk: medium
+    effort_hours: 16
+
+  - id: PB-ENG-SERVICE-IDENTITY
+    title: Move pipelines to service identities
+    summary: Re-home scheduled loads that run under a person to a service user with key-pair auth.
+    steps:
+      - Create a SERVICE user + functional role for the pipeline (landing-zone users).
+      - Switch the scheduler connection; verify a full run; remove DML rights from the person's role.
+    verification: WA-ENG-003 passes.
+    risk: medium
+    effort_hours: 4
+
+  - id: PB-OPS-ALERT-PACK
+    title: Alert pack — failed tasks, credit spikes, privileged use
+    summary: Deploy the Package O alert pack with routes to the on-call channel.
+    steps:
+      - Create Snowflake Alerts for task failures, credit anomalies and ACCOUNTADMIN use.
+      - Route them to the client's notification integration; test each alert.
+    verification: WA-OPS-001, WA-OPS-002 and WA-OPS-003 pass.
+    risk: low
+    effort_hours: 4
+
+  - id: PB-OPS-PIPELINE-TRIAGE
+    title: Fix recurring task failures
+    summary: Classify root causes with the Pipeline Triage agent; fix data contracts or code; rerun idempotent tasks.
+    steps:
+      - Run Pipeline Triage; review its root-cause findings and fix drafts.
+      - Flag idempotent tasks (IDEMPOTENT tag) so transient failures can be rerun under the pre-approved catalogue.
+    verification: WA-OPS-004 passes.
+    agent: {agent_id: AG-PIPELINE-TRIAGE, action_type: task.fix_draft}
+    risk: medium
+    effort_hours: 8
+
+  - id: PB-AI-SEMANTIC-VIEWS
+    title: Semantic views for the top KPI domains
+    summary: Generate semantic views from the certified KPI registry (one definition per KPI).
+    steps:
+      - Register certified KPIs in knowledge/semantic/kpi_registry.yaml (owner, definition, synonyms).
+      - Generate CREATE SEMANTIC VIEW DDL (altitude generate) and deploy through CI.
+      - Run the golden-question evaluation harness before exposing to Cortex Analyst.
+    verification: WA-AI-002 passes; evaluation harness score at or above the rubric.
+    risk: low
+    effort_hours: 24
