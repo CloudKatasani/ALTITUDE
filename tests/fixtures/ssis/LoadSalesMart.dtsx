@@ -1,0 +1,491 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:refId="Package"
+  DTS:CreationDate="3/14/2019 9:12:44 AM"
+  DTS:CreationName="Microsoft.Package"
+  DTS:CreatorName="CORP\etl.dev"
+  DTS:DTSID="{6C1D7A3E-5B0F-4E6B-9C2D-1A8E4F3B7D21}"
+  DTS:ExecutableType="Microsoft.Package"
+  DTS:LastModifiedProductVersion="15.0.2000.180"
+  DTS:LocaleID="1033"
+  DTS:ObjectName="LoadSalesMart"
+  DTS:PackageType="5"
+  DTS:VersionBuild="42"
+  DTS:VersionGUID="{0E5D2C11-77A4-4D0B-B8F6-2C5E9A1B3F40}">
+  <DTS:Property DTS:Name="PackageFormatVersion">8</DTS:Property>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager DTS:refId="Package.ConnectionManagers[SRC_ERP]" DTS:CreationName="OLEDB"
+      DTS:DTSID="{A1B2C3D4-0001-4E5F-8A9B-0C1D2E3F4A5B}" DTS:ObjectName="SRC_ERP">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager DTS:ConnectionString="Data Source=erp-sql01;Initial Catalog=ERP;Provider=SQLNCLI11.1;Integrated Security=SSPI;" />
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+    <DTS:ConnectionManager DTS:refId="Package.ConnectionManagers[DWH]" DTS:CreationName="OLEDB"
+      DTS:DTSID="{A1B2C3D4-0002-4E5F-8A9B-0C1D2E3F4A5B}" DTS:ObjectName="DWH">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager DTS:ConnectionString="Data Source=dwh-sql01;Initial Catalog=SalesDW;Provider=SQLNCLI11.1;Integrated Security=SSPI;" />
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+  </DTS:ConnectionManagers>
+  <DTS:Variables>
+    <DTS:Variable DTS:CreationName="" DTS:DTSID="{B7E1C0A2-1111-4C3D-9E8F-5A6B7C8D9E0F}" DTS:Namespace="User" DTS:ObjectName="LoadDate">
+      <DTS:VariableValue DTS:DataType="7">2026-01-01</DTS:VariableValue>
+    </DTS:Variable>
+    <DTS:Variable DTS:CreationName="" DTS:DTSID="{B7E1C0A2-2222-4C3D-9E8F-5A6B7C8D9E0F}" DTS:Namespace="User" DTS:ObjectName="RowsLoaded">
+      <DTS:VariableValue DTS:DataType="3">0</DTS:VariableValue>
+    </DTS:Variable>
+  </DTS:Variables>
+  <DTS:Executables>
+    <DTS:Executable DTS:refId="Package\SQL Truncate FactSales" DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:DTSID="{C0000001-0000-4000-8000-000000000001}" DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:ObjectName="SQL Truncate FactSales" DTS:TaskContact="Execute SQL Task">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask"
+          SQLTask:Connection="{A1B2C3D4-0002-4E5F-8A9B-0C1D2E3F4A5B}"
+          SQLTask:SqlStatementSource="TRUNCATE TABLE dbo.FactSales;" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\SQL Log Start" DTS:CreationName="Microsoft.ExecuteSQLTask"
+      DTS:DTSID="{C0000001-0000-4000-8000-000000000002}" DTS:ExecutableType="Microsoft.ExecuteSQLTask"
+      DTS:ObjectName="SQL Log Start" DTS:TaskContact="Execute SQL Task">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask"
+          SQLTask:Connection="{A1B2C3D4-0002-4E5F-8A9B-0C1D2E3F4A5B}"
+          SQLTask:SqlStatementSource="INSERT INTO dbo.EtlRunLog (PackageName, StartedAt) SELECT TOP 1 'LoadSalesMart', GETDATE() FROM dbo.EtlRunLog WITH (NOLOCK);" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\DFT Load DimProduct" DTS:CreationName="Microsoft.Pipeline"
+      DTS:DTSID="{C0000001-0000-4000-8000-000000000003}" DTS:ExecutableType="Microsoft.Pipeline"
+      DTS:ObjectName="DFT Load DimProduct" DTS:TaskContact="Performs high-performance data extraction, transformation and loading">
+      <DTS:ObjectData>
+        <pipeline version="1">
+          <components>
+            <component refId="Package\DFT Load DimProduct\SRC Product" componentClassID="Microsoft.OLEDBSource"
+              contactInfo="OLE DB Source" description="OLE DB Source" name="SRC Product" usesDispositions="true" version="7">
+              <properties>
+                <property dataType="System.Int32" name="CommandTimeout">0</property>
+                <property dataType="System.String" name="OpenRowset">[dbo].[Product]</property>
+                <property dataType="System.String" name="SqlCommand"></property>
+                <property dataType="System.Int32" name="AccessMode" typeConverter="AccessMode">0</property>
+              </properties>
+              <connections>
+                <connection refId="Package\DFT Load DimProduct\SRC Product.Connections[OleDbConnection]"
+                  connectionManagerID="Package.ConnectionManagers[SRC_ERP]" connectionManagerRefId="Package.ConnectionManagers[SRC_ERP]" name="OleDbConnection" />
+              </connections>
+              <outputs>
+                <output refId="Package\DFT Load DimProduct\SRC Product.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                  <outputColumns>
+                    <outputColumn refId="Package\DFT Load DimProduct\SRC Product.Outputs[OLE DB Source Output].Columns[ProductID]" dataType="i4" lineageId="Package\DFT Load DimProduct\SRC Product.Outputs[OLE DB Source Output].Columns[ProductID]" name="ProductID" />
+                    <outputColumn refId="Package\DFT Load DimProduct\SRC Product.Outputs[OLE DB Source Output].Columns[ProductName]" dataType="wstr" length="100" lineageId="Package\DFT Load DimProduct\SRC Product.Outputs[OLE DB Source Output].Columns[ProductName]" name="ProductName" />
+                    <outputColumn refId="Package\DFT Load DimProduct\SRC Product.Outputs[OLE DB Source Output].Columns[Category]" dataType="wstr" length="50" lineageId="Package\DFT Load DimProduct\SRC Product.Outputs[OLE DB Source Output].Columns[Category]" name="Category" />
+                    <outputColumn refId="Package\DFT Load DimProduct\SRC Product.Outputs[OLE DB Source Output].Columns[ListPrice]" dataType="cy" lineageId="Package\DFT Load DimProduct\SRC Product.Outputs[OLE DB Source Output].Columns[ListPrice]" name="ListPrice" />
+                    <outputColumn refId="Package\DFT Load DimProduct\SRC Product.Outputs[OLE DB Source Output].Columns[Discontinued]" dataType="bool" lineageId="Package\DFT Load DimProduct\SRC Product.Outputs[OLE DB Source Output].Columns[Discontinued]" name="Discontinued" />
+                  </outputColumns>
+                  <externalMetadataColumns isUsed="True" />
+                </output>
+                <output refId="Package\DFT Load DimProduct\SRC Product.Outputs[OLE DB Source Error Output]" isErrorOut="true" name="OLE DB Source Error Output">
+                  <outputColumns />
+                </output>
+              </outputs>
+            </component>
+            <component refId="Package\DFT Load DimProduct\DER Clean Product" componentClassID="Microsoft.DerivedColumn"
+              contactInfo="Derived Column" description="Creates new column values by applying expressions to transformation input columns." name="DER Clean Product" usesDispositions="true">
+              <inputs>
+                <input refId="Package\DFT Load DimProduct\DER Clean Product.Inputs[Derived Column Input]" description="Input to the Derived Column Transformation" name="Derived Column Input">
+                  <inputColumns>
+                    <inputColumn refId="Package\DFT Load DimProduct\DER Clean Product.Inputs[Derived Column Input].Columns[ProductName]" cachedDataType="wstr" cachedLength="100" cachedName="ProductName" lineageId="Package\DFT Load DimProduct\SRC Product.Outputs[OLE DB Source Output].Columns[ProductName]" usageType="readWrite">
+                      <properties>
+                        <property containsID="true" dataType="System.String" name="Expression">UPPER(TRIM(#{Package\DFT Load DimProduct\SRC Product.Outputs[OLE DB Source Output].Columns[ProductName]}))</property>
+                        <property dataType="System.String" name="FriendlyExpression">REPLACENULL(UPPER(TRIM(ProductName)), "UNNAMED")</property>
+                      </properties>
+                    </inputColumn>
+                  </inputColumns>
+                </input>
+              </inputs>
+              <outputs>
+                <output refId="Package\DFT Load DimProduct\DER Clean Product.Outputs[Derived Column Output]" exclusionGroup="1" name="Derived Column Output" synchronousInputId="Package\DFT Load DimProduct\DER Clean Product.Inputs[Derived Column Input]">
+                  <outputColumns>
+                    <outputColumn refId="Package\DFT Load DimProduct\DER Clean Product.Outputs[Derived Column Output].Columns[PriceBand]" dataType="wstr" length="10" lineageId="Package\DFT Load DimProduct\DER Clean Product.Outputs[Derived Column Output].Columns[PriceBand]" name="PriceBand">
+                      <properties>
+                        <property containsID="true" dataType="System.String" name="Expression">#{Package\DFT Load DimProduct\SRC Product.Outputs[OLE DB Source Output].Columns[ListPrice]} &gt;= 100 ? "PREMIUM" : "STANDARD"</property>
+                        <property dataType="System.String" name="FriendlyExpression">ListPrice &gt;= 100 ? "PREMIUM" : (ListPrice &gt;= 20 ? "STANDARD" : "BUDGET")</property>
+                      </properties>
+                    </outputColumn>
+                    <outputColumn refId="Package\DFT Load DimProduct\DER Clean Product.Outputs[Derived Column Output].Columns[IsActive]" dataType="bool" lineageId="Package\DFT Load DimProduct\DER Clean Product.Outputs[Derived Column Output].Columns[IsActive]" name="IsActive">
+                      <properties>
+                        <property dataType="System.String" name="FriendlyExpression">!REPLACENULL(Discontinued, FALSE)</property>
+                      </properties>
+                    </outputColumn>
+                  </outputColumns>
+                </output>
+                <output refId="Package\DFT Load DimProduct\DER Clean Product.Outputs[Derived Column Error Output]" exclusionGroup="1" isErrorOut="true" name="Derived Column Error Output" />
+              </outputs>
+            </component>
+            <component refId="Package\DFT Load DimProduct\SRT Dedupe Product" componentClassID="Microsoft.Sort" name="SRT Dedupe Product">
+              <properties>
+                <property dataType="System.Boolean" name="EliminateDuplicates">true</property>
+              </properties>
+              <inputs>
+                <input refId="Package\DFT Load DimProduct\SRT Dedupe Product.Inputs[Sort Input]" name="Sort Input" />
+              </inputs>
+              <outputs>
+                <output refId="Package\DFT Load DimProduct\SRT Dedupe Product.Outputs[Sort Output]" name="Sort Output" />
+              </outputs>
+            </component>
+            <component refId="Package\DFT Load DimProduct\DST DimProduct" componentClassID="Microsoft.OLEDBDestination" name="DST DimProduct" version="4">
+              <properties>
+                <property dataType="System.String" name="OpenRowset">[dbo].[DimProduct]</property>
+                <property dataType="System.Int32" name="AccessMode" typeConverter="AccessMode">3</property>
+                <property dataType="System.Boolean" name="FastLoadKeepNulls">false</property>
+              </properties>
+              <connections>
+                <connection refId="Package\DFT Load DimProduct\DST DimProduct.Connections[OleDbConnection]" connectionManagerID="Package.ConnectionManagers[DWH]" connectionManagerRefId="Package.ConnectionManagers[DWH]" name="OleDbConnection" />
+              </connections>
+              <inputs>
+                <input refId="Package\DFT Load DimProduct\DST DimProduct.Inputs[OLE DB Destination Input]" name="OLE DB Destination Input">
+                  <inputColumns>
+                    <inputColumn refId="Package\DFT Load DimProduct\DST DimProduct.Inputs[OLE DB Destination Input].Columns[ProductID]" cachedDataType="i4" cachedName="ProductID" externalMetadataColumnId="Package\DFT Load DimProduct\DST DimProduct.Inputs[OLE DB Destination Input].ExternalColumns[ProductKey]" lineageId="Package\DFT Load DimProduct\SRC Product.Outputs[OLE DB Source Output].Columns[ProductID]" />
+                    <inputColumn refId="Package\DFT Load DimProduct\DST DimProduct.Inputs[OLE DB Destination Input].Columns[ProductName]" cachedDataType="wstr" cachedLength="100" cachedName="ProductName" externalMetadataColumnId="Package\DFT Load DimProduct\DST DimProduct.Inputs[OLE DB Destination Input].ExternalColumns[ProductName]" lineageId="Package\DFT Load DimProduct\SRC Product.Outputs[OLE DB Source Output].Columns[ProductName]" />
+                    <inputColumn refId="Package\DFT Load DimProduct\DST DimProduct.Inputs[OLE DB Destination Input].Columns[Category]" cachedDataType="wstr" cachedLength="50" cachedName="Category" externalMetadataColumnId="Package\DFT Load DimProduct\DST DimProduct.Inputs[OLE DB Destination Input].ExternalColumns[Category]" lineageId="Package\DFT Load DimProduct\SRC Product.Outputs[OLE DB Source Output].Columns[Category]" />
+                    <inputColumn refId="Package\DFT Load DimProduct\DST DimProduct.Inputs[OLE DB Destination Input].Columns[ListPrice]" cachedDataType="cy" cachedName="ListPrice" externalMetadataColumnId="Package\DFT Load DimProduct\DST DimProduct.Inputs[OLE DB Destination Input].ExternalColumns[ListPrice]" lineageId="Package\DFT Load DimProduct\SRC Product.Outputs[OLE DB Source Output].Columns[ListPrice]" />
+                    <inputColumn refId="Package\DFT Load DimProduct\DST DimProduct.Inputs[OLE DB Destination Input].Columns[PriceBand]" cachedDataType="wstr" cachedLength="10" cachedName="PriceBand" externalMetadataColumnId="Package\DFT Load DimProduct\DST DimProduct.Inputs[OLE DB Destination Input].ExternalColumns[PriceBand]" lineageId="Package\DFT Load DimProduct\DER Clean Product.Outputs[Derived Column Output].Columns[PriceBand]" />
+                    <inputColumn refId="Package\DFT Load DimProduct\DST DimProduct.Inputs[OLE DB Destination Input].Columns[IsActive]" cachedDataType="bool" cachedName="IsActive" externalMetadataColumnId="Package\DFT Load DimProduct\DST DimProduct.Inputs[OLE DB Destination Input].ExternalColumns[IsActive]" lineageId="Package\DFT Load DimProduct\DER Clean Product.Outputs[Derived Column Output].Columns[IsActive]" />
+                  </inputColumns>
+                  <externalMetadataColumns isUsed="True">
+                    <externalMetadataColumn refId="Package\DFT Load DimProduct\DST DimProduct.Inputs[OLE DB Destination Input].ExternalColumns[ProductKey]" dataType="i4" name="ProductKey" />
+                    <externalMetadataColumn refId="Package\DFT Load DimProduct\DST DimProduct.Inputs[OLE DB Destination Input].ExternalColumns[ProductName]" dataType="wstr" length="100" name="ProductName" />
+                    <externalMetadataColumn refId="Package\DFT Load DimProduct\DST DimProduct.Inputs[OLE DB Destination Input].ExternalColumns[Category]" dataType="wstr" length="50" name="Category" />
+                    <externalMetadataColumn refId="Package\DFT Load DimProduct\DST DimProduct.Inputs[OLE DB Destination Input].ExternalColumns[ListPrice]" dataType="cy" name="ListPrice" />
+                    <externalMetadataColumn refId="Package\DFT Load DimProduct\DST DimProduct.Inputs[OLE DB Destination Input].ExternalColumns[PriceBand]" dataType="wstr" length="10" name="PriceBand" />
+                    <externalMetadataColumn refId="Package\DFT Load DimProduct\DST DimProduct.Inputs[OLE DB Destination Input].ExternalColumns[IsActive]" dataType="bool" name="IsActive" />
+                  </externalMetadataColumns>
+                </input>
+              </inputs>
+            </component>
+          </components>
+          <paths>
+            <path refId="Package\DFT Load DimProduct.Paths[OLE DB Source Output]" endId="Package\DFT Load DimProduct\DER Clean Product.Inputs[Derived Column Input]" name="OLE DB Source Output" startId="Package\DFT Load DimProduct\SRC Product.Outputs[OLE DB Source Output]" />
+            <path refId="Package\DFT Load DimProduct.Paths[Derived Column Output]" endId="Package\DFT Load DimProduct\SRT Dedupe Product.Inputs[Sort Input]" name="Derived Column Output" startId="Package\DFT Load DimProduct\DER Clean Product.Outputs[Derived Column Output]" />
+            <path refId="Package\DFT Load DimProduct.Paths[Sort Output]" endId="Package\DFT Load DimProduct\DST DimProduct.Inputs[OLE DB Destination Input]" name="Sort Output" startId="Package\DFT Load DimProduct\SRT Dedupe Product.Outputs[Sort Output]" />
+          </paths>
+        </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\DFT Load FactSales" DTS:CreationName="Microsoft.Pipeline"
+      DTS:DTSID="{C0000001-0000-4000-8000-000000000004}" DTS:ExecutableType="Microsoft.Pipeline" DTS:ObjectName="DFT Load FactSales">
+      <DTS:ObjectData>
+        <pipeline version="1">
+          <components>
+            <component refId="Package\DFT Load FactSales\SRC SalesOrderDetail" componentClassID="Microsoft.OLEDBSource" name="SRC SalesOrderDetail" version="7">
+              <properties>
+                <property dataType="System.String" name="OpenRowset"></property>
+                <property dataType="System.String" name="SqlCommand">SELECT d.SalesOrderID, d.SalesOrderLine, d.ProductID, d.CustomerID, d.OrderDate, d.Quantity, d.UnitPrice
+FROM dbo.SalesOrderDetail AS d WITH (NOLOCK)</property>
+                <property dataType="System.Int32" name="AccessMode" typeConverter="AccessMode">2</property>
+              </properties>
+              <connections>
+                <connection refId="Package\DFT Load FactSales\SRC SalesOrderDetail.Connections[OleDbConnection]" connectionManagerID="Package.ConnectionManagers[SRC_ERP]" connectionManagerRefId="Package.ConnectionManagers[SRC_ERP]" name="OleDbConnection" />
+              </connections>
+              <outputs>
+                <output refId="Package\DFT Load FactSales\SRC SalesOrderDetail.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                  <outputColumns>
+                    <outputColumn refId="Package\DFT Load FactSales\SRC SalesOrderDetail.Outputs[OLE DB Source Output].Columns[SalesOrderID]" dataType="i4" lineageId="Package\DFT Load FactSales\SRC SalesOrderDetail.Outputs[OLE DB Source Output].Columns[SalesOrderID]" name="SalesOrderID" />
+                    <outputColumn refId="Package\DFT Load FactSales\SRC SalesOrderDetail.Outputs[OLE DB Source Output].Columns[SalesOrderLine]" dataType="i2" lineageId="Package\DFT Load FactSales\SRC SalesOrderDetail.Outputs[OLE DB Source Output].Columns[SalesOrderLine]" name="SalesOrderLine" />
+                    <outputColumn refId="Package\DFT Load FactSales\SRC SalesOrderDetail.Outputs[OLE DB Source Output].Columns[ProductID]" dataType="i4" lineageId="Package\DFT Load FactSales\SRC SalesOrderDetail.Outputs[OLE DB Source Output].Columns[ProductID]" name="ProductID" />
+                    <outputColumn refId="Package\DFT Load FactSales\SRC SalesOrderDetail.Outputs[OLE DB Source Output].Columns[CustomerID]" dataType="i4" lineageId="Package\DFT Load FactSales\SRC SalesOrderDetail.Outputs[OLE DB Source Output].Columns[CustomerID]" name="CustomerID" />
+                    <outputColumn refId="Package\DFT Load FactSales\SRC SalesOrderDetail.Outputs[OLE DB Source Output].Columns[OrderDate]" dataType="dbTimeStamp" lineageId="Package\DFT Load FactSales\SRC SalesOrderDetail.Outputs[OLE DB Source Output].Columns[OrderDate]" name="OrderDate" />
+                    <outputColumn refId="Package\DFT Load FactSales\SRC SalesOrderDetail.Outputs[OLE DB Source Output].Columns[Quantity]" dataType="i4" lineageId="Package\DFT Load FactSales\SRC SalesOrderDetail.Outputs[OLE DB Source Output].Columns[Quantity]" name="Quantity" />
+                    <outputColumn refId="Package\DFT Load FactSales\SRC SalesOrderDetail.Outputs[OLE DB Source Output].Columns[UnitPrice]" dataType="numeric" precision="12" scale="2" lineageId="Package\DFT Load FactSales\SRC SalesOrderDetail.Outputs[OLE DB Source Output].Columns[UnitPrice]" name="UnitPrice" />
+                  </outputColumns>
+                </output>
+              </outputs>
+            </component>
+            <component refId="Package\DFT Load FactSales\SRC SalesOrderDetailArchive" componentClassID="Microsoft.OLEDBSource" name="SRC SalesOrderDetailArchive" version="7">
+              <properties>
+                <property dataType="System.String" name="OpenRowset">[archive].[SalesOrderDetail]</property>
+                <property dataType="System.Int32" name="AccessMode" typeConverter="AccessMode">0</property>
+              </properties>
+              <connections>
+                <connection refId="Package\DFT Load FactSales\SRC SalesOrderDetailArchive.Connections[OleDbConnection]" connectionManagerID="Package.ConnectionManagers[SRC_ERP]" connectionManagerRefId="Package.ConnectionManagers[SRC_ERP]" name="OleDbConnection" />
+              </connections>
+              <outputs>
+                <output refId="Package\DFT Load FactSales\SRC SalesOrderDetailArchive.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                  <outputColumns>
+                    <outputColumn refId="Package\DFT Load FactSales\SRC SalesOrderDetailArchive.Outputs[OLE DB Source Output].Columns[SalesOrderID]" dataType="i4" lineageId="Package\DFT Load FactSales\SRC SalesOrderDetailArchive.Outputs[OLE DB Source Output].Columns[SalesOrderID]" name="SalesOrderID" />
+                    <outputColumn refId="Package\DFT Load FactSales\SRC SalesOrderDetailArchive.Outputs[OLE DB Source Output].Columns[SalesOrderLine]" dataType="i2" lineageId="Package\DFT Load FactSales\SRC SalesOrderDetailArchive.Outputs[OLE DB Source Output].Columns[SalesOrderLine]" name="SalesOrderLine" />
+                    <outputColumn refId="Package\DFT Load FactSales\SRC SalesOrderDetailArchive.Outputs[OLE DB Source Output].Columns[ProductID]" dataType="i4" lineageId="Package\DFT Load FactSales\SRC SalesOrderDetailArchive.Outputs[OLE DB Source Output].Columns[ProductID]" name="ProductID" />
+                    <outputColumn refId="Package\DFT Load FactSales\SRC SalesOrderDetailArchive.Outputs[OLE DB Source Output].Columns[CustomerID]" dataType="i4" lineageId="Package\DFT Load FactSales\SRC SalesOrderDetailArchive.Outputs[OLE DB Source Output].Columns[CustomerID]" name="CustomerID" />
+                    <outputColumn refId="Package\DFT Load FactSales\SRC SalesOrderDetailArchive.Outputs[OLE DB Source Output].Columns[OrderDate]" dataType="dbTimeStamp" lineageId="Package\DFT Load FactSales\SRC SalesOrderDetailArchive.Outputs[OLE DB Source Output].Columns[OrderDate]" name="OrderDate" />
+                    <outputColumn refId="Package\DFT Load FactSales\SRC SalesOrderDetailArchive.Outputs[OLE DB Source Output].Columns[Quantity]" dataType="i4" lineageId="Package\DFT Load FactSales\SRC SalesOrderDetailArchive.Outputs[OLE DB Source Output].Columns[Quantity]" name="Quantity" />
+                    <outputColumn refId="Package\DFT Load FactSales\SRC SalesOrderDetailArchive.Outputs[OLE DB Source Output].Columns[UnitPrice]" dataType="numeric" precision="12" scale="2" lineageId="Package\DFT Load FactSales\SRC SalesOrderDetailArchive.Outputs[OLE DB Source Output].Columns[UnitPrice]" name="UnitPrice" />
+                  </outputColumns>
+                </output>
+              </outputs>
+            </component>
+            <component refId="Package\DFT Load FactSales\UNI All Orders" componentClassID="Microsoft.UnionAll" name="UNI All Orders">
+              <inputs>
+                <input refId="Package\DFT Load FactSales\UNI All Orders.Inputs[Union All Input 1]" name="Union All Input 1" />
+                <input refId="Package\DFT Load FactSales\UNI All Orders.Inputs[Union All Input 2]" name="Union All Input 2" />
+              </inputs>
+              <outputs>
+                <output refId="Package\DFT Load FactSales\UNI All Orders.Outputs[Union All Output 1]" name="Union All Output 1" />
+              </outputs>
+            </component>
+            <component refId="Package\DFT Load FactSales\LKP DimProduct" componentClassID="Microsoft.Lookup" name="LKP DimProduct" version="6">
+              <properties>
+                <property dataType="System.String" name="SqlCommand">SELECT ProductKey, Category FROM [dbo].[DimProduct]</property>
+                <property dataType="System.Int32" name="CacheType" typeConverter="CacheType">0</property>
+                <property dataType="System.Int32" name="NoMatchBehavior" typeConverter="LookupNoMatchBehavior">1</property>
+              </properties>
+              <connections>
+                <connection refId="Package\DFT Load FactSales\LKP DimProduct.Connections[OleDbConnection]" connectionManagerID="Package.ConnectionManagers[DWH]" connectionManagerRefId="Package.ConnectionManagers[DWH]" name="OleDbConnection" />
+              </connections>
+              <inputs>
+                <input refId="Package\DFT Load FactSales\LKP DimProduct.Inputs[Lookup Input]" name="Lookup Input">
+                  <inputColumns>
+                    <inputColumn refId="Package\DFT Load FactSales\LKP DimProduct.Inputs[Lookup Input].Columns[ProductID]" cachedDataType="i4" cachedName="ProductID" lineageId="Package\DFT Load FactSales\UNI All Orders.Outputs[Union All Output 1].Columns[ProductID]">
+                      <properties>
+                        <property dataType="System.String" name="JoinToReferenceColumn">ProductKey</property>
+                      </properties>
+                    </inputColumn>
+                  </inputColumns>
+                </input>
+              </inputs>
+              <outputs>
+                <output refId="Package\DFT Load FactSales\LKP DimProduct.Outputs[Lookup Match Output]" name="Lookup Match Output" exclusionGroup="1">
+                  <outputColumns>
+                    <outputColumn refId="Package\DFT Load FactSales\LKP DimProduct.Outputs[Lookup Match Output].Columns[ProductCategory]" dataType="wstr" length="50" lineageId="Package\DFT Load FactSales\LKP DimProduct.Outputs[Lookup Match Output].Columns[ProductCategory]" name="ProductCategory">
+                      <properties>
+                        <property dataType="System.String" name="CopyFromReferenceColumn">Category</property>
+                      </properties>
+                    </outputColumn>
+                  </outputColumns>
+                </output>
+                <output refId="Package\DFT Load FactSales\LKP DimProduct.Outputs[Lookup No Match Output]" name="Lookup No Match Output" exclusionGroup="1" />
+                <output refId="Package\DFT Load FactSales\LKP DimProduct.Outputs[Lookup Error Output]" isErrorOut="true" name="Lookup Error Output" />
+              </outputs>
+            </component>
+            <component refId="Package\DFT Load FactSales\DER Line Total" componentClassID="Microsoft.DerivedColumn" name="DER Line Total">
+              <outputs>
+                <output refId="Package\DFT Load FactSales\DER Line Total.Outputs[Derived Column Output]" name="Derived Column Output">
+                  <outputColumns>
+                    <outputColumn refId="Package\DFT Load FactSales\DER Line Total.Outputs[Derived Column Output].Columns[LineTotal]" dataType="numeric" precision="18" scale="2" lineageId="Package\DFT Load FactSales\DER Line Total.Outputs[Derived Column Output].Columns[LineTotal]" name="LineTotal">
+                      <properties>
+                        <property dataType="System.String" name="FriendlyExpression">(DT_NUMERIC,18,2)(Quantity * UnitPrice)</property>
+                      </properties>
+                    </outputColumn>
+                    <outputColumn refId="Package\DFT Load FactSales\DER Line Total.Outputs[Derived Column Output].Columns[LoadDate]" dataType="dbTimeStamp" lineageId="Package\DFT Load FactSales\DER Line Total.Outputs[Derived Column Output].Columns[LoadDate]" name="LoadDate">
+                      <properties>
+                        <property dataType="System.String" name="FriendlyExpression">@[User::LoadDate]</property>
+                      </properties>
+                    </outputColumn>
+                  </outputColumns>
+                </output>
+              </outputs>
+            </component>
+            <component refId="Package\DFT Load FactSales\CSPL Returns" componentClassID="Microsoft.ConditionalSplit" name="CSPL Returns">
+              <outputs>
+                <output refId="Package\DFT Load FactSales\CSPL Returns.Outputs[Returns]" exclusionGroup="1" name="Returns">
+                  <properties>
+                    <property dataType="System.Int32" name="EvaluationOrder">0</property>
+                    <property dataType="System.String" name="FriendlyExpression">Quantity &lt; 0</property>
+                    <property dataType="System.Boolean" name="IsDefaultOut">false</property>
+                  </properties>
+                </output>
+                <output refId="Package\DFT Load FactSales\CSPL Returns.Outputs[Zero Quantity]" exclusionGroup="1" name="Zero Quantity">
+                  <properties>
+                    <property dataType="System.Int32" name="EvaluationOrder">1</property>
+                    <property dataType="System.String" name="FriendlyExpression">Quantity == 0</property>
+                    <property dataType="System.Boolean" name="IsDefaultOut">false</property>
+                  </properties>
+                </output>
+                <output refId="Package\DFT Load FactSales\CSPL Returns.Outputs[Sales]" exclusionGroup="1" name="Sales">
+                  <properties>
+                    <property dataType="System.Int32" name="EvaluationOrder">-1</property>
+                    <property dataType="System.Boolean" name="IsDefaultOut">true</property>
+                  </properties>
+                </output>
+                <output refId="Package\DFT Load FactSales\CSPL Returns.Outputs[Conditional Split Error Output]" isErrorOut="true" name="Conditional Split Error Output" />
+              </outputs>
+            </component>
+            <component refId="Package\DFT Load FactSales\DST FactSales" componentClassID="Microsoft.OLEDBDestination" name="DST FactSales" version="4">
+              <properties>
+                <property dataType="System.String" name="OpenRowset">[dbo].[FactSales]</property>
+                <property dataType="System.Int32" name="AccessMode" typeConverter="AccessMode">3</property>
+              </properties>
+              <inputs>
+                <input refId="Package\DFT Load FactSales\DST FactSales.Inputs[OLE DB Destination Input]" name="OLE DB Destination Input">
+                  <inputColumns>
+                    <inputColumn cachedName="SalesOrderID" externalMetadataColumnId="Package\DFT Load FactSales\DST FactSales.Inputs[OLE DB Destination Input].ExternalColumns[SalesOrderID]" />
+                    <inputColumn cachedName="SalesOrderLine" externalMetadataColumnId="Package\DFT Load FactSales\DST FactSales.Inputs[OLE DB Destination Input].ExternalColumns[SalesOrderLine]" />
+                    <inputColumn cachedName="ProductID" externalMetadataColumnId="Package\DFT Load FactSales\DST FactSales.Inputs[OLE DB Destination Input].ExternalColumns[ProductKey]" />
+                    <inputColumn cachedName="CustomerID" externalMetadataColumnId="Package\DFT Load FactSales\DST FactSales.Inputs[OLE DB Destination Input].ExternalColumns[CustomerID]" />
+                    <inputColumn cachedName="OrderDate" externalMetadataColumnId="Package\DFT Load FactSales\DST FactSales.Inputs[OLE DB Destination Input].ExternalColumns[OrderDate]" />
+                    <inputColumn cachedName="Quantity" externalMetadataColumnId="Package\DFT Load FactSales\DST FactSales.Inputs[OLE DB Destination Input].ExternalColumns[Quantity]" />
+                    <inputColumn cachedName="ProductCategory" externalMetadataColumnId="Package\DFT Load FactSales\DST FactSales.Inputs[OLE DB Destination Input].ExternalColumns[Category]" />
+                    <inputColumn cachedName="LineTotal" externalMetadataColumnId="Package\DFT Load FactSales\DST FactSales.Inputs[OLE DB Destination Input].ExternalColumns[LineTotal]" />
+                    <inputColumn cachedName="LoadDate" externalMetadataColumnId="Package\DFT Load FactSales\DST FactSales.Inputs[OLE DB Destination Input].ExternalColumns[LoadDate]" />
+                  </inputColumns>
+                  <externalMetadataColumns isUsed="True">
+                    <externalMetadataColumn refId="Package\DFT Load FactSales\DST FactSales.Inputs[OLE DB Destination Input].ExternalColumns[SalesOrderID]" dataType="i4" name="SalesOrderID" />
+                    <externalMetadataColumn refId="Package\DFT Load FactSales\DST FactSales.Inputs[OLE DB Destination Input].ExternalColumns[SalesOrderLine]" dataType="i2" name="SalesOrderLine" />
+                    <externalMetadataColumn refId="Package\DFT Load FactSales\DST FactSales.Inputs[OLE DB Destination Input].ExternalColumns[ProductKey]" dataType="i4" name="ProductKey" />
+                    <externalMetadataColumn refId="Package\DFT Load FactSales\DST FactSales.Inputs[OLE DB Destination Input].ExternalColumns[CustomerID]" dataType="i4" name="CustomerID" />
+                    <externalMetadataColumn refId="Package\DFT Load FactSales\DST FactSales.Inputs[OLE DB Destination Input].ExternalColumns[OrderDate]" dataType="dbTimeStamp" name="OrderDate" />
+                    <externalMetadataColumn refId="Package\DFT Load FactSales\DST FactSales.Inputs[OLE DB Destination Input].ExternalColumns[Quantity]" dataType="i4" name="Quantity" />
+                    <externalMetadataColumn refId="Package\DFT Load FactSales\DST FactSales.Inputs[OLE DB Destination Input].ExternalColumns[Category]" dataType="wstr" length="50" name="Category" />
+                    <externalMetadataColumn refId="Package\DFT Load FactSales\DST FactSales.Inputs[OLE DB Destination Input].ExternalColumns[LineTotal]" dataType="numeric" precision="18" scale="2" name="LineTotal" />
+                    <externalMetadataColumn refId="Package\DFT Load FactSales\DST FactSales.Inputs[OLE DB Destination Input].ExternalColumns[LoadDate]" dataType="dbTimeStamp" name="LoadDate" />
+                  </externalMetadataColumns>
+                </input>
+              </inputs>
+            </component>
+            <component refId="Package\DFT Load FactSales\DST FactReturns" componentClassID="Microsoft.OLEDBDestination" name="DST FactReturns" version="4">
+              <properties>
+                <property dataType="System.String" name="OpenRowset">[dbo].[FactReturns]</property>
+              </properties>
+              <inputs>
+                <input refId="Package\DFT Load FactSales\DST FactReturns.Inputs[OLE DB Destination Input]" name="OLE DB Destination Input">
+                  <inputColumns>
+                    <inputColumn cachedName="SalesOrderID" externalMetadataColumnId="Package\DFT Load FactSales\DST FactReturns.Inputs[OLE DB Destination Input].ExternalColumns[SalesOrderID]" />
+                    <inputColumn cachedName="SalesOrderLine" externalMetadataColumnId="Package\DFT Load FactSales\DST FactReturns.Inputs[OLE DB Destination Input].ExternalColumns[SalesOrderLine]" />
+                    <inputColumn cachedName="ProductID" externalMetadataColumnId="Package\DFT Load FactSales\DST FactReturns.Inputs[OLE DB Destination Input].ExternalColumns[ProductKey]" />
+                    <inputColumn cachedName="Quantity" externalMetadataColumnId="Package\DFT Load FactSales\DST FactReturns.Inputs[OLE DB Destination Input].ExternalColumns[ReturnedQuantity]" />
+                    <inputColumn cachedName="LineTotal" externalMetadataColumnId="Package\DFT Load FactSales\DST FactReturns.Inputs[OLE DB Destination Input].ExternalColumns[RefundAmount]" />
+                  </inputColumns>
+                  <externalMetadataColumns isUsed="True">
+                    <externalMetadataColumn refId="Package\DFT Load FactSales\DST FactReturns.Inputs[OLE DB Destination Input].ExternalColumns[SalesOrderID]" dataType="i4" name="SalesOrderID" />
+                    <externalMetadataColumn refId="Package\DFT Load FactSales\DST FactReturns.Inputs[OLE DB Destination Input].ExternalColumns[SalesOrderLine]" dataType="i2" name="SalesOrderLine" />
+                    <externalMetadataColumn refId="Package\DFT Load FactSales\DST FactReturns.Inputs[OLE DB Destination Input].ExternalColumns[ProductKey]" dataType="i4" name="ProductKey" />
+                    <externalMetadataColumn refId="Package\DFT Load FactSales\DST FactReturns.Inputs[OLE DB Destination Input].ExternalColumns[ReturnedQuantity]" dataType="i4" name="ReturnedQuantity" />
+                    <externalMetadataColumn refId="Package\DFT Load FactSales\DST FactReturns.Inputs[OLE DB Destination Input].ExternalColumns[RefundAmount]" dataType="numeric" precision="18" scale="2" name="RefundAmount" />
+                  </externalMetadataColumns>
+                </input>
+              </inputs>
+            </component>
+          </components>
+          <paths>
+            <path refId="Package\DFT Load FactSales.Paths[Src]" endId="Package\DFT Load FactSales\UNI All Orders.Inputs[Union All Input 1]" name="OLE DB Source Output" startId="Package\DFT Load FactSales\SRC SalesOrderDetail.Outputs[OLE DB Source Output]" />
+            <path refId="Package\DFT Load FactSales.Paths[Archive]" endId="Package\DFT Load FactSales\UNI All Orders.Inputs[Union All Input 2]" name="OLE DB Source Output 1" startId="Package\DFT Load FactSales\SRC SalesOrderDetailArchive.Outputs[OLE DB Source Output]" />
+            <path refId="Package\DFT Load FactSales.Paths[Union All Output 1]" endId="Package\DFT Load FactSales\LKP DimProduct.Inputs[Lookup Input]" name="Union All Output 1" startId="Package\DFT Load FactSales\UNI All Orders.Outputs[Union All Output 1]" />
+            <path refId="Package\DFT Load FactSales.Paths[Lookup Match Output]" endId="Package\DFT Load FactSales\DER Line Total.Inputs[Derived Column Input]" name="Lookup Match Output" startId="Package\DFT Load FactSales\LKP DimProduct.Outputs[Lookup Match Output]" />
+            <path refId="Package\DFT Load FactSales.Paths[Derived Column Output]" endId="Package\DFT Load FactSales\CSPL Returns.Inputs[Conditional Split Input]" name="Derived Column Output" startId="Package\DFT Load FactSales\DER Line Total.Outputs[Derived Column Output]" />
+            <path refId="Package\DFT Load FactSales.Paths[Sales]" endId="Package\DFT Load FactSales\DST FactSales.Inputs[OLE DB Destination Input]" name="Sales" startId="Package\DFT Load FactSales\CSPL Returns.Outputs[Sales]" />
+            <path refId="Package\DFT Load FactSales.Paths[Returns]" endId="Package\DFT Load FactSales\DST FactReturns.Inputs[OLE DB Destination Input]" name="Returns" startId="Package\DFT Load FactSales\CSPL Returns.Outputs[Returns]" />
+          </paths>
+        </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\DFT Aggregate SalesByCategory" DTS:CreationName="Microsoft.Pipeline"
+      DTS:DTSID="{C0000001-0000-4000-8000-000000000005}" DTS:ExecutableType="Microsoft.Pipeline" DTS:ObjectName="DFT Aggregate SalesByCategory">
+      <DTS:ObjectData>
+        <pipeline version="1">
+          <components>
+            <component refId="Package\DFT Aggregate SalesByCategory\SRC FactSales" componentClassID="Microsoft.OLEDBSource" name="SRC FactSales">
+              <properties>
+                <property dataType="System.String" name="OpenRowset">[dbo].[FactSales]</property>
+                <property dataType="System.Int32" name="AccessMode">0</property>
+              </properties>
+              <connections>
+                <connection connectionManagerID="Package.ConnectionManagers[DWH]" name="OleDbConnection" />
+              </connections>
+              <outputs>
+                <output refId="Package\DFT Aggregate SalesByCategory\SRC FactSales.Outputs[OLE DB Source Output]" name="OLE DB Source Output">
+                  <outputColumns>
+                    <outputColumn dataType="wstr" length="50" name="Category" lineageId="Package\DFT Aggregate SalesByCategory\SRC FactSales.Outputs[OLE DB Source Output].Columns[Category]" />
+                    <outputColumn dataType="numeric" precision="18" scale="2" name="LineTotal" lineageId="Package\DFT Aggregate SalesByCategory\SRC FactSales.Outputs[OLE DB Source Output].Columns[LineTotal]" />
+                    <outputColumn dataType="i4" name="SalesOrderID" lineageId="Package\DFT Aggregate SalesByCategory\SRC FactSales.Outputs[OLE DB Source Output].Columns[SalesOrderID]" />
+                  </outputColumns>
+                </output>
+              </outputs>
+            </component>
+            <component refId="Package\DFT Aggregate SalesByCategory\AGG By Category" componentClassID="Microsoft.Aggregate" name="AGG By Category">
+              <inputs>
+                <input refId="Package\DFT Aggregate SalesByCategory\AGG By Category.Inputs[Aggregate Input 1]" name="Aggregate Input 1">
+                  <inputColumns>
+                    <inputColumn refId="Package\DFT Aggregate SalesByCategory\AGG By Category.Inputs[Aggregate Input 1].Columns[Category]" cachedName="Category" lineageId="Package\DFT Aggregate SalesByCategory\SRC FactSales.Outputs[OLE DB Source Output].Columns[Category]" />
+                    <inputColumn refId="Package\DFT Aggregate SalesByCategory\AGG By Category.Inputs[Aggregate Input 1].Columns[LineTotal]" cachedName="LineTotal" lineageId="Package\DFT Aggregate SalesByCategory\SRC FactSales.Outputs[OLE DB Source Output].Columns[LineTotal]" />
+                    <inputColumn refId="Package\DFT Aggregate SalesByCategory\AGG By Category.Inputs[Aggregate Input 1].Columns[SalesOrderID]" cachedName="SalesOrderID" lineageId="Package\DFT Aggregate SalesByCategory\SRC FactSales.Outputs[OLE DB Source Output].Columns[SalesOrderID]" />
+                  </inputColumns>
+                </input>
+              </inputs>
+              <outputs>
+                <output refId="Package\DFT Aggregate SalesByCategory\AGG By Category.Outputs[Aggregate Output 1]" name="Aggregate Output 1">
+                  <outputColumns>
+                    <outputColumn dataType="wstr" length="50" name="Category">
+                      <properties>
+                        <property name="AggregationType">0</property>
+                        <property name="AggregationColumnId">Package\DFT Aggregate SalesByCategory\AGG By Category.Inputs[Aggregate Input 1].Columns[Category]</property>
+                      </properties>
+                    </outputColumn>
+                    <outputColumn dataType="numeric" precision="18" scale="2" name="TotalSales">
+                      <properties>
+                        <property name="AggregationType">4</property>
+                        <property name="AggregationColumnId">Package\DFT Aggregate SalesByCategory\AGG By Category.Inputs[Aggregate Input 1].Columns[LineTotal]</property>
+                      </properties>
+                    </outputColumn>
+                    <outputColumn dataType="i8" name="OrderCount">
+                      <properties>
+                        <property name="AggregationType">3</property>
+                        <property name="AggregationColumnId">Package\DFT Aggregate SalesByCategory\AGG By Category.Inputs[Aggregate Input 1].Columns[SalesOrderID]</property>
+                      </properties>
+                    </outputColumn>
+                  </outputColumns>
+                </output>
+              </outputs>
+            </component>
+            <component refId="Package\DFT Aggregate SalesByCategory\DST AggSalesByCategory" componentClassID="Microsoft.OLEDBDestination" name="DST AggSalesByCategory">
+              <properties>
+                <property dataType="System.String" name="OpenRowset">[dbo].[AggSalesByCategory]</property>
+              </properties>
+              <inputs>
+                <input refId="Package\DFT Aggregate SalesByCategory\DST AggSalesByCategory.Inputs[OLE DB Destination Input]" name="OLE DB Destination Input">
+                  <inputColumns>
+                    <inputColumn cachedName="Category" externalMetadataColumnId="Package\DFT Aggregate SalesByCategory\DST AggSalesByCategory.Inputs[OLE DB Destination Input].ExternalColumns[Category]" />
+                    <inputColumn cachedName="TotalSales" externalMetadataColumnId="Package\DFT Aggregate SalesByCategory\DST AggSalesByCategory.Inputs[OLE DB Destination Input].ExternalColumns[TotalSales]" />
+                    <inputColumn cachedName="OrderCount" externalMetadataColumnId="Package\DFT Aggregate SalesByCategory\DST AggSalesByCategory.Inputs[OLE DB Destination Input].ExternalColumns[OrderCount]" />
+                  </inputColumns>
+                  <externalMetadataColumns isUsed="True">
+                    <externalMetadataColumn refId="Package\DFT Aggregate SalesByCategory\DST AggSalesByCategory.Inputs[OLE DB Destination Input].ExternalColumns[Category]" dataType="wstr" length="50" name="Category" />
+                    <externalMetadataColumn refId="Package\DFT Aggregate SalesByCategory\DST AggSalesByCategory.Inputs[OLE DB Destination Input].ExternalColumns[TotalSales]" dataType="numeric" precision="18" scale="2" name="TotalSales" />
+                    <externalMetadataColumn refId="Package\DFT Aggregate SalesByCategory\DST AggSalesByCategory.Inputs[OLE DB Destination Input].ExternalColumns[OrderCount]" dataType="i8" name="OrderCount" />
+                  </externalMetadataColumns>
+                </input>
+              </inputs>
+            </component>
+          </components>
+          <paths>
+            <path endId="Package\DFT Aggregate SalesByCategory\AGG By Category.Inputs[Aggregate Input 1]" name="OLE DB Source Output" startId="Package\DFT Aggregate SalesByCategory\SRC FactSales.Outputs[OLE DB Source Output]" />
+            <path endId="Package\DFT Aggregate SalesByCategory\DST AggSalesByCategory.Inputs[OLE DB Destination Input]" name="Aggregate Output 1" startId="Package\DFT Aggregate SalesByCategory\AGG By Category.Outputs[Aggregate Output 1]" />
+          </paths>
+        </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\SCR Notify Finance" DTS:CreationName="Microsoft.ScriptTask"
+      DTS:DTSID="{C0000001-0000-4000-8000-000000000006}" DTS:ExecutableType="Microsoft.ScriptTask" DTS:ObjectName="SCR Notify Finance">
+      <DTS:ObjectData>
+        <ScriptProject Name="ST_7f3a" VSTAMajorVersion="15" Language="CSharp" EntryPoint="Main" ReadOnlyVariables="User::RowsLoaded">
+          <ProjectItem Name="ScriptMain.cs" Encoding="UTF8"><![CDATA[public void Main() {
+  var rows = (int)Dts.Variables["User::RowsLoaded"].Value;
+  System.IO.File.WriteAllText(@"\\fileshare\finance\sales_loaded.flag", rows.ToString());
+  Dts.TaskResult = (int)ScriptResults.Success;
+}]]></ProjectItem>
+        </ScriptProject>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[Constraint 1]" DTS:CreationName="" DTS:From="Package\SQL Log Start" DTS:To="Package\SQL Truncate FactSales" DTS:ObjectName="Constraint 1" />
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[Constraint 2]" DTS:CreationName="" DTS:From="Package\SQL Truncate FactSales" DTS:To="Package\DFT Load DimProduct" DTS:ObjectName="Constraint 2" />
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[Constraint 3]" DTS:CreationName="" DTS:From="Package\DFT Load DimProduct" DTS:To="Package\DFT Load FactSales" DTS:ObjectName="Constraint 3" />
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[Constraint 4]" DTS:CreationName="" DTS:From="Package\DFT Load FactSales" DTS:To="Package\DFT Aggregate SalesByCategory" DTS:ObjectName="Constraint 4" />
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[Constraint 5]" DTS:CreationName="" DTS:From="Package\DFT Aggregate SalesByCategory" DTS:To="Package\SCR Notify Finance" DTS:ObjectName="Constraint 5" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler DTS:refId="Package.EventHandlers[OnError]" DTS:CreationName="OnError" DTS:EventName="OnError" DTS:ObjectName="OnError">
+      <DTS:Executables>
+        <DTS:Executable DTS:refId="Package.EventHandlers[OnError]\SEND Alert" DTS:CreationName="Microsoft.SendMailTask" DTS:ExecutableType="Microsoft.SendMailTask" DTS:ObjectName="SEND Alert" />
+      </DTS:Executables>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

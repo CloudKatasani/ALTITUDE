@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "sqlglot fallback converter detectors",
+  "x-altitude-globs": ["conversion/fallback_rules.yaml"],
+  "type": "object",
+  "required": ["generic", "rules"],
+  "additionalProperties": false,
+  "$defs": {
+    "severity": {"type": "string", "pattern": "^P[1-4]$"},
+    "code": {"type": "string", "pattern": "^ALT-(EWI|FDM|PRF)-[A-Z]{0,2}\\d{4}$"}
+  },
+  "properties": {
+    "last_verified": {"type": "string"},
+    "verified_by": {"type": "string"},
+    "generic": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "code", "severity", "message"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string"},
+          "code": {"$ref": "#/$defs/code"},
+          "severity": {"$ref": "#/$defs/severity"},
+          "message": {"type": "string"}
+        }
+      }
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "dialects", "code", "severity", "action", "pattern", "message"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^FB-[A-Z]{2,3}-\\d{2}$"},
+          "dialects": {"type": "array", "items": {"enum": ["teradata", "oracle", "tsql"]}, "minItems": 1},
+          "code": {"$ref": "#/$defs/code"},
+          "severity": {"$ref": "#/$defs/severity"},
+          "action": {"enum": ["flag", "keep", "comment_out"]},
+          "pattern": {"type": "string", "minLength": 1},
+          "message": {"type": "string"},
+          "known_issue": {"type": "string", "pattern": "^[A-Z]{2}-\\d{2}$"}
+        }
+      }
+    }
+  }
+}

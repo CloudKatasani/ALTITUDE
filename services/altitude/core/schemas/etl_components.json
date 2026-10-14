@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ETL tool component -> mapping-graph kind -> target mapping",
+  "x-altitude-globs": ["etl/components_*.yaml"],
+  "type": "object",
+  "required": ["id", "tool", "components", "data_types", "functions"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {"type": "string"},
+    "tool": {"enum": ["ssis", "informatica"]},
+    "last_verified": {"type": "string"},
+    "verified_by": {"type": "string"},
+    "components": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "class_ids", "kind", "target"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^(SSIS|INF)-[A-Z]{1,2}-[A-Z0-9]+$"},
+          "class_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+          "kind": {"enum": ["source", "project", "filter", "lookup", "aggregate", "join", "split", "union", "sort",
+                            "sequence", "passthrough", "target", "unsupported", "data_flow", "sql_task",
+                            "script_task", "container", "package_call", "notification", "file_task"]},
+          "target": {"type": "string"},
+          "known_issue": {"type": "string", "pattern": "^ETL-[A-Z]+-\\d{2}$"}
+        }
+      }
+    },
+    "data_types": {"type": "object", "additionalProperties": {"type": "string"}},
+    "casts": {"type": "object", "additionalProperties": {"type": "string"}},
+    "functions": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          {"type": "string"},
+          {"type": "object", "required": ["special"], "additionalProperties": false,
+           "properties": {"special": {"type": "string"}}}
+        ]
+      }
+    },
+    "keyword_values": {"type": "array", "items": {"type": "string"}},
+    "date_parts": {"type": "object", "additionalProperties": {"type": "string"}},
+    "join_types": {"type": "object", "additionalProperties": {"enum": ["inner", "left", "right", "full"]}}
+  }
+}

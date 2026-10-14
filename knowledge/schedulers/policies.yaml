@@ -1,0 +1,25 @@
+# Scheduler conversion policies (Section 11.2): retry and SLA defaults and target placement, as data.
+# Values here apply when the source scheduler definition does not specify them.
+id: scheduler-policies
+defaults:
+  retries: 2
+  retry_delay_minutes: 5
+  timeout_minutes: 240
+  suspend_after_failures: 3
+  timezone: UTC
+  start_date: "2026-01-01"
+snowflake:
+  database: OPS
+  schema: ORCHESTRATION
+  warehouse: TRANSFORM_WH
+  dbt_project: OPS.ORCHESTRATION.DWH_DBT
+  script_stage: "@OPS.ORCHESTRATION.SCRIPTS"
+  sla_alerts: true
+  alert_warehouse: OPS_WH
+  notification_integration: OPS_EMAIL_INT
+  default_alert_recipient: data-platform-oncall@example.com
+airflow:
+  conn_id: snowflake_default
+  owner: data-platform
+  catchup: false
+  max_active_runs: 1

@@ -1,0 +1,226 @@
+# SSIS (.dtsx) component -> mapping-graph kind -> Snowflake/dbt target (Section 11.1).
+id: etl-components-ssis
+tool: ssis
+last_verified: "2026-10-01"
+verified_by: practice-lead-etl
+components:
+  # ---------------------------------------------------------------- data flow
+  - id: SSIS-DF-OLEDBSRC
+    class_ids: [Microsoft.OLEDBSource, Microsoft.ADONETSource, Microsoft.ODBCSource, "{165A526D-D5DE-47FF-96A6-F8274C19826B}"]
+    kind: source
+    target: "dbt source + stg_ model"
+  - id: SSIS-DF-FILESRC
+    class_ids: [Microsoft.FlatFileSource, Microsoft.ExcelSource]
+    kind: source
+    target: "stage + COPY INTO landing table, then dbt source"
+    known_issue: ETL-GEN-02
+  - id: SSIS-DF-DERIVED
+    class_ids: [Microsoft.DerivedColumn, "{49928E82-9C4E-49F0-AABE-3812B82707EC}"]
+    kind: project
+    target: "column expressions in int_ model"
+  - id: SSIS-DF-DATACONVERT
+    class_ids: [Microsoft.DataConvert]
+    kind: project
+    target: "CAST in int_ model"
+  - id: SSIS-DF-LOOKUP
+    class_ids: [Microsoft.Lookup, "{671046B0-AA63-4C9F-90E4-C06E0B710CE3}"]
+    kind: lookup
+    target: "LEFT JOIN to deduplicated reference model"
+    known_issue: ETL-SSIS-04
+  - id: SSIS-DF-CSPLIT
+    class_ids: [Microsoft.ConditionalSplit, "{7F88F654-4E20-4D14-84F4-AF9C925D3087}"]
+    kind: split
+    target: "first-match WHERE predicates per output"
+    known_issue: ETL-SSIS-05
+  - id: SSIS-DF-MULTICAST
+    class_ids: [Microsoft.Multicast]
+    kind: passthrough
+    target: "shared upstream model referenced by several models"
+  - id: SSIS-DF-UNIONALL
+    class_ids: [Microsoft.UnionAll, Microsoft.Merge]
+    kind: union
+    target: "UNION ALL"
+  - id: SSIS-DF-MERGEJOIN
+    class_ids: [Microsoft.MergeJoin]
+    kind: join
+    target: "JOIN (sort inputs no longer required)"
+  - id: SSIS-DF-AGGREGATE
+    class_ids: [Microsoft.Aggregate]
+    kind: aggregate
+    target: "GROUP BY in agg_ / int_ model"
+  - id: SSIS-DF-SORT
+    class_ids: [Microsoft.Sort]
+    kind: sort
+    target: "removed (ordering is not a table property); DISTINCT when EliminateDuplicates"
+  - id: SSIS-DF-ROWCOUNT
+    class_ids: [Microsoft.RowCount]
+    kind: passthrough
+    target: "removed; row counts come from query history / dbt run results"
+  - id: SSIS-DF-DEST
+    class_ids: [Microsoft.OLEDBDestination, Microsoft.ADONETDestination, Microsoft.ODBCDestination, Microsoft.SQLServerDestination, "{4ADA7EAA-136C-4215-8098-D7A7C27FC0D1}"]
+    kind: target
+    target: "dim_/fct_/agg_ model"
+  - id: SSIS-DF-FILEDEST
+    class_ids: [Microsoft.FlatFileDestination, Microsoft.ExcelDestination]
+    kind: target
+    target: "COPY INTO @stage (unload) after the model"
+    known_issue: ETL-GEN-02
+  - id: SSIS-DF-SCD
+    class_ids: [Microsoft.SCD]
+    kind: unsupported
+    target: "dbt snapshot (re-engineer)"
+    known_issue: ETL-SSIS-06
+  - id: SSIS-DF-SCRIPT
+    class_ids: [Microsoft.ScriptComponentHost]
+    kind: unsupported
+    target: "re-engineer (Snowpark / SQL); never convert C# blindly"
+    known_issue: ETL-SSIS-01
+  - id: SSIS-DF-OLEDBCMD
+    class_ids: [Microsoft.OLEDBCommand]
+    kind: unsupported
+    target: "set-based MERGE in an incremental model"
+    known_issue: ETL-GEN-01
+  - id: SSIS-DF-PIVOT
+    class_ids: [Microsoft.Pivot, Microsoft.UnPivot, Microsoft.FuzzyLookup, Microsoft.FuzzyGrouping, Microsoft.TermExtraction]
+    kind: unsupported
+    target: "re-engineer (PIVOT/UNPIVOT or Cortex functions)"
+  # ---------------------------------------------------------------- control flow
+  - id: SSIS-CF-PIPELINE
+    class_ids: [Microsoft.Pipeline, SSIS.Pipeline.3, SSIS.Pipeline.2]
+    kind: data_flow
+    target: "dbt models (one job per data flow)"
+  - id: SSIS-CF-SQLTASK
+    class_ids: [Microsoft.ExecuteSQLTask, Microsoft.SqlServer.Dts.Tasks.ExecuteSQLTask.ExecuteSQLTask]
+    kind: sql_task
+    target: "dbt macro (run-operation) or pre/post-hook; TRUNCATE before full reload is retired"
+  - id: SSIS-CF-SCRIPT
+    class_ids: [Microsoft.ScriptTask, Microsoft.SqlServer.Dts.Tasks.ScriptTask.ScriptTask]
+    kind: script_task
+    target: "re-engineer (Snowpark Python / external function)"
+    known_issue: ETL-SSIS-01
+  - id: SSIS-CF-CONTAINER
+    class_ids: ["STOCK:SEQUENCE", "STOCK:FORLOOP", "STOCK:FOREACHLOOP"]
+    kind: container
+    target: "orchestrator task group; FOREACH loops become set-based models or Snowflake Scripting loops"
+  - id: SSIS-CF-EXECPACKAGE
+    class_ids: [Microsoft.ExecutePackageTask]
+    kind: package_call
+    target: "task-graph dependency"
+  - id: SSIS-CF-SENDMAIL
+    class_ids: [Microsoft.SendMailTask]
+    kind: notification
+    target: "Snowflake notification integration / orchestrator alert"
+  - id: SSIS-CF-FILES
+    class_ids: [Microsoft.FileSystemTask, Microsoft.FtpTask]
+    kind: file_task
+    target: "stages + external access integration"
+    known_issue: ETL-GEN-02
+# SSIS pipeline dataType codes -> canonical (Snowflake) types; {length}/{precision}/{scale} filled from metadata.
+data_types:
+  i1: SMALLINT
+  i2: SMALLINT
+  i4: INTEGER
+  i8: BIGINT
+  ui1: SMALLINT
+  ui2: INTEGER
+  ui4: BIGINT
+  ui8: DECIMAL(20,0)
+  r4: FLOAT
+  r8: DOUBLE
+  cy: DECIMAL(19,4)
+  numeric: DECIMAL({precision},{scale})
+  decimal: DECIMAL(38,{scale})
+  wstr: VARCHAR({length})
+  str: VARCHAR({length})
+  ntext: VARCHAR
+  text: VARCHAR
+  dbDate: DATE
+  date: TIMESTAMP
+  dbTime: TIME
+  dbTimeStamp: TIMESTAMP
+  dbTimeStamp2: TIMESTAMP
+  dbTimeStampOffset: TIMESTAMP_TZ
+  bool: BOOLEAN
+  guid: VARCHAR(36)
+  bytes: BINARY
+  image: BINARY
+# Expression-language casts: (DT_WSTR,50)expr -> CAST(expr AS VARCHAR(50)); {0}.. are the cast's parameters.
+casts:
+  DT_WSTR: VARCHAR({0})
+  DT_STR: VARCHAR({0})
+  DT_TEXT: VARCHAR
+  DT_NTEXT: VARCHAR
+  DT_I1: SMALLINT
+  DT_I2: SMALLINT
+  DT_I4: INTEGER
+  DT_I8: BIGINT
+  DT_UI4: BIGINT
+  DT_NUMERIC: DECIMAL({0},{1})
+  DT_DECIMAL: DECIMAL(38,{0})
+  DT_CY: DECIMAL(19,4)
+  DT_R4: FLOAT
+  DT_R8: DOUBLE
+  DT_BOOL: BOOLEAN
+  DT_DBDATE: DATE
+  DT_DATE: TIMESTAMP
+  DT_DBTIMESTAMP: TIMESTAMP
+  DT_DBTIMESTAMP2: TIMESTAMP
+  DT_GUID: VARCHAR(36)
+# Expression functions -> Snowflake SQL templates ({0}, {1}, ... are translated arguments) or a named special form.
+functions:
+  UPPER: "UPPER({0})"
+  LOWER: "LOWER({0})"
+  TRIM: "TRIM({0})"
+  LTRIM: "LTRIM({0})"
+  RTRIM: "RTRIM({0})"
+  LEN: "LENGTH({0})"
+  SUBSTRING: "SUBSTR({0}, {1}, {2})"
+  LEFT: "LEFT({0}, {1})"
+  RIGHT: "RIGHT({0}, {1})"
+  REPLACE: "REPLACE({0}, {1}, {2})"
+  REVERSE: "REVERSE({0})"
+  FINDSTRING: "POSITION({1} IN {0})"
+  ISNULL: "({0} IS NULL)"
+  REPLACENULL: "COALESCE({0}, {1})"
+  GETDATE: "CURRENT_TIMESTAMP()"
+  GETUTCDATE: "SYSDATE()"
+  ABS: "ABS({0})"
+  ROUND: "ROUND({0}, {1})"
+  FLOOR: "FLOOR({0})"
+  CEILING: "CEIL({0})"
+  POWER: "POWER({0}, {1})"
+  SQRT: "SQRT({0})"
+  SIGN: "SIGN({0})"
+  YEAR: "YEAR({0})"
+  MONTH: "MONTH({0})"
+  DAY: "DAY({0})"
+  DATEADD: {special: dateadd}
+  DATEDIFF: {special: datediff}
+  DATEPART: {special: datepart}
+  "NULL": {special: typed_null}
+date_parts:
+  yy: year
+  yyyy: year
+  year: year
+  qq: quarter
+  q: quarter
+  quarter: quarter
+  mm: month
+  m: month
+  month: month
+  dd: day
+  d: day
+  day: day
+  dy: dayofyear
+  dw: dayofweek
+  wk: week
+  ww: week
+  week: week
+  hh: hour
+  hour: hour
+  mi: minute
+  n: minute
+  minute: minute
+  ss: second
+  s: second
+  second: second

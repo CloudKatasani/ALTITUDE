@@ -1,0 +1,168 @@
+# AI remediation agent rules: issue code / pattern -> fix template (Section 16 "Convert", M5).
+# A rule fires on an open issue whose code matches `codes` and whose region (line or statement around the
+# issue marker) matches `when` and does not match `unless`. Fix types:
+#   drop_lines   remove region lines matching `pattern`
+#   drop_region  replace the whole region with a one-line explanatory comment
+#   regex        apply `steps` (pattern -> replacement, python re syntax) in order
+#   ack          no code change; the marker is cleared and the change still goes to review
+# Confidence is a rubric reference (tier); below rubric.ai.review_confidence_min the change is queued for review.
+# `tests` become generated unit tests in the PR pack: `absent`/`present` regexes over the remediated region
+# and `parses: snowflake` (sqlglot parse of the region).
+last_verified: "2026-10-01"
+verified_by: practice-lead-conversion
+rules:
+  - id: RR-TD-SESSION
+    codes: ['ALT-EWI-TD0001']
+    scope: statement
+    when: '^\s*--\s*\.(LOGON|LOGOFF|QUIT|EXIT|SET\s+\w+|SESSIONS|WIDTH|TITLEDASHES|RETRY)\b'
+    fix:
+      type: drop_lines
+      pattern: '^\s*--\s*\.(LOGON|LOGOFF|QUIT|EXIT|SET\s+\w+|SESSIONS|WIDTH|TITLEDASHES|RETRY)\b.*$'
+    confidence_ref: rubric.conversion.remediation_confidence.deterministic
+    rationale: "BTEQ session commands only configure the client session; Snowflake connections are configured by the orchestrator or Snowflake CLI profile, so the commands are dropped."
+    prompt: conversion.remediate.rule
+    tests:
+      absent: ['^\s*-*\s*\.(LOGON|LOGOFF)\b']
+  - id: RR-TD-ERRORCHECK
+    codes: ['ALT-EWI-TD0002']
+    scope: statement
+    when: '\.IF\s+ERRORCODE\s*(<>|!=|>)\s*0\s+THEN\s+\.(QUIT|EXIT)\b'
+    fix:
+      type: drop_lines
+      pattern: '^\s*--\s*\.IF\s+ERRORCODE\s*(<>|!=|>)\s*0\s+THEN\s+\.(QUIT|EXIT)\b.*$'
+    confidence_ref: rubric.conversion.remediation_confidence.heuristic
+    rationale: "'.IF ERRORCODE <> 0 THEN .QUIT' aborts on failure; Snowflake Scripting blocks and the Snowflake CLI (exit-on-error) abort on the first failing statement, so the check is redundant. Assumes the orchestrator only inspects a non-zero exit code - confirm the exit-code contract."
+    prompt: conversion.remediate.rule
+    tests:
+      absent: ['\.IF\s+ERRORCODE']
+  - id: RR-TD-ACTIVITYCOUNT
+    codes: ['ALT-EWI-TD0004']
+    scope: statement
+    when: '\bACTIVITYCOUNT\b'
+    fix:
+      type: regex
+      steps:
+        - {pattern: '\bACTIVITYCOUNT\b', replacement: 'SQLROWCOUNT'}
+    confidence_ref: rubric.conversion.remediation_confidence.pattern
+    rationale: "ACTIVITYCOUNT (rows affected by the previous request) maps to the Snowflake Scripting global SQLROWCOUNT."
+    prompt: conversion.remediate.rule
+    tests:
+      absent: ['\bACTIVITYCOUNT\b']
+      present: ['\bSQLROWCOUNT\b']
+  - id: RR-TD-COLLECT-STATS
+    codes: ['ALT-EWI-TD0006']
+    scope: statement
+    when: '\bCOLLECT\s+STAT'
+    fix:
+      type: drop_region
+      comment: "-- removed: COLLECT STATISTICS is not applicable in Snowflake (statistics are maintained automatically)"
+    confidence_ref: rubric.conversion.remediation_confidence.deterministic
+    rationale: "Snowflake maintains micro-partition metadata automatically; COLLECT STATISTICS has no equivalent and is removed."
+    prompt: conversion.remediate.rule
+    tests:
+      absent: ['^\s*COLLECT\s+STAT']
+  - id: RR-TD-UPDATE-FROM
+    codes: ['ALT-EWI-TD0008']
+    scope: statement
+    when: 'UPD(?:ATE)?\s+\w+\s+FROM\s+[\w.]+(?:\s+(?:AS\s+)?\w+)?\s+SET\s+'
+    fix:
+      type: regex
+      steps:
+        - pattern: '(?is)UPD(?:ATE)?\s+(\w+)\s+FROM\s+([\w.]+(?:\s+(?:AS\s+)?(?!SET\b)\w+)?)\s+SET\s+(.*?)\s+WHERE\s+(.*?)\s*;'
+          replacement: 'UPDATE \1 SET \3 FROM \2 WHERE \4;'
+    confidence_ref: rubric.conversion.remediation_confidence.heuristic
+    rationale: "Teradata 'UPDATE t FROM s SET ... WHERE' is rewritten to Snowflake 'UPDATE t SET ... FROM s WHERE'. If the source can match a target row more than once the result is nondeterministic (TD-08): pre-aggregate or dedupe the source."
+    prompt: conversion.remediate.rule
+    tests:
+      absent: ['UPD(?:ATE)?\s+\w+\s+FROM']
+      parses: snowflake
+  - id: RR-MS-ROWCOUNT
+    codes: ['ALT-EWI-MS0001']
+    scope: statement
+    when: '@@ROWCOUNT\b'
+    fix:
+      type: regex
+      steps:
+        - {pattern: '@@ROWCOUNT\b', replacement: 'SQLROWCOUNT'}
+    confidence_ref: rubric.conversion.remediation_confidence.pattern
+    rationale: "@@ROWCOUNT (rows affected by the last statement) maps to the Snowflake Scripting global SQLROWCOUNT."
+    prompt: conversion.remediate.rule
+    tests:
+      absent: ['@@ROWCOUNT']
+      present: ['\bSQLROWCOUNT\b']
+  - id: RR-MS-PROC-WRAP
+    codes: ['ALT-EWI-MS0007']
+    scope: statement
+    when: 'CREATE\s+(?:OR\s+ALTER\s+)?PROC(?:EDURE)?\s+[\w.\[\]]+\s+AS\s+BEGIN\b'
+    unless: '(@\w+\s+(INT|VARCHAR|NVARCHAR|DATE|DATETIME|DECIMAL|BIT)\b|\bOUTPUT\b)'
+    fix:
+      type: regex
+      steps:
+        - {pattern: '\[(\w+)\]', replacement: '\1'}
+        - {pattern: '(?im)^\s*SET\s+NOCOUNT\s+ON\s*;?[ \t]*\n', replacement: ''}
+        - {pattern: '(?i)\bGETDATE\(\)', replacement: 'CURRENT_TIMESTAMP()'}
+        - pattern: '(?is)CREATE\s+(?:OR\s+ALTER\s+)?PROC(?:EDURE)?\s+([\w.]+)\s+AS\s+BEGIN\b'
+          replacement: "CREATE OR REPLACE PROCEDURE \\1()\nRETURNS VARCHAR\nLANGUAGE SQL\nEXECUTE AS CALLER\nAS\n$$\nBEGIN"
+        - pattern: '(?is)\bEND\s*;?\s*\Z'
+          replacement: "    RETURN 'OK';\nEND;\n$$;\n"
+    confidence_ref: rubric.conversion.remediation_confidence.heuristic
+    rationale: "Parameterless T-SQL procedure wrapped as a Snowflake Scripting procedure (RETURNS VARCHAR, LANGUAGE SQL, EXECUTE AS CALLER); SET NOCOUNT dropped, GETDATE() -> CURRENT_TIMESTAMP(). Caller rights and the return contract are assumptions to confirm."
+    prompt: conversion.remediate.rule
+    tests:
+      absent: ['\bSET\s+NOCOUNT\b', '\bGETDATE\(\)', 'CREATE\s+PROC\b']
+      present: ['LANGUAGE\s+SQL', '\$\$']
+  - id: RR-MS-NOLOCK-ACK
+    codes: ['ALT-FDM-MS0005']
+    scope: statement
+    fix:
+      type: ack
+    confidence_ref: rubric.conversion.remediation_confidence.deterministic
+    rationale: "The transpiler dropped the NOLOCK hint; Snowflake reads are snapshot-consistent so no replacement is needed (MS-03)."
+    prompt: conversion.remediate.rule
+    tests:
+      absent: ['\bNOLOCK\b']
+  - id: RR-OR-ROWNUM-LIMIT
+    codes: ['ALT-EWI-OR0004']
+    scope: statement
+    when: '\bWHERE\s+ROWNUM\s*<=?\s*\d+\s*;'
+    unless: '\bORDER\s+BY\b'
+    fix:
+      type: regex
+      steps:
+        - {pattern: '(?i)\s+WHERE\s+ROWNUM\s*<=\s*(\d+)\s*;', replacement: ' LIMIT \1;'}
+    confidence_ref: rubric.conversion.remediation_confidence.pattern
+    rationale: "'WHERE ROWNUM <= n' as the only predicate without ORDER BY is an arbitrary first-n sample, equivalent to LIMIT n."
+    prompt: conversion.remediate.rule
+    tests:
+      absent: ['\bROWNUM\b']
+      parses: snowflake
+  - id: RR-SC-0073-REVIEW
+    codes: ['SSC-EWI-0073']
+    scope: statement
+    fix:
+      type: ack
+    confidence_ref: rubric.conversion.remediation_confidence.heuristic
+    rationale: "SnowConvert marked the statement for functional-equivalence review; no code change is proposed, the marker is cleared only after a named reviewer confirms equivalence."
+    prompt: conversion.remediate.rule
+    tests:
+      absent: ['SSC-EWI-0073']
+  - id: RR-SC-FDM-ACK
+    codes: ['SSC-FDM-\w+']
+    scope: statement
+    fix:
+      type: ack
+    confidence_ref: rubric.conversion.remediation_confidence.heuristic
+    rationale: "Functional-difference note from SnowConvert acknowledged; the difference is carried to validation as a drift case rather than changed in code."
+    prompt: conversion.remediate.rule
+    tests:
+      absent: ['SSC-FDM-']
+  - id: RR-SC-PRF-ACK
+    codes: ['SSC-PRF-\w+']
+    scope: statement
+    fix:
+      type: ack
+    confidence_ref: rubric.conversion.remediation_confidence.pattern
+    rationale: "Performance review note acknowledged; measured during performance testing instead of pre-emptive tuning."
+    prompt: conversion.remediate.rule
+    tests:
+      absent: ['SSC-PRF-']

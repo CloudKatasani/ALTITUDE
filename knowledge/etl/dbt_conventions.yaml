@@ -1,0 +1,37 @@
+# dbt generation conventions (Section 11.1): stg_ / int_ / dim_ / fct_ / agg_, tests and materialisations.
+id: etl-dbt-conventions
+project:
+  profile: snowflake
+  config_version: 2
+  model_schema: analytics
+layers:
+  staging: {prefix: stg_, folder: staging, materialized: view}
+  intermediate: {prefix: int_, folder: intermediate, materialized: view}
+  marts: {folder: marts, materialized: table}
+# Target table name -> mart prefix. First match wins; the pattern is matched against the lower-cased target name
+# and the 'strip' group is removed from the model name (DIM_CUSTOMER -> dim_customer, FACT_SALES -> fct_sales).
+target_prefixes:
+  - {pattern: '^(dim_|d_)', prefix: dim_}
+  - {pattern: '^(fact_|fct_|f_)', prefix: fct_}
+  - {pattern: '^(agg_|summary_|sum_)', prefix: agg_}
+  - {pattern: '^(stg_|stage_|staging_)', prefix: int_}
+# When the name carries no prefix: aggregate in the graph -> agg_, otherwise fact if it holds foreign keys, else dim_.
+fallback_prefix:
+  aggregate: agg_
+  with_foreign_keys: fct_
+  default: dim_
+# Key inference when the tool export carries no key metadata (SSIS): column name patterns per table.
+# {table} is the singular lower-case table name without schema/prefix (customers -> customer).
+key_inference:
+  primary: ['^{table}_?id$', '^{table}_?key$', '^id$']
+  foreign: ['^(?P<table>[a-z][a-z0-9]*)_?(id|key)$']
+  table_prefixes_to_strip: [dim_, fact_, fct_, stg_, src_, tbl_]
+tests:
+  primary_key: [unique, not_null]
+  foreign_key: [relationships]
+  derived_literal_values: [accepted_values]
+reserved_words: [all, alter, and, any, as, between, by, case, cast, check, column, connect, create, current, delete,
+  distinct, drop, else, exists, "false", following, for, from, full, grant, group, having, ilike, in, increment, inner,
+  insert, intersect, into, is, join, lateral, left, like, localtime, minus, natural, not, "null", of, "on", or, order,
+  qualify, regexp, revoke, right, rlike, row, rows, sample, select, set, some, start, table, tablesample, then, to,
+  trigger, "true", try_cast, union, unique, update, using, values, when, whenever, where, with]
