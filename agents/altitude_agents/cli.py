@@ -122,6 +122,18 @@ def cmd_execute(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_guard(args: argparse.Namespace) -> int:
+    gw = _gateway(args)
+    tel = _telemetry(args)
+    executor = _executor(args, tel)
+    if executor is None:
+        raise SystemExit("choose an executor: --simulate or --live")
+    for r in gw.check_all_guards(tel, executor):
+        verdict = "ROLLED BACK" if r.regressed else "ok"
+        print(f"{r.action_id} {r.metric}: {r.baseline:.3f} -> {r.observed:.3f} (tolerance {r.tolerance}) {verdict}")
+    return 0
+
+
 def cmd_log(args: argparse.Namespace) -> int:
     from .actions import ActionLog
 
@@ -198,6 +210,15 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     e.add_argument("--live", action="store_true")
     e.add_argument("--dry-run", action="store_true")
     e.set_defaults(func=cmd_execute)
+
+    gd = sub.add_parser("guard", help="re-check guard metrics of executed L3 actions; auto-rollback on regression")
+    gd.add_argument("--snapshot", required=True, help="telemetry covering the post-change observation window")
+    gd.add_argument("--store", default="altitude.duckdb")
+    gd.add_argument("--tenant", default="default")
+    gd.add_argument("--simulate", action="store_true")
+    gd.add_argument("--live", action="store_true")
+    gd.add_argument("--dry-run", action="store_true")
+    gd.set_defaults(func=cmd_guard)
 
     lg = sub.add_parser("log", help="show the immutable history of one action")
     lg.add_argument("action_id")

@@ -410,6 +410,18 @@ class ActionGateway:
                          details={"baseline": result.baseline, "observed": observed, "tolerance": tolerance})
         return result
 
+    def check_all_guards(self, telemetry_after: Telemetry, executor: Executor) -> list[GuardResult]:
+        """Re-check every executed, guarded L3 action of this tenant (run after the observation window)."""
+        rows = self.store.query(
+            "SELECT DISTINCT a.action_id FROM agent_action a JOIN agent_run r ON a.run_id = r.run_id "
+            "WHERE r.tenant_id = ? AND a.autonomy = 'L3' AND a.status = 'executed' ORDER BY 1", [self.policy.tenant_id])
+        results = []
+        for r in rows:
+            res = self.check_guard(r["action_id"], telemetry_after, executor)
+            if res is not None:
+                results.append(res)
+        return results
+
     def rollback(self, action_id: str, executor: Executor, actor: str, reason: str,
                  details: dict | None = None) -> ActionRecord:
         latest = self.log.latest(action_id)

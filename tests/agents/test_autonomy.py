@@ -301,6 +301,41 @@ def test_auto_rollback_when_guard_metric_regresses(seeded_tables, seeded_tel):
     assert store.query("SELECT * FROM audit_event WHERE action='agent_action.rolled_back'")
 
 
+def test_guard_sweep_after_an_agent_run(seeded_tables, seeded_tel):
+    store = Store()
+    runner = _runner(store)
+    sim = SimulatedSnowflake(seeded_tel, clock=clock)
+    runner.run("AG-WAREHOUSE-RIGHTSIZER", seeded_tel, executor=sim, require_promoted=False)
+    after = Telemetry.from_tables(_with_queueing(seeded_tables, "WH_BI_PROD", 0.9))
+    results = {r.action_id: r for r in runner.gateway.check_all_guards(after, sim)}
+    assert len(results) == 3 and sum(r.regressed for r in results.values()) == 1
+    assert sim.warehouse("WH_BI_PROD")["AUTO_SUSPEND"] == 900 and sim.warehouse("WH_DEV")["AUTO_SUSPEND"] == 60
+    assert runner.gateway.check_all_guards(after, sim) and len(sim.executed) == 4   # rolled-back action not re-checked
+
+
+def test_low_confidence_action_waits_for_review_even_when_approved(seeded_tel):
+    store = Store()
+    runner = _runner(store)
+    sim = SimulatedSnowflake(seeded_tel, clock=clock)
+    from altitude_agents.agents.pipeline_triage import PipelineTriage
+    report = runner.run("AG-PIPELINE-TRIAGE", seeded_tel, agent=PipelineTriage(signatures=[]), require_promoted=False)
+    finding = report.findings[0]
+    assert finding["needs_review"]
+    draft = report.actions[0]
+    assert draft.autonomy == "L2" and draft.payload["needs_review"]
+    # pretend a human approved a (hypothetically executable) rerun drafted from this low-confidence finding
+    rerun = runner.gateway.propose(report.run_id, runner.agents["AG-PIPELINE-TRIAGE"], ProposedAction(
+        "task.rerun", "EDW.SALES.LOAD_ORDERS_TASK", {}, "L3", 0.4, "unclassified"), needs_review=True,
+        review_subject=("agent_finding", f"AG-PIPELINE-TRIAGE:{finding['kind']}:{finding['subject']}"))
+    assert rerun.autonomy == "L2"
+    runner.gateway.approve(rerun.action_id, "pat", approver_role="pipeline-owner")
+    with pytest.raises(ApprovalRequired, match="review"):
+        runner.gateway.execute(rerun.action_id, sim)
+    item = runner.review.open_items("agent_finding")[0]
+    runner.review.decide(item["item_id"], "lead-engineer", "approved")
+    assert runner.gateway.execute(rerun.action_id, sim).status == "executed"
+
+
 def test_guard_ok_keeps_change(seeded_tables, seeded_tel):
     store = Store()
     gw = _gateway(store)
