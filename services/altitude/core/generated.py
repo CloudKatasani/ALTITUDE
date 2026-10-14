@@ -33,10 +33,14 @@ _COMMENT = {
 
 # Modules whose ``generate`` submodule contributes to ``generated/``.
 GENERATOR_MODULES = [
+    "altitude.knowledge_publish.generate",
+    "altitude.validation.generate",
     "altitude.diagnostics.generate",
     "altitude.observability.generate",
     "altitude.foundation.generate",
-    "altitude.knowledge_publish.generate",
+    "altitude.airready.generate",
+    "altitude_agents.generate",
+    "altitude.etl.generate",
 ]
 
 
