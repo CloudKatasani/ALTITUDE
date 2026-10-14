@@ -1,0 +1,19 @@
+# Package O runbook (Section 7.6) — referenced by knowledge/observability/alerts.yaml
+id: RB-AI-CORTEX-SPIKE
+title: Cortex spend spike
+alert_classes:
+- cortex_spend_spike
+owner_role: AI_LEAD
+autonomy: L1
+linked_kpis:
+- KPI-AI-001
+- KPI-AI-003
+- KPI-AI-004
+linked_checks:
+- DX-AI-02
+steps:
+- action: Break the spike down by function, agent and model (KPI-AI-001, KPI-AI-003).
+- action: Check whether the spend came from governed agents or direct personal use (KPI-AI-004).
+- action: Apply Cortex budget and agent-role controls if usage is ungoverned.
+escalation: FinOps lead when the spike exceeds the Cortex budget.
+verification: Daily Cortex credits back within the forecast band.

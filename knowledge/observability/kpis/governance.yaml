@@ -1,0 +1,257 @@
+# KPI catalogue — Governance & Data Quality (Section 7.4).
+version: 1.0.0
+kpis:
+  - id: KPI-GOV-001
+    name: Tag coverage
+    domain: governance
+    tier: core
+    status: implemented
+    definition: Share of tables carrying at least one object-level tag, per snapshot day.
+    unit: ratio
+    grain: [account, day]
+    dimension: none
+    aggregation: latest
+    direction: higher_is_better
+    sources: [TABLES, TAG_REFERENCES]
+    freshness_sla_ref: rubric.obs.freshness.governance
+    target_ref: rubric.obs.kpi_targets.tag_coverage_min
+    owner_role: DATA_GOVERNANCE_LEAD
+    waf_pillar: security_governance
+    linked_checks: [DX-COST-07, DX-GOV-01]
+    synonyms: [tag coverage, tagged tables, tagging, classification coverage]
+    measures: [TABLES, TAGGED]
+    sql: >-
+      SELECT t.ACCOUNT_NAME, t.SNAPSHOT_DATE AS PERIOD, '' AS DIMENSION,
+             avg(CASE WHEN g.OBJECT_NAME IS NOT NULL THEN 1.0 ELSE 0.0 END) AS VALUE, count(*) AS TABLES,
+             count(g.OBJECT_NAME) AS TAGGED
+      FROM CURATED.SNAP_TABLES t
+      LEFT JOIN (SELECT DISTINCT ACCOUNT_NAME, SNAPSHOT_DATE, OBJECT_DATABASE, OBJECT_SCHEMA, OBJECT_NAME
+                 FROM CURATED.SNAP_TAG_REFERENCES WHERE DOMAIN = 'TABLE') g
+        ON g.ACCOUNT_NAME = t.ACCOUNT_NAME AND g.SNAPSHOT_DATE = t.SNAPSHOT_DATE AND g.OBJECT_DATABASE = t.TABLE_CATALOG
+       AND g.OBJECT_SCHEMA = t.TABLE_SCHEMA AND g.OBJECT_NAME = t.TABLE_NAME
+      GROUP BY 1, 2
+
+  - id: KPI-GOV-002
+    name: Owner coverage on Tier-1 objects
+    domain: governance
+    tier: core
+    status: implemented
+    definition: Share of Tier-1 tables (TIER tag = tier1) carrying the owner tag, per snapshot day.
+    unit: ratio
+    grain: [account, day]
+    dimension: none
+    aggregation: latest
+    direction: higher_is_better
+    sources: [TABLES, TAG_REFERENCES, CLIENT_INPUTS]
+    freshness_sla_ref: rubric.obs.freshness.governance
+    target_ref: rubric.obs.kpi_targets.owner_coverage_min
+    owner_role: DATA_GOVERNANCE_LEAD
+    waf_pillar: security_governance
+    linked_checks: [DX-GOV-01]
+    synonyms: [owner coverage, ownership, data owner, tier 1 owners, stewardship]
+    measures: [TIER1_TABLES, OWNED]
+    sql: >-
+      WITH tags AS (SELECT ACCOUNT_NAME, SNAPSHOT_DATE, OBJECT_DATABASE || '.' || OBJECT_SCHEMA || '.' || OBJECT_NAME AS FQ,
+                           TAG_NAME, TAG_VALUE FROM CURATED.SNAP_TAG_REFERENCES WHERE DOMAIN = 'TABLE'),
+      tier1 AS (SELECT DISTINCT ACCOUNT_NAME, SNAPSHOT_DATE, FQ FROM tags WHERE TAG_NAME = 'TIER' AND TAG_VALUE = 'tier1'),
+      owned AS (SELECT DISTINCT t.ACCOUNT_NAME, t.SNAPSHOT_DATE, t.FQ FROM tags t
+                LEFT JOIN CURATED.DIM_ACCOUNT a ON a.ACCOUNT_NAME = t.ACCOUNT_NAME
+                WHERE t.TAG_NAME = coalesce(a.OWNER_TAG, 'DATA_OWNER'))
+      SELECT tier1.ACCOUNT_NAME, tier1.SNAPSHOT_DATE AS PERIOD, '' AS DIMENSION,
+             avg(CASE WHEN owned.FQ IS NOT NULL THEN 1.0 ELSE 0.0 END) AS VALUE, count(*) AS TIER1_TABLES,
+             count(owned.FQ) AS OWNED
+      FROM tier1 LEFT JOIN owned ON owned.ACCOUNT_NAME = tier1.ACCOUNT_NAME AND owned.SNAPSHOT_DATE = tier1.SNAPSHOT_DATE
+       AND owned.FQ = tier1.FQ
+      GROUP BY 1, 2
+
+  - id: KPI-GOV-003
+    name: Masking coverage on classified columns
+    domain: governance
+    tier: extended
+    status: implemented
+    definition: Share of PII-tagged columns with an active masking policy, per snapshot day.
+    unit: ratio
+    grain: [account, day]
+    dimension: none
+    aggregation: latest
+    direction: higher_is_better
+    sources: [TAG_REFERENCES, POLICY_REFERENCES]
+    freshness_sla_ref: rubric.obs.freshness.governance
+    target_ref: rubric.obs.kpi_targets.masking_coverage_min
+    owner_role: DATA_GOVERNANCE_LEAD
+    waf_pillar: security_governance
+    linked_checks: [DX-SEC-05]
+    synonyms: [masking, masking coverage, pii, sensitive columns, data protection]
+    measures: [CLASSIFIED_COLUMNS, MASKED]
+    sql: >-
+      SELECT c.ACCOUNT_NAME, c.SNAPSHOT_DATE AS PERIOD, '' AS DIMENSION,
+             avg(CASE WHEN p.REF_COLUMN_NAME IS NOT NULL THEN 1.0 ELSE 0.0 END) AS VALUE, count(*) AS CLASSIFIED_COLUMNS,
+             count(p.REF_COLUMN_NAME) AS MASKED
+      FROM CURATED.SNAP_TAG_REFERENCES c
+      LEFT JOIN (SELECT DISTINCT ACCOUNT_NAME, SNAPSHOT_DATE, REF_DATABASE_NAME, REF_SCHEMA_NAME, REF_ENTITY_NAME, REF_COLUMN_NAME
+                 FROM CURATED.SNAP_POLICY_REFERENCES WHERE POLICY_KIND = 'MASKING_POLICY' AND POLICY_STATUS = 'ACTIVE') p
+        ON p.ACCOUNT_NAME = c.ACCOUNT_NAME AND p.SNAPSHOT_DATE = c.SNAPSHOT_DATE AND p.REF_DATABASE_NAME = c.OBJECT_DATABASE
+       AND p.REF_SCHEMA_NAME = c.OBJECT_SCHEMA AND p.REF_ENTITY_NAME = c.OBJECT_NAME AND p.REF_COLUMN_NAME = c.COLUMN_NAME
+      WHERE c.DOMAIN = 'COLUMN' AND c.TAG_NAME = 'PII'
+      GROUP BY 1, 2
+
+  - id: KPI-GOV-004
+    name: DMF coverage on Tier-1 tables
+    domain: governance
+    tier: extended
+    status: implemented
+    definition: Share of Tier-1 tables with at least one data metric function attached, per snapshot day.
+    unit: ratio
+    grain: [account, day]
+    dimension: none
+    aggregation: latest
+    direction: higher_is_better
+    sources: [TAG_REFERENCES, DATA_METRIC_FUNCTION_REFERENCES]
+    freshness_sla_ref: rubric.obs.freshness.governance
+    target_ref: rubric.obs.kpi_targets.dmf_coverage_min
+    owner_role: DATA_GOVERNANCE_LEAD
+    waf_pillar: security_governance
+    linked_checks: [DX-GOV-02]
+    synonyms: [dmf, data metric functions, data quality coverage, dq coverage, quality monitoring]
+    measures: [TIER1_TABLES, MONITORED]
+    sql: >-
+      WITH tier1 AS (SELECT DISTINCT ACCOUNT_NAME, SNAPSHOT_DATE, OBJECT_DATABASE || '.' || OBJECT_SCHEMA || '.' || OBJECT_NAME AS FQ
+                     FROM CURATED.SNAP_TAG_REFERENCES WHERE DOMAIN = 'TABLE' AND TAG_NAME = 'TIER' AND TAG_VALUE = 'tier1'),
+      dmf AS (SELECT DISTINCT ACCOUNT_NAME, SNAPSHOT_DATE, REF_ENTITY_NAME AS FQ FROM CURATED.SNAP_DATA_METRIC_FUNCTION_REFERENCES)
+      SELECT tier1.ACCOUNT_NAME, tier1.SNAPSHOT_DATE AS PERIOD, '' AS DIMENSION,
+             avg(CASE WHEN dmf.FQ IS NOT NULL THEN 1.0 ELSE 0.0 END) AS VALUE, count(*) AS TIER1_TABLES, count(dmf.FQ) AS MONITORED
+      FROM tier1 LEFT JOIN dmf ON dmf.ACCOUNT_NAME = tier1.ACCOUNT_NAME AND dmf.SNAPSHOT_DATE = tier1.SNAPSHOT_DATE
+       AND dmf.FQ = tier1.FQ
+      GROUP BY 1, 2
+
+  - id: KPI-GOV-005
+    name: Data quality expectation violations
+    domain: governance
+    tier: core
+    status: implemented
+    definition: Number of data metric function results that violated their expectation, per account and day.
+    unit: violations
+    grain: [account, day]
+    dimension: none
+    aggregation: sum
+    direction: lower_is_better
+    sources: [DATA_QUALITY_MONITORING_RESULTS]
+    freshness_sla_ref: rubric.obs.freshness.governance
+    owner_role: DATA_GOVERNANCE_LEAD
+    waf_pillar: security_governance
+    linked_checks: [DX-GOV-02]
+    synonyms: [data quality, dq violations, quality issues, expectation violations]
+    measures: [MEASUREMENTS]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, '' AS DIMENSION, count(*) FILTER (WHERE EXPECTATION_VIOLATED) AS VALUE,
+             count(*) AS MEASUREMENTS
+      FROM CURATED.FACT_DQ_RESULT GROUP BY 1, 2
+
+  - id: KPI-GOV-006
+    name: Tier-1 column comment coverage
+    domain: governance
+    tier: extended
+    status: implemented
+    definition: Share of columns on Tier-1 tables with a comment, per snapshot day.
+    unit: ratio
+    grain: [account, day]
+    dimension: none
+    aggregation: latest
+    direction: higher_is_better
+    sources: [COLUMNS, TAG_REFERENCES]
+    freshness_sla_ref: rubric.obs.freshness.governance
+    owner_role: DATA_GOVERNANCE_LEAD
+    waf_pillar: security_governance
+    linked_checks: [DX-AI-03]
+    synonyms: [comments, column comments, documentation, described columns]
+    sql: >-
+      WITH tier1 AS (SELECT DISTINCT ACCOUNT_NAME, SNAPSHOT_DATE, OBJECT_DATABASE || '.' || OBJECT_SCHEMA || '.' || OBJECT_NAME AS FQ
+                     FROM CURATED.SNAP_TAG_REFERENCES WHERE DOMAIN = 'TABLE' AND TAG_NAME = 'TIER' AND TAG_VALUE = 'tier1')
+      SELECT c.ACCOUNT_NAME, c.SNAPSHOT_DATE AS PERIOD, '' AS DIMENSION,
+             avg(CASE WHEN c.COMMENT IS NOT NULL THEN 1.0 ELSE 0.0 END) AS VALUE
+      FROM CURATED.SNAP_COLUMNS c JOIN tier1 ON tier1.ACCOUNT_NAME = c.ACCOUNT_NAME AND tier1.SNAPSHOT_DATE = c.SNAPSHOT_DATE
+       AND tier1.FQ = c.FQ_NAME
+      GROUP BY 1, 2
+
+  - id: KPI-GOV-007
+    name: Table comment coverage
+    domain: governance
+    tier: extended
+    status: implemented
+    definition: Share of tables with a table-level comment, per snapshot day.
+    unit: ratio
+    grain: [account, day]
+    dimension: none
+    aggregation: latest
+    direction: higher_is_better
+    sources: [TABLES]
+    freshness_sla_ref: rubric.obs.freshness.governance
+    owner_role: DATA_GOVERNANCE_LEAD
+    waf_pillar: security_governance
+    linked_checks: [DX-GOV-01]
+    synonyms: [table comments, described tables]
+    sql: >-
+      SELECT ACCOUNT_NAME, SNAPSHOT_DATE AS PERIOD, '' AS DIMENSION, avg(CASE WHEN COMMENT IS NOT NULL THEN 1.0 ELSE 0.0 END) AS VALUE
+      FROM CURATED.SNAP_TABLES GROUP BY 1, 2
+
+  - id: KPI-GOV-008
+    name: DMF pass rate
+    domain: governance
+    tier: extended
+    status: implemented
+    definition: Share of data metric function results that met their expectation, per account and day.
+    unit: ratio
+    grain: [account, day]
+    dimension: none
+    aggregation: avg
+    direction: higher_is_better
+    sources: [DATA_QUALITY_MONITORING_RESULTS]
+    freshness_sla_ref: rubric.obs.freshness.governance
+    owner_role: DATA_GOVERNANCE_LEAD
+    waf_pillar: security_governance
+    linked_checks: [DX-GOV-02]
+    synonyms: [dmf pass rate, quality pass rate, data quality score]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, '' AS DIMENSION, avg(CASE WHEN EXPECTATION_VIOLATED THEN 0.0 ELSE 1.0 END) AS VALUE
+      FROM CURATED.FACT_DQ_RESULT GROUP BY 1, 2
+
+  - id: KPI-GOV-009
+    name: Data product health score
+    domain: governance
+    tier: advanced
+    status: planned
+    definition: Composite of freshness, quality, ownership and documentation per data product.
+    unit: score
+    grain: [account, data_product, day]
+    dimension: data_product
+    aggregation: latest
+    direction: higher_is_better
+    sources: [TAG_REFERENCES, DATA_QUALITY_MONITORING_RESULTS, TASK_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.governance
+    owner_role: DATA_GOVERNANCE_LEAD
+    waf_pillar: security_governance
+    linked_checks: []
+
+  - id: KPI-GOV-010
+    name: Classified columns
+    domain: governance
+    tier: extended
+    status: implemented
+    definition: Number of columns carrying a PII classification tag, per snapshot day.
+    unit: columns
+    grain: [account, day]
+    dimension: none
+    aggregation: latest
+    direction: neutral
+    sources: [TAG_REFERENCES]
+    freshness_sla_ref: rubric.obs.freshness.governance
+    owner_role: DATA_GOVERNANCE_LEAD
+    waf_pillar: security_governance
+    linked_checks: [DX-SEC-05]
+    synonyms: [classified columns, pii columns, sensitive data inventory]
+    sql: >-
+      SELECT h.ACCOUNT_NAME, h.SNAPSHOT_DATE AS PERIOD, '' AS DIMENSION, count(c.COLUMN_NAME) AS VALUE
+      FROM CURATED.SNAPSHOT_HARVEST h
+      LEFT JOIN CURATED.SNAP_TAG_REFERENCES c ON c.ACCOUNT_NAME = h.ACCOUNT_NAME AND c.SNAPSHOT_DATE = h.SNAPSHOT_DATE
+       AND c.DOMAIN = 'COLUMN' AND c.TAG_NAME = 'PII'
+      WHERE h.SOURCE_TABLE = 'TAG_REFERENCES' GROUP BY 1, 2

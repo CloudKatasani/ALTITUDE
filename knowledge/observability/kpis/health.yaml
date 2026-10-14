@@ -1,0 +1,62 @@
+# KPI catalogue — Platform Health Index (Section 7.4 / 6.11).
+# The observed index is recomputed monthly from KPI attainment against rubric targets (engine: python,
+# altitude.observability.kpi.compute_health_index). When a Package D re-run is available, its scorecard
+# Health Index supersedes the observed one for that month (fed by diagnostics).
+version: 1.0.0
+kpis:
+  - id: KPI-PHI-001
+    name: Platform Health Index
+    domain: health
+    tier: extended
+    status: implemented
+    engine: python
+    definition: >-
+      0-100 index: rubric-weighted mean of WAF pillar scores, each the mean attainment of that pillar's targeted
+      KPIs (KPI monthly value vs its rubric target, capped at 1).
+    unit: score
+    grain: [account, month]
+    dimension: none
+    aggregation: latest
+    direction: higher_is_better
+    sources: [WAREHOUSE_METERING_HISTORY, QUERY_HISTORY, TASK_HISTORY, USERS, TAG_REFERENCES]
+    freshness_sla_ref: rubric.obs.freshness.governance
+    owner_role: PLATFORM_OWNER
+    waf_pillar: operational_excellence
+    linked_checks: []
+    synonyms: [health index, platform health, health score, overall health, scorecard]
+
+  - id: KPI-PHI-002
+    name: Health Index by WAF pillar
+    domain: health
+    tier: extended
+    status: implemented
+    engine: python
+    definition: Pillar scores (0-100) behind KPI-PHI-001, one per Well-Architected pillar and month.
+    unit: score
+    grain: [account, waf_pillar, month]
+    dimension: waf_pillar
+    aggregation: latest
+    direction: higher_is_better
+    sources: [WAREHOUSE_METERING_HISTORY, QUERY_HISTORY, TASK_HISTORY, USERS, TAG_REFERENCES]
+    freshness_sla_ref: rubric.obs.freshness.governance
+    owner_role: PLATFORM_OWNER
+    waf_pillar: operational_excellence
+    linked_checks: []
+    synonyms: [pillar score, waf pillar, well architected, pillar health]
+
+  - id: KPI-PHI-003
+    name: Peer benchmark position
+    domain: health
+    tier: advanced
+    status: planned
+    definition: Quartile of the Health Index among anonymised peers by industry and spend band (opt-in benchmarking).
+    unit: quartile
+    grain: [account, month]
+    dimension: none
+    aggregation: latest
+    direction: higher_is_better
+    sources: []
+    freshness_sla_ref: rubric.obs.freshness.governance
+    owner_role: PLATFORM_OWNER
+    waf_pillar: operational_excellence
+    linked_checks: []

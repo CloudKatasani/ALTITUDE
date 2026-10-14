@@ -1,0 +1,184 @@
+# KPI catalogue — Usage & Adoption (Section 7.4).
+version: 1.0.0
+kpis:
+  - id: KPI-USE-001
+    name: Active users
+    domain: usage
+    tier: core
+    status: implemented
+    definition: Distinct users who ran at least one query, per account and day (HUMAN_USERS excludes service users).
+    unit: users
+    grain: [account, day]
+    dimension: none
+    aggregation: avg
+    direction: higher_is_better
+    sources: [QUERY_HISTORY, USERS]
+    freshness_sla_ref: rubric.obs.freshness.usage
+    owner_role: PLATFORM_OWNER
+    waf_pillar: operational_excellence
+    linked_checks: []
+    synonyms: [active users, users, daily active users, dau, adoption, how many users]
+    measures: [HUMAN_USERS]
+    sql: >-
+      SELECT q.ACCOUNT_NAME, q.DAY AS PERIOD, '' AS DIMENSION, count(DISTINCT q.USER_NAME) AS VALUE,
+             count(DISTINCT CASE WHEN coalesce(u.IS_HUMAN, TRUE) THEN q.USER_NAME END) AS HUMAN_USERS
+      FROM CURATED.FACT_QUERY q
+      LEFT JOIN CURATED.DIM_USER u ON u.ACCOUNT_NAME = q.ACCOUNT_NAME AND u.USER_NAME = q.USER_NAME
+      GROUP BY 1, 2
+
+  - id: KPI-USE-002
+    name: Queries by client tool
+    domain: usage
+    tier: core
+    status: implemented
+    definition: Number of queries per client application (driver / tool) and day.
+    unit: queries
+    grain: [account, client_tool, day]
+    dimension: client_tool
+    aggregation: sum
+    direction: neutral
+    sources: [QUERY_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.usage
+    owner_role: PLATFORM_OWNER
+    waf_pillar: operational_excellence
+    linked_checks: [DX-BI-03]
+    synonyms: [client tool, tools, applications, power bi, dbt, drivers, which tools]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, CLIENT_APPLICATION AS DIMENSION, count(*) AS VALUE
+      FROM CURATED.FACT_QUERY GROUP BY 1, 2, 3
+
+  - id: KPI-USE-003
+    name: Unused objects
+    domain: usage
+    tier: extended
+    status: implemented
+    definition: Tables with no recorded access within the rubric window before the snapshot day.
+    unit: tables
+    grain: [account, day]
+    dimension: none
+    aggregation: latest
+    direction: lower_is_better
+    sources: [TABLES, ACCESS_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.governance
+    target_ref: rubric.obs.kpi_targets.unused_objects_max
+    owner_role: DATA_GOVERNANCE_LEAD
+    waf_pillar: cost_optimization
+    linked_checks: [DX-GOV-03]
+    synonyms: [unused, unused tables, stale objects, unaccessed tables, dead tables]
+    measures: [TABLES]
+    sql: >-
+      SELECT t.ACCOUNT_NAME, t.SNAPSHOT_DATE AS PERIOD, '' AS DIMENSION,
+             count(*) FILTER (WHERE a.LAST_ACCESSED IS NULL
+                              OR date_diff('day', CAST(a.LAST_ACCESSED AS DATE), t.SNAPSHOT_DATE) > ${rubric.obs.usage.unused_object_days}) AS VALUE,
+             count(*) AS TABLES
+      FROM CURATED.SNAP_TABLES t
+      LEFT JOIN (SELECT s.ACCOUNT_NAME, s.SNAPSHOT_DATE, f.OBJECT_NAME, max(f.QUERY_START_TIME) AS LAST_ACCESSED
+                 FROM (SELECT DISTINCT ACCOUNT_NAME, SNAPSHOT_DATE FROM CURATED.SNAP_TABLES) s
+                 JOIN CURATED.FACT_ACCESS f ON f.ACCOUNT_NAME = s.ACCOUNT_NAME AND f.DAY <= s.SNAPSHOT_DATE
+                 GROUP BY 1, 2, 3) a
+        ON a.ACCOUNT_NAME = t.ACCOUNT_NAME AND a.SNAPSHOT_DATE = t.SNAPSHOT_DATE AND a.OBJECT_NAME = t.FQ_NAME
+      GROUP BY 1, 2
+
+  - id: KPI-USE-004
+    name: Query volume by warehouse
+    domain: usage
+    tier: core
+    status: implemented
+    definition: Number of queries per warehouse and day.
+    unit: queries
+    grain: [account, warehouse, day]
+    dimension: warehouse
+    aggregation: sum
+    direction: neutral
+    sources: [QUERY_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.usage
+    owner_role: PLATFORM_OWNER
+    waf_pillar: operational_excellence
+    linked_checks: []
+    synonyms: [query volume, number of queries, query count, how many queries, workload]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, coalesce(WAREHOUSE_NAME, '(none)') AS DIMENSION, count(*) AS VALUE
+      FROM CURATED.FACT_QUERY GROUP BY 1, 2, 3
+
+  - id: KPI-USE-005
+    name: Top consumers
+    domain: usage
+    tier: extended
+    status: implemented
+    definition: Compute credits attributed to each user per day (top consumers).
+    unit: credits
+    grain: [account, user, day]
+    dimension: user
+    aggregation: sum
+    direction: neutral
+    sources: [QUERY_ATTRIBUTION_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.cost
+    owner_role: FINOPS_LEAD
+    waf_pillar: cost_optimization
+    linked_checks: []
+    synonyms: [top consumers, top users, heaviest users, who uses the most, biggest spenders]
+    measures: [QUERIES]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, USER_NAME AS DIMENSION, sum(CREDITS_ATTRIBUTED_COMPUTE) AS VALUE, count(*) AS QUERIES
+      FROM CURATED.FACT_QUERY_ATTRIBUTION GROUP BY 1, 2, 3
+
+  - id: KPI-USE-006
+    name: Adoption by domain
+    domain: usage
+    tier: advanced
+    status: implemented
+    definition: Distinct users reading objects in each database schema (data domain) per day.
+    unit: users
+    grain: [account, domain, day]
+    dimension: data_domain
+    aggregation: avg
+    direction: higher_is_better
+    sources: [ACCESS_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.governance
+    owner_role: DATA_GOVERNANCE_LEAD
+    waf_pillar: operational_excellence
+    linked_checks: []
+    synonyms: [adoption by domain, domain adoption, schema usage]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, split_part(OBJECT_NAME, '.', 1) || '.' || split_part(OBJECT_NAME, '.', 2) AS DIMENSION,
+             count(DISTINCT USER_NAME) AS VALUE
+      FROM CURATED.FACT_ACCESS WHERE ACCESS_TYPE = 'READ' GROUP BY 1, 2, 3
+
+  - id: KPI-USE-007
+    name: BI report views (90 days)
+    domain: usage
+    tier: extended
+    status: implemented
+    definition: Views in the last 90 days per BI report, per snapshot day (BI metadata).
+    unit: views
+    grain: [account, report, day]
+    dimension: report
+    aggregation: latest
+    direction: neutral
+    sources: [BI_REPORTS]
+    freshness_sla_ref: rubric.obs.freshness.reference
+    owner_role: BI_LEAD
+    waf_pillar: operational_excellence
+    linked_checks: [DX-BI-01, DX-BI-03]
+    synonyms: [report views, dashboard views, bi usage, report usage]
+    measures: [REFRESHES_PER_DAY]
+    sql: >-
+      SELECT ACCOUNT_NAME, SNAPSHOT_DATE AS PERIOD, REPORT_ID || ' ' || NAME AS DIMENSION, VIEWS_90D AS VALUE, REFRESHES_PER_DAY
+      FROM CURATED.SNAP_BI_REPORTS
+
+  - id: KPI-USE-008
+    name: Cost per BI view
+    domain: usage
+    tier: advanced
+    status: planned
+    definition: Query and refresh cost of a report's signature over 90 days / its views over 90 days.
+    unit: usd
+    grain: [account, report, day]
+    dimension: report
+    aggregation: latest
+    direction: lower_is_better
+    sources: [BI_REPORTS, QUERY_ATTRIBUTION_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.reference
+    owner_role: BI_LEAD
+    waf_pillar: cost_optimization
+    linked_checks: [DX-BI-03]

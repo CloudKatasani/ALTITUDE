@@ -1,0 +1,18 @@
+# Package O runbook (Section 7.6) — referenced by knowledge/observability/alerts.yaml
+id: RB-SEC-NO-MFA
+title: New user without MFA
+alert_classes:
+- new_user_without_mfa
+owner_role: SECURITY_LEAD
+autonomy: L1
+linked_kpis:
+- KPI-SEC-001
+- KPI-SEC-006
+linked_checks:
+- DX-SEC-01
+steps:
+- action: Confirm the user is human and enabled (CURATED.DIM_USER).
+- action: Require MFA enrolment or move the user to SSO-only authentication; disable password login.
+- action: If enrolment is not completed within one business day, disable the user.
+escalation: Security lead after one business day.
+verification: KPI-SEC-006 returns to its previous value; the user has MFA or is SSO-only.

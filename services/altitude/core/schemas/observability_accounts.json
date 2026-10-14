@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Package O tenant accounts registry (multi-account harvest and alert routes)",
+  "x-altitude-globs": ["observability/accounts/*.yaml"],
+  "type": "object",
+  "required": ["tenant_id", "accounts", "alert_routes"],
+  "additionalProperties": false,
+  "properties": {
+    "tenant_id": {"type": "string", "pattern": "^TEN-"},
+    "tenant_name": {"type": "string"},
+    "central_account": {"type": "string"},
+    "accounts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["account_name", "environment", "source"],
+        "additionalProperties": false,
+        "properties": {
+          "account_name": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"},
+          "environment": {"enum": ["prod", "uat", "qa", "dev", "sandbox"]},
+          "source": {"enum": ["synthetic", "snowflake"]},
+          "connection_ref": {"type": "string", "pattern": "^vault://"},
+          "synthetic": {
+            "type": "object", "additionalProperties": false,
+            "properties": {
+              "organization": {"type": "string"},
+              "profile": {"enum": ["seeded", "clean"]},
+              "seed": {"type": "integer"},
+              "disabled_issues": {"type": "array", "items": {"type": "string"}},
+              "anomalies": {"type": "array", "items": {"type": "object"}}
+            }
+          }
+        },
+        "if": {"properties": {"source": {"const": "snowflake"}}},
+        "then": {"required": ["connection_ref"]}
+      }
+    },
+    "cost_centres": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "unallocated_label": {"type": "string"},
+        "owners": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    },
+    "alert_routes": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["channel", "target"],
+        "additionalProperties": false,
+        "properties": {
+          "channel": {"enum": ["slack", "teams", "pagerduty", "servicenow"]},
+          "target": {"type": "string"},
+          "webhook_ref": {"type": "string", "pattern": "^vault://"},
+          "routing_key_ref": {"type": "string", "pattern": "^vault://"},
+          "instance_ref": {"type": "string", "pattern": "^vault://"},
+          "assignment_group": {"type": "string"}
+        }
+      }
+    }
+  }
+}

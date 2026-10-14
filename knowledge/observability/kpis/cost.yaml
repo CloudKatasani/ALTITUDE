@@ -1,0 +1,474 @@
+# KPI catalogue — Cost & FinOps (Section 7.4). Every implemented KPI's `sql` runs over CURATED and returns
+# ACCOUNT_NAME, PERIOD (date), DIMENSION (text, '' when none), VALUE (+ the listed `measures`).
+# `${rubric.obs.x}` placeholders are substituted from the rubric at compute/generate time.
+version: 1.0.0
+kpis:
+  - id: KPI-COST-001
+    name: Credits by account, warehouse and day
+    domain: cost
+    tier: core
+    status: implemented
+    definition: >-
+      Credits billed per warehouse and day: compute + cloud services credits from WAREHOUSE_METERING_HISTORY, with
+      the account-day cloud-services adjustment from METERING_DAILY_HISTORY allocated pro rata to cloud-services use.
+    unit: credits
+    grain: [account, warehouse, day]
+    dimension: warehouse
+    aggregation: sum
+    direction: lower_is_better
+    sources: [WAREHOUSE_METERING_HISTORY, METERING_DAILY_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.cost
+    owner_role: PLATFORM_OWNER
+    waf_pillar: cost_optimization
+    linked_checks: [DX-COST-01, DX-COST-02]
+    synonyms: [credits, credit usage, warehouse credits, compute credits, consumption, burn]
+    measures: [CREDITS_USED, CREDITS_USED_COMPUTE, CREDITS_USED_CLOUD_SERVICES]
+    realised_value: {basis_kpi: KPI-COST-002}
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, WAREHOUSE_NAME AS DIMENSION, CREDITS_BILLED AS VALUE, CREDITS_USED,
+             CREDITS_USED_COMPUTE, CREDITS_USED_CLOUD_SERVICES
+      FROM CURATED.FACT_WAREHOUSE_DAILY
+
+  - id: KPI-COST-002
+    name: Spend ($) by warehouse and day
+    domain: cost
+    tier: core
+    status: implemented
+    definition: KPI-COST-001 credits billed multiplied by the contract price per credit (client input).
+    unit: usd
+    grain: [account, warehouse, day]
+    dimension: warehouse
+    aggregation: sum
+    direction: lower_is_better
+    sources: [WAREHOUSE_METERING_HISTORY, METERING_DAILY_HISTORY, CLIENT_INPUTS]
+    freshness_sla_ref: rubric.obs.freshness.cost
+    owner_role: PLATFORM_OWNER
+    waf_pillar: cost_optimization
+    linked_checks: [DX-COST-01, DX-COST-02]
+    synonyms: [spend, cost, dollars, money, warehouse cost, how much did we spend]
+    measures: [CREDITS_BILLED, PRICE_PER_CREDIT]
+    realised_value: {basis_kpi: KPI-COST-002}
+    sql: >-
+      SELECT d.ACCOUNT_NAME, d.DAY AS PERIOD, d.WAREHOUSE_NAME AS DIMENSION, d.CREDITS_BILLED * a.PRICE_PER_CREDIT AS VALUE,
+             d.CREDITS_BILLED, a.PRICE_PER_CREDIT
+      FROM CURATED.FACT_WAREHOUSE_DAILY d JOIN CURATED.DIM_ACCOUNT a ON a.ACCOUNT_NAME = d.ACCOUNT_NAME
+
+  - id: KPI-COST-003
+    name: Cost by cost centre
+    domain: cost
+    tier: core
+    status: implemented
+    definition: >-
+      Daily billed cost ($) by cost centre: warehouse spend by the warehouse's cost-centre tag; serverless, AI and
+      untagged warehouse spend fall into UNALLOCATED. Sums to total billed spend (KPI-COST-011).
+    unit: usd
+    grain: [account, cost_centre, day]
+    dimension: cost_centre
+    aggregation: sum
+    direction: neutral
+    sources: [WAREHOUSE_METERING_HISTORY, METERING_DAILY_HISTORY, TAG_REFERENCES, CLIENT_INPUTS]
+    freshness_sla_ref: rubric.obs.freshness.cost
+    owner_role: FINOPS_LEAD
+    waf_pillar: cost_optimization
+    linked_checks: [DX-COST-07]
+    synonyms: [cost centre, cost center, chargeback, showback, department, business unit, tag]
+    measures: [CREDITS_BILLED]
+    sql: >-
+      WITH c AS (
+        SELECT ACCOUNT_NAME, DAY, coalesce(COST_CENTRE, 'UNALLOCATED') AS COST_CENTRE, CREDITS_BILLED
+        FROM CURATED.FACT_WAREHOUSE_DAILY
+        UNION ALL
+        SELECT ACCOUNT_NAME, DAY, 'UNALLOCATED', CREDITS_BILLED FROM CURATED.FACT_METERING_DAILY
+        WHERE SERVICE_TYPE <> 'WAREHOUSE_METERING')
+      SELECT c.ACCOUNT_NAME, c.DAY AS PERIOD, c.COST_CENTRE AS DIMENSION, sum(c.CREDITS_BILLED) * max(a.PRICE_PER_CREDIT) AS VALUE,
+             sum(c.CREDITS_BILLED) AS CREDITS_BILLED
+      FROM c JOIN CURATED.DIM_ACCOUNT a ON a.ACCOUNT_NAME = c.ACCOUNT_NAME
+      GROUP BY c.ACCOUNT_NAME, c.DAY, c.COST_CENTRE
+
+  - id: KPI-COST-004
+    name: Month-on-month spend trend
+    domain: cost
+    tier: core
+    status: implemented
+    definition: >-
+      Percent change in average daily billed spend versus the previous calendar month (average daily spend makes
+      partial months comparable).
+    unit: percent
+    grain: [account, month]
+    dimension: none
+    aggregation: latest
+    direction: lower_is_better
+    sources: [METERING_DAILY_HISTORY, CLIENT_INPUTS]
+    freshness_sla_ref: rubric.obs.freshness.cost
+    owner_role: FINOPS_LEAD
+    waf_pillar: cost_optimization
+    linked_checks: [DX-COST-08]
+    synonyms: [month on month, mom, trend, growth, compared to last month, monthly trend]
+    measures: [MONTH_USD, AVG_DAILY_USD, PREV_AVG_DAILY_USD, DAYS]
+    sql: >-
+      WITH m AS (
+        SELECT f.ACCOUNT_NAME, CAST(date_trunc('month', f.DAY) AS DATE) AS MONTH,
+               sum(f.CREDITS_BILLED) * max(a.PRICE_PER_CREDIT) AS MONTH_USD, count(DISTINCT f.DAY) AS DAYS
+        FROM CURATED.FACT_METERING_DAILY f JOIN CURATED.DIM_ACCOUNT a ON a.ACCOUNT_NAME = f.ACCOUNT_NAME
+        GROUP BY 1, 2),
+      t AS (SELECT ACCOUNT_NAME, MONTH, MONTH_USD, DAYS, MONTH_USD / DAYS AS AVG_DAILY_USD,
+                   lag(MONTH_USD / DAYS) OVER (PARTITION BY ACCOUNT_NAME ORDER BY MONTH) AS PREV_AVG_DAILY_USD
+            FROM m)
+      SELECT ACCOUNT_NAME, MONTH AS PERIOD, '' AS DIMENSION,
+             CASE WHEN PREV_AVG_DAILY_USD > 0 THEN (AVG_DAILY_USD / PREV_AVG_DAILY_USD - 1) * 100 END AS VALUE,
+             MONTH_USD, AVG_DAILY_USD, PREV_AVG_DAILY_USD, DAYS
+      FROM t
+
+  - id: KPI-COST-005
+    name: Forecast vs budget
+    domain: cost
+    tier: core
+    status: implemented
+    definition: >-
+      Month-end forecast of billed credits (month-to-date run rate x days in month) divided by the account budget's
+      monthly spending limit (credits). Above 1.0 the month is forecast to overrun.
+    unit: ratio
+    grain: [account, month]
+    dimension: none
+    aggregation: latest
+    direction: lower_is_better
+    sources: [METERING_DAILY_HISTORY, BUDGETS]
+    freshness_sla_ref: rubric.obs.freshness.cost
+    owner_role: FINOPS_LEAD
+    waf_pillar: cost_optimization
+    linked_checks: [DX-COST-08, DX-OPS-02]
+    synonyms: [forecast, budget, overrun, on track, projection, run rate]
+    measures: [MTD_CREDITS, FORECAST_CREDITS, BUDGET_CREDITS, DAYS_ELAPSED, DAYS_IN_MONTH]
+    sql: >-
+      WITH m AS (
+        SELECT ACCOUNT_NAME, CAST(date_trunc('month', DAY) AS DATE) AS MONTH, sum(CREDITS_BILLED) AS MTD_CREDITS,
+               max(DAY) AS LAST_DAY_SEEN
+        FROM CURATED.FACT_METERING_DAILY GROUP BY 1, 2),
+      b AS (SELECT ACCOUNT_NAME, sum(SPENDING_LIMIT) AS BUDGET_CREDITS FROM CURATED.SNAP_BUDGETS
+            WHERE IS_LATEST AND SCOPE = 'ACCOUNT' GROUP BY 1)
+      SELECT m.ACCOUNT_NAME, m.MONTH AS PERIOD, '' AS DIMENSION,
+             CASE WHEN b.BUDGET_CREDITS > 0 THEN
+               (m.MTD_CREDITS / (date_diff('day', m.MONTH, m.LAST_DAY_SEEN) + 1) * dayofmonth(last_day(m.MONTH))) / b.BUDGET_CREDITS
+             END AS VALUE,
+             m.MTD_CREDITS,
+             m.MTD_CREDITS / (date_diff('day', m.MONTH, m.LAST_DAY_SEEN) + 1) * dayofmonth(last_day(m.MONTH)) AS FORECAST_CREDITS,
+             b.BUDGET_CREDITS, date_diff('day', m.MONTH, m.LAST_DAY_SEEN) + 1 AS DAYS_ELAPSED,
+             dayofmonth(last_day(m.MONTH)) AS DAYS_IN_MONTH
+      FROM m LEFT JOIN b ON b.ACCOUNT_NAME = m.ACCOUNT_NAME
+
+  - id: KPI-COST-006
+    name: Cost per query signature
+    domain: cost
+    tier: extended
+    status: implemented
+    definition: Compute credits attributed to each parameterised query signature per day, in dollars.
+    unit: usd
+    grain: [account, query_signature, day]
+    dimension: query_signature
+    aggregation: sum
+    direction: lower_is_better
+    sources: [QUERY_ATTRIBUTION_HISTORY, QUERY_HISTORY, CLIENT_INPUTS]
+    freshness_sla_ref: rubric.obs.freshness.cost
+    owner_role: PLATFORM_OWNER
+    waf_pillar: cost_optimization
+    linked_checks: [DX-COST-03, DX-PERF-04]
+    synonyms: [query signature, expensive queries, query cost, top queries, costliest queries]
+    measures: [CREDITS, EXECUTIONS, USD_PER_EXECUTION]
+    realised_value: {basis_kpi: KPI-COST-006}
+    sql: >-
+      SELECT q.ACCOUNT_NAME, q.DAY AS PERIOD, q.SIGNATURE AS DIMENSION,
+             sum(q.CREDITS_ATTRIBUTED_COMPUTE) * max(a.PRICE_PER_CREDIT) AS VALUE, sum(q.CREDITS_ATTRIBUTED_COMPUTE) AS CREDITS,
+             count(*) AS EXECUTIONS, sum(q.CREDITS_ATTRIBUTED_COMPUTE) * max(a.PRICE_PER_CREDIT) / count(*) AS USD_PER_EXECUTION
+      FROM CURATED.FACT_QUERY q JOIN CURATED.DIM_ACCOUNT a ON a.ACCOUNT_NAME = q.ACCOUNT_NAME
+      GROUP BY q.ACCOUNT_NAME, q.DAY, q.SIGNATURE
+
+  - id: KPI-COST-007
+    name: Idle credit share
+    domain: cost
+    tier: extended
+    status: implemented
+    definition: compute credits billed while the warehouse had no running queries / total compute credits
+    unit: ratio
+    grain: [account, warehouse, day]
+    dimension: warehouse
+    aggregation: avg
+    direction: lower_is_better
+    sources: [WAREHOUSE_METERING_HISTORY, QUERY_ATTRIBUTION_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.cost
+    target_ref: rubric.obs.kpi_targets.idle_share_max
+    owner_role: PLATFORM_OWNER
+    waf_pillar: cost_optimization
+    linked_checks: [DX-COST-01, DX-COST-02]
+    synonyms: [idle, idle credits, idle share, wasted credits, auto suspend, unused compute]
+    measures: [IDLE_CREDITS, CREDITS_USED_COMPUTE]
+    realised_value: {basis_kpi: KPI-COST-002}
+    alert:
+      threshold_ref: rubric.obs.idle_share_alert
+      route_ref: tenant.alert_routes.finops
+      runbook: RB-COST-IDLE
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, WAREHOUSE_NAME AS DIMENSION,
+             CASE WHEN CREDITS_USED_COMPUTE > 0 THEN IDLE_CREDITS / CREDITS_USED_COMPUTE END AS VALUE, IDLE_CREDITS,
+             CREDITS_USED_COMPUTE
+      FROM CURATED.FACT_WAREHOUSE_DAILY
+
+  - id: KPI-COST-008
+    name: Serverless credit breakdown
+    domain: cost
+    tier: extended
+    status: implemented
+    definition: Credits per day by serverless service type (clustering, search optimisation, MV refresh, Snowpipe, AI services).
+    unit: credits
+    grain: [account, service_type, day]
+    dimension: service_type
+    aggregation: sum
+    direction: lower_is_better
+    sources: [AUTOMATIC_CLUSTERING_HISTORY, SEARCH_OPTIMIZATION_HISTORY, MATERIALIZED_VIEW_REFRESH_HISTORY, PIPE_USAGE_HISTORY, CORTEX_USAGE_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.cost
+    owner_role: PLATFORM_OWNER
+    waf_pillar: cost_optimization
+    linked_checks: [DX-COST-05]
+    synonyms: [serverless, clustering credits, snowpipe, automatic clustering, search optimization, materialized view]
+    measures: [OBJECTS]
+    realised_value: {basis_kpi: KPI-COST-008}
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, SERVICE_TYPE AS DIMENSION, sum(CREDITS) AS VALUE,
+             count(DISTINCT OBJECT_NAME) AS OBJECTS
+      FROM CURATED.FACT_SERVERLESS_DAILY GROUP BY 1, 2, 3
+
+  - id: KPI-COST-009
+    name: Storage by type
+    domain: cost
+    tier: extended
+    status: implemented
+    definition: Average stored terabytes per day by storage type (database, stage, fail-safe, hybrid).
+    unit: tb
+    grain: [account, storage_type, day]
+    dimension: storage_type
+    aggregation: avg
+    direction: lower_is_better
+    sources: [STORAGE_USAGE]
+    freshness_sla_ref: rubric.obs.freshness.governance
+    owner_role: PLATFORM_OWNER
+    waf_pillar: cost_optimization
+    linked_checks: [DX-COST-06]
+    synonyms: [storage, terabytes, tb, failsafe, stage storage, storage by type]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, 'DATABASE' AS DIMENSION, STORAGE_BYTES / power(1024, 4) AS VALUE FROM CURATED.FACT_STORAGE_DAILY
+      UNION ALL SELECT ACCOUNT_NAME, DAY, 'STAGE', STAGE_BYTES / power(1024, 4) FROM CURATED.FACT_STORAGE_DAILY
+      UNION ALL SELECT ACCOUNT_NAME, DAY, 'FAILSAFE', FAILSAFE_BYTES / power(1024, 4) FROM CURATED.FACT_STORAGE_DAILY
+      UNION ALL SELECT ACCOUNT_NAME, DAY, 'HYBRID', HYBRID_TABLE_STORAGE_BYTES / power(1024, 4) FROM CURATED.FACT_STORAGE_DAILY
+
+  - id: KPI-COST-010
+    name: Credits billed by service type and day
+    domain: cost
+    tier: core
+    status: implemented
+    definition: Billing truth — METERING_DAILY_HISTORY credits billed per service type and day.
+    unit: credits
+    grain: [account, service_type, day]
+    dimension: service_type
+    aggregation: sum
+    direction: lower_is_better
+    sources: [METERING_DAILY_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.cost
+    owner_role: FINOPS_LEAD
+    waf_pillar: cost_optimization
+    linked_checks: [DX-COST-08]
+    synonyms: [billed credits, billing, invoice, service type, metering]
+    measures: [CREDITS_USED, CREDITS_ADJUSTMENT_CLOUD_SERVICES]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, SERVICE_TYPE AS DIMENSION, CREDITS_BILLED AS VALUE, CREDITS_USED,
+             CREDITS_ADJUSTMENT_CLOUD_SERVICES
+      FROM CURATED.FACT_METERING_DAILY
+
+  - id: KPI-COST-011
+    name: Total spend ($) by account and day
+    domain: cost
+    tier: core
+    status: implemented
+    definition: All billed credits (every service type) for the account-day multiplied by the contract price.
+    unit: usd
+    grain: [account, day]
+    dimension: none
+    aggregation: sum
+    direction: lower_is_better
+    sources: [METERING_DAILY_HISTORY, CLIENT_INPUTS]
+    freshness_sla_ref: rubric.obs.freshness.cost
+    owner_role: FINOPS_LEAD
+    waf_pillar: cost_optimization
+    linked_checks: [DX-COST-08]
+    synonyms: [total spend, total cost, account spend, overall cost, bill]
+    measures: [CREDITS_BILLED]
+    sql: >-
+      SELECT f.ACCOUNT_NAME, f.DAY AS PERIOD, '' AS DIMENSION, sum(f.CREDITS_BILLED) * max(a.PRICE_PER_CREDIT) AS VALUE,
+             sum(f.CREDITS_BILLED) AS CREDITS_BILLED
+      FROM CURATED.FACT_METERING_DAILY f JOIN CURATED.DIM_ACCOUNT a ON a.ACCOUNT_NAME = f.ACCOUNT_NAME
+      GROUP BY f.ACCOUNT_NAME, f.DAY
+
+  - id: KPI-COST-012
+    name: Storage cost per month
+    domain: cost
+    tier: extended
+    status: implemented
+    definition: Average stored TB (database + stage + fail-safe + hybrid) in the month x contract storage price per TB-month.
+    unit: usd
+    grain: [account, month]
+    dimension: none
+    aggregation: latest
+    direction: lower_is_better
+    sources: [STORAGE_USAGE, CLIENT_INPUTS]
+    freshness_sla_ref: rubric.obs.freshness.governance
+    owner_role: FINOPS_LEAD
+    waf_pillar: cost_optimization
+    linked_checks: [DX-COST-06]
+    synonyms: [storage cost, storage spend, storage bill]
+    measures: [AVG_TB]
+    sql: >-
+      SELECT s.ACCOUNT_NAME, CAST(date_trunc('month', s.DAY) AS DATE) AS PERIOD, '' AS DIMENSION,
+             avg((s.STORAGE_BYTES + s.STAGE_BYTES + s.FAILSAFE_BYTES + coalesce(s.HYBRID_TABLE_STORAGE_BYTES, 0)) / power(1024, 4))
+               * max(a.STORAGE_PRICE_PER_TB_MONTH) AS VALUE,
+             avg((s.STORAGE_BYTES + s.STAGE_BYTES + s.FAILSAFE_BYTES + coalesce(s.HYBRID_TABLE_STORAGE_BYTES, 0)) / power(1024, 4)) AS AVG_TB
+      FROM CURATED.FACT_STORAGE_DAILY s JOIN CURATED.DIM_ACCOUNT a ON a.ACCOUNT_NAME = s.ACCOUNT_NAME
+      GROUP BY 1, 2
+
+  - id: KPI-COST-013
+    name: Capacity commitment burn-down
+    domain: cost
+    tier: advanced
+    status: implemented
+    definition: >-
+      Cumulative billed credits since the commitment start / annual committed credits, per day; compare with
+      EXPECTED_SHARE (elapsed share of the commitment term).
+    unit: ratio
+    grain: [account, day]
+    dimension: none
+    aggregation: latest
+    direction: neutral
+    sources: [METERING_DAILY_HISTORY, CLIENT_INPUTS]
+    freshness_sla_ref: rubric.obs.freshness.cost
+    owner_role: FINOPS_LEAD
+    waf_pillar: cost_optimization
+    linked_checks: [DX-COST-08]
+    synonyms: [commitment, capacity, burn down, contract, prepaid credits]
+    measures: [CONSUMED_CREDITS, ANNUAL_COMMIT_CREDITS, EXPECTED_SHARE]
+    sql: >-
+      WITH d AS (SELECT ACCOUNT_NAME, DAY, sum(CREDITS_BILLED) AS CREDITS FROM CURATED.FACT_METERING_DAILY GROUP BY 1, 2)
+      SELECT d.ACCOUNT_NAME, d.DAY AS PERIOD, '' AS DIMENSION,
+             sum(d.CREDITS) OVER (PARTITION BY d.ACCOUNT_NAME ORDER BY d.DAY) / a.ANNUAL_COMMIT_CREDITS AS VALUE,
+             sum(d.CREDITS) OVER (PARTITION BY d.ACCOUNT_NAME ORDER BY d.DAY) AS CONSUMED_CREDITS, a.ANNUAL_COMMIT_CREDITS,
+             (date_diff('day', a.COMMIT_START, d.DAY) + 1) / (date_diff('day', a.COMMIT_START, a.COMMIT_END) + 1) AS EXPECTED_SHARE
+      FROM d JOIN CURATED.DIM_ACCOUNT a ON a.ACCOUNT_NAME = d.ACCOUNT_NAME
+      WHERE a.ANNUAL_COMMIT_CREDITS > 0 AND d.DAY >= a.COMMIT_START
+
+  - id: KPI-COST-015
+    name: Cloud services ratio
+    domain: cost
+    tier: extended
+    status: implemented
+    definition: Cloud-services credits used / compute credits used for warehouse metering, per account and day.
+    unit: ratio
+    grain: [account, day]
+    dimension: none
+    aggregation: avg
+    direction: lower_is_better
+    sources: [METERING_DAILY_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.cost
+    owner_role: PLATFORM_OWNER
+    waf_pillar: cost_optimization
+    linked_checks: []
+    synonyms: [cloud services, cloud services ratio, metadata cost]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, '' AS DIMENSION,
+             CASE WHEN CREDITS_USED_COMPUTE > 0 THEN CREDITS_USED_CLOUD_SERVICES / CREDITS_USED_COMPUTE END AS VALUE
+      FROM CURATED.FACT_METERING_DAILY WHERE SERVICE_TYPE = 'WAREHOUSE_METERING'
+
+  - id: KPI-COST-016
+    name: Unit cost per dashboard view
+    domain: cost
+    tier: advanced
+    status: planned
+    definition: BI refresh and query cost attributed to a dashboard / its views in the period.
+    unit: usd
+    grain: [account, report, month]
+    dimension: report
+    aggregation: latest
+    direction: lower_is_better
+    sources: [BI_REPORTS, QUERY_ATTRIBUTION_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.usage
+    owner_role: BI_LEAD
+    waf_pillar: cost_optimization
+    linked_checks: [DX-BI-03]
+
+  - id: KPI-COST-017
+    name: Unit cost per data product
+    domain: cost
+    tier: advanced
+    status: planned
+    definition: Compute, storage and serverless cost attributed to each data product (by data-product tag).
+    unit: usd
+    grain: [account, data_product, month]
+    dimension: data_product
+    aggregation: latest
+    direction: lower_is_better
+    sources: [QUERY_ATTRIBUTION_HISTORY, TABLE_STORAGE_METRICS, TAG_REFERENCES]
+    freshness_sla_ref: rubric.obs.freshness.cost
+    owner_role: FINOPS_LEAD
+    waf_pillar: cost_optimization
+    linked_checks: [DX-COST-07]
+
+  - id: KPI-COST-018
+    name: Cost per agent answer
+    domain: cost
+    tier: advanced
+    status: planned
+    definition: Cortex Agent token cost plus agent warehouse cost per answered question.
+    unit: usd
+    grain: [account, agent, day]
+    dimension: agent
+    aggregation: avg
+    direction: lower_is_better
+    sources: [CORTEX_USAGE_HISTORY, QUERY_ATTRIBUTION_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.ai
+    owner_role: AI_LEAD
+    waf_pillar: cost_optimization
+    linked_checks: [DX-AI-02]
+
+  - id: KPI-COST-019
+    name: Credits by role
+    domain: cost
+    tier: extended
+    status: planned
+    definition: Attributed compute credits by executing role per day (needs ROLE_NAME on attribution rows).
+    unit: credits
+    grain: [account, role, day]
+    dimension: role
+    aggregation: sum
+    direction: neutral
+    sources: [QUERY_ATTRIBUTION_HISTORY, QUERY_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.cost
+    owner_role: FINOPS_LEAD
+    waf_pillar: cost_optimization
+    linked_checks: []
+
+  - id: KPI-COST-020
+    name: Resource monitor coverage
+    domain: cost
+    tier: extended
+    status: implemented
+    definition: Share of warehouses with a resource monitor attached, per snapshot day.
+    unit: ratio
+    grain: [account, day]
+    dimension: none
+    aggregation: latest
+    direction: higher_is_better
+    sources: [WAREHOUSES]
+    freshness_sla_ref: rubric.obs.freshness.cost
+    owner_role: PLATFORM_OWNER
+    waf_pillar: cost_optimization
+    linked_checks: [DX-OPS-02]
+    synonyms: [resource monitor, monitor coverage, quota]
+    sql: >-
+      SELECT ACCOUNT_NAME, SNAPSHOT_DATE AS PERIOD, '' AS DIMENSION,
+             avg(CASE WHEN RESOURCE_MONITOR IS NOT NULL THEN 1.0 ELSE 0.0 END) AS VALUE
+      FROM CURATED.SNAP_WAREHOUSES GROUP BY 1, 2

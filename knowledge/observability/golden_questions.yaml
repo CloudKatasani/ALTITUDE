@@ -1,0 +1,67 @@
+# Ask-the-platform golden questions (Section 7.10 week 5). Run against the fixture account; each answer must
+# resolve to the expected certified KPI, carry citations (KPI id + KPI rows + RAW source tables), and its value
+# must equal the KPI table aggregated over the stated window. `refuse: true` questions must be refused.
+version: 1.0.0
+fixture:
+  account_name: ACME_PROD
+  profile: seeded
+  end_date: "2026-09-30"
+  days: 45
+questions:
+  - id: GQ-OBS-001
+    question: How many credits did WH_DS use in the last 7 days?
+    expected: {kpi_id: KPI-COST-001, dimension: WH_DS, window_days: 7, answer_contains: [WH_DS, credits]}
+  - id: GQ-OBS-002
+    question: What was our total spend yesterday?
+    expected: {kpi_id: KPI-COST-011, window_days: 1, answer_contains: ["$"]}
+  - id: GQ-OBS-003
+    question: What is the idle credit share for WH_BI_PROD this month?
+    expected: {kpi_id: KPI-COST-007, dimension: WH_BI_PROD, answer_contains: ["%"]}
+  - id: GQ-OBS-004
+    question: What is our MFA coverage?
+    expected: {kpi_id: KPI-SEC-001, answer_contains: ["%"]}
+  - id: GQ-OBS-005
+    question: How many failed tasks were there in the last 30 days?
+    expected: {kpi_id: KPI-REL-002, window_days: 30}
+  - id: GQ-OBS-006
+    question: Which cost centre spent the most last month?
+    expected: {kpi_id: KPI-COST-003, ranking: true, answer_contains: [highest]}
+  - id: GQ-OBS-007
+    question: What is the p95 query time on WH_BI_PROD last week?
+    expected: {kpi_id: KPI-PERF-001, dimension: WH_BI_PROD, window_days: 7}
+  - id: GQ-OBS-008
+    question: How many Cortex credits did we use last week?
+    expected: {kpi_id: KPI-AI-001, window_days: 7}
+  - id: GQ-OBS-009
+    question: What is the task success rate over the last 30 days?
+    expected: {kpi_id: KPI-REL-001, window_days: 30, answer_contains: ["%"]}
+  - id: GQ-OBS-010
+    question: How many users have ACCOUNTADMIN?
+    expected: {kpi_id: KPI-SEC-002}
+  - id: GQ-OBS-011
+    question: What is the platform health index?
+    expected: {kpi_id: KPI-PHI-001, answer_contains: [score]}
+  - id: GQ-OBS-012
+    question: How much queued time did WH_BI_PROD have yesterday?
+    expected: {kpi_id: KPI-PERF-002, dimension: WH_BI_PROD, window_days: 1}
+  - id: GQ-OBS-013
+    question: Which warehouses spill the most to storage in the last 14 days?
+    expected: {kpi_id: KPI-PERF-003, ranking: true, window_days: 14}
+  - id: GQ-OBS-014
+    question: What is the masking coverage on classified columns?
+    expected: {kpi_id: KPI-GOV-003}
+  - id: GQ-OBS-015
+    question: How many dormant users do we have?
+    expected: {kpi_id: KPI-SEC-004}
+  - id: GQ-OBS-016
+    question: What is the serverless credit breakdown for the last 7 days?
+    expected: {kpi_id: KPI-COST-008, window_days: 7}
+  - id: GQ-OBS-R01
+    question: What will the weather be in Paris tomorrow?
+    expected: {refuse: true}
+  - id: GQ-OBS-R02
+    question: Who is going to win the next football world cup?
+    expected: {refuse: true}
+  - id: GQ-OBS-R03
+    question: What is the cost per accepted answer of our agents?
+    expected: {refuse: true}

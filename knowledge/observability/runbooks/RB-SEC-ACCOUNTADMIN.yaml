@@ -1,0 +1,18 @@
+# Package O runbook (Section 7.6) — referenced by knowledge/observability/alerts.yaml
+id: RB-SEC-ACCOUNTADMIN
+title: ACCOUNTADMIN use
+alert_classes:
+- accountadmin_use
+owner_role: SECURITY_LEAD
+autonomy: L0
+linked_kpis:
+- KPI-SEC-007
+- KPI-SEC-002
+linked_checks:
+- DX-SEC-02
+steps:
+- action: List users and statements executed under ACCOUNTADMIN for the day (CURATED.FACT_QUERY).
+- action: Match each session to an approved break-glass change ticket.
+- action: For unapproved use, open a security incident and review the user's ACCOUNTADMIN grant.
+escalation: CISO delegate for any unapproved ACCOUNTADMIN session.
+verification: Every ACCOUNTADMIN session on the day has a matching approved change.

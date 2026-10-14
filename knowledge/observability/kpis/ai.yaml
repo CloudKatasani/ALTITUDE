@@ -1,0 +1,164 @@
+# KPI catalogue — AI / Cortex (Section 7.4).
+version: 1.0.0
+kpis:
+  - id: KPI-AI-001
+    name: Cortex credits by function and agent
+    domain: ai
+    tier: core
+    status: implemented
+    definition: Cortex token credits per day by function and agent (DIMENSION = function / agent; '(no agent)' when direct).
+    unit: credits
+    grain: [account, function, agent, day]
+    dimension: function_agent
+    aggregation: sum
+    direction: lower_is_better
+    sources: [CORTEX_USAGE_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.ai
+    owner_role: AI_LEAD
+    waf_pillar: cost_optimization
+    linked_checks: [DX-AI-02]
+    synonyms: [cortex, cortex credits, ai spend, llm cost, ai credits, agent credits, tokens cost]
+    measures: [TOKENS, CALLS]
+    realised_value: {basis_kpi: KPI-AI-001}
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, FUNCTION_NAME || ' / ' || AGENT_NAME AS DIMENSION, sum(TOKEN_CREDITS) AS VALUE,
+             sum(TOKENS) AS TOKENS, count(*) AS CALLS
+      FROM CURATED.FACT_CORTEX_USAGE GROUP BY 1, 2, 3
+
+  - id: KPI-AI-002
+    name: Cost per accepted answer
+    domain: ai
+    tier: extended
+    status: planned
+    definition: Cortex Agent cost / answers accepted by users (needs agent feedback events; not in the harvest contract yet).
+    unit: usd
+    grain: [account, agent, day]
+    dimension: agent
+    aggregation: avg
+    direction: lower_is_better
+    sources: [CORTEX_USAGE_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.ai
+    owner_role: AI_LEAD
+    waf_pillar: cost_optimization
+    linked_checks: [DX-AI-02]
+
+  - id: KPI-AI-003
+    name: Cortex tokens by model
+    domain: ai
+    tier: extended
+    status: implemented
+    definition: Tokens processed per model and day.
+    unit: tokens
+    grain: [account, model, day]
+    dimension: model
+    aggregation: sum
+    direction: neutral
+    sources: [CORTEX_USAGE_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.ai
+    owner_role: AI_LEAD
+    waf_pillar: cost_optimization
+    linked_checks: []
+    synonyms: [tokens, model usage, llm tokens, tokens by model]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, coalesce(MODEL_NAME, '(unknown)') AS DIMENSION, sum(TOKENS) AS VALUE
+      FROM CURATED.FACT_CORTEX_USAGE GROUP BY 1, 2, 3
+
+  - id: KPI-AI-004
+    name: Cortex spend without agent identity
+    domain: ai
+    tier: extended
+    status: implemented
+    definition: Share of Cortex credits not attributable to a governed agent (direct calls by personal users), per day.
+    unit: ratio
+    grain: [account, day]
+    dimension: none
+    aggregation: avg
+    direction: lower_is_better
+    sources: [CORTEX_USAGE_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.ai
+    owner_role: AI_LEAD
+    waf_pillar: security_governance
+    linked_checks: [DX-AI-02]
+    synonyms: [ungoverned ai, cortex without agent, direct cortex usage, unbudgeted ai]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, '' AS DIMENSION,
+             sum(CASE WHEN NO_AGENT THEN TOKEN_CREDITS ELSE 0 END) / sum(TOKEN_CREDITS) AS VALUE
+      FROM CURATED.FACT_CORTEX_USAGE GROUP BY 1, 2 HAVING sum(TOKEN_CREDITS) > 0
+
+  - id: KPI-AI-005
+    name: Cortex call latency
+    domain: ai
+    tier: extended
+    status: implemented
+    definition: Average seconds per Cortex call, per function and day.
+    unit: seconds
+    grain: [account, function, day]
+    dimension: function
+    aggregation: avg
+    direction: lower_is_better
+    sources: [CORTEX_USAGE_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.ai
+    owner_role: AI_LEAD
+    waf_pillar: performance_efficiency
+    linked_checks: []
+    synonyms: [cortex latency, ai latency, llm latency, agent latency]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, FUNCTION_NAME AS DIMENSION, avg(date_diff('second', START_TIME, END_TIME)) AS VALUE
+      FROM CURATED.FACT_CORTEX_USAGE GROUP BY 1, 2, 3
+
+  - id: KPI-AI-006
+    name: Semantic views
+    domain: ai
+    tier: extended
+    status: implemented
+    definition: Number of semantic views in the account, per snapshot day (AI readiness of top KPI domains).
+    unit: views
+    grain: [account, day]
+    dimension: none
+    aggregation: latest
+    direction: higher_is_better
+    sources: [SEMANTIC_VIEWS]
+    freshness_sla_ref: rubric.obs.freshness.reference
+    owner_role: AI_LEAD
+    waf_pillar: operational_excellence
+    linked_checks: [DX-AI-01]
+    synonyms: [semantic views, semantic layer, certified kpis]
+    sql: >-
+      SELECT h.ACCOUNT_NAME, h.SNAPSHOT_DATE AS PERIOD, '' AS DIMENSION, count(s.NAME) AS VALUE
+      FROM CURATED.SNAPSHOT_HARVEST h
+      LEFT JOIN CURATED.SNAP_SEMANTIC_VIEWS s ON s.ACCOUNT_NAME = h.ACCOUNT_NAME AND s.SNAPSHOT_DATE = h.SNAPSHOT_DATE
+      WHERE h.SOURCE_TABLE = 'SEMANTIC_VIEWS' GROUP BY 1, 2
+
+  - id: KPI-AI-007
+    name: Agent evaluation drift
+    domain: ai
+    tier: advanced
+    status: planned
+    definition: Change in golden-question pass rate of in-account agents between evaluation runs.
+    unit: ratio
+    grain: [account, agent, day]
+    dimension: agent
+    aggregation: latest
+    direction: higher_is_better
+    sources: []
+    freshness_sla_ref: rubric.obs.freshness.ai
+    owner_role: AI_LEAD
+    waf_pillar: operational_excellence
+    linked_checks: []
+
+  - id: KPI-AI-008
+    name: Agent warehouse credits
+    domain: ai
+    tier: extended
+    status: planned
+    definition: Warehouse credits consumed by agent roles (needs role on attribution rows).
+    unit: credits
+    grain: [account, agent, day]
+    dimension: agent
+    aggregation: sum
+    direction: lower_is_better
+    sources: [QUERY_ATTRIBUTION_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.ai
+    owner_role: AI_LEAD
+    waf_pillar: cost_optimization
+    linked_checks: [DX-AI-02]

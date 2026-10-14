@@ -1,0 +1,254 @@
+# KPI catalogue — Performance & Workload (Section 7.4).
+version: 1.0.0
+kpis:
+  - id: KPI-PERF-001
+    name: Query time p50 / p95 by warehouse
+    domain: performance
+    tier: core
+    status: implemented
+    definition: Median and 95th-percentile total elapsed time (ms) of successful queries per warehouse and day; VALUE is p95.
+    unit: ms
+    grain: [account, warehouse, day]
+    dimension: warehouse
+    aggregation: avg
+    direction: lower_is_better
+    sources: [QUERY_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.performance
+    owner_role: PLATFORM_OWNER
+    waf_pillar: performance_efficiency
+    linked_checks: [DX-PERF-01, DX-PERF-04]
+    synonyms: [query time, latency, p95, p50, median query time, slow queries, response time, elapsed time]
+    measures: [P50_MS, P95_MS, QUERIES]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, WAREHOUSE_NAME AS DIMENSION, quantile_cont(TOTAL_ELAPSED_TIME, 0.95) AS VALUE,
+             quantile_cont(TOTAL_ELAPSED_TIME, 0.5) AS P50_MS, quantile_cont(TOTAL_ELAPSED_TIME, 0.95) AS P95_MS,
+             count(*) AS QUERIES
+      FROM CURATED.FACT_QUERY WHERE WAREHOUSE_NAME IS NOT NULL AND EXECUTION_STATUS = 'SUCCESS'
+      GROUP BY 1, 2, 3
+
+  - id: KPI-PERF-002
+    name: Queued time by warehouse
+    domain: performance
+    tier: core
+    status: implemented
+    definition: Total seconds queries spent queued for warehouse overload per warehouse and day.
+    unit: seconds
+    grain: [account, warehouse, day]
+    dimension: warehouse
+    aggregation: sum
+    direction: lower_is_better
+    sources: [QUERY_HISTORY, WAREHOUSE_LOAD_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.performance
+    target_ref: rubric.obs.kpi_targets.queued_seconds_daily_max
+    owner_role: PLATFORM_OWNER
+    waf_pillar: performance_efficiency
+    linked_checks: [DX-PERF-01]
+    synonyms: [queued, queueing, queue time, waiting, concurrency, overload]
+    measures: [QUEUED_QUERIES, P95_QUEUED_MS]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, WAREHOUSE_NAME AS DIMENSION, sum(QUEUED_OVERLOAD_TIME) / 1000.0 AS VALUE,
+             count(*) FILTER (WHERE QUEUED_OVERLOAD_TIME > 0) AS QUEUED_QUERIES,
+             quantile_cont(QUEUED_OVERLOAD_TIME, 0.95) AS P95_QUEUED_MS
+      FROM CURATED.FACT_QUERY WHERE WAREHOUSE_NAME IS NOT NULL GROUP BY 1, 2, 3
+
+  - id: KPI-PERF-003
+    name: Spill to storage
+    domain: performance
+    tier: extended
+    status: implemented
+    definition: Gigabytes spilled to local plus remote storage per warehouse and day.
+    unit: gb
+    grain: [account, warehouse, day]
+    dimension: warehouse
+    aggregation: sum
+    direction: lower_is_better
+    sources: [QUERY_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.performance
+    target_ref: rubric.obs.kpi_targets.spill_gb_daily_max
+    owner_role: PLATFORM_OWNER
+    waf_pillar: performance_efficiency
+    linked_checks: [DX-PERF-02]
+    synonyms: [spill, spilling, spilled bytes, remote spill, local spill, memory]
+    measures: [LOCAL_GB, REMOTE_GB, SPILLING_QUERIES]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, WAREHOUSE_NAME AS DIMENSION,
+             (sum(BYTES_SPILLED_TO_LOCAL_STORAGE) + sum(BYTES_SPILLED_TO_REMOTE_STORAGE)) / power(1024, 3) AS VALUE,
+             sum(BYTES_SPILLED_TO_LOCAL_STORAGE) / power(1024, 3) AS LOCAL_GB,
+             sum(BYTES_SPILLED_TO_REMOTE_STORAGE) / power(1024, 3) AS REMOTE_GB,
+             count(*) FILTER (WHERE BYTES_SPILLED_TO_LOCAL_STORAGE + BYTES_SPILLED_TO_REMOTE_STORAGE > 0) AS SPILLING_QUERIES
+      FROM CURATED.FACT_QUERY WHERE WAREHOUSE_NAME IS NOT NULL GROUP BY 1, 2, 3
+
+  - id: KPI-PERF-004
+    name: Pruning efficiency
+    domain: performance
+    tier: extended
+    status: implemented
+    definition: 1 - partitions scanned / partitions total, over queries that touched partitioned tables, per warehouse and day.
+    unit: ratio
+    grain: [account, warehouse, day]
+    dimension: warehouse
+    aggregation: avg
+    direction: higher_is_better
+    sources: [QUERY_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.performance
+    target_ref: rubric.obs.kpi_targets.pruning_efficiency_min
+    owner_role: PLATFORM_OWNER
+    waf_pillar: performance_efficiency
+    linked_checks: [DX-PERF-03]
+    synonyms: [pruning, partition pruning, micro partitions, scanned partitions, clustering effectiveness]
+    measures: [PARTITIONS_SCANNED, PARTITIONS_TOTAL]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, WAREHOUSE_NAME AS DIMENSION,
+             1 - sum(PARTITIONS_SCANNED) / sum(PARTITIONS_TOTAL) AS VALUE, sum(PARTITIONS_SCANNED) AS PARTITIONS_SCANNED,
+             sum(PARTITIONS_TOTAL) AS PARTITIONS_TOTAL
+      FROM CURATED.FACT_QUERY WHERE WAREHOUSE_NAME IS NOT NULL AND PARTITIONS_TOTAL > 0 GROUP BY 1, 2, 3
+
+  - id: KPI-PERF-005
+    name: Cache hit rate
+    domain: performance
+    tier: extended
+    status: implemented
+    definition: Average share of scanned data served from the warehouse cache (PERCENTAGE_SCANNED_FROM_CACHE) per warehouse and day.
+    unit: ratio
+    grain: [account, warehouse, day]
+    dimension: warehouse
+    aggregation: avg
+    direction: higher_is_better
+    sources: [QUERY_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.performance
+    target_ref: rubric.obs.kpi_targets.cache_hit_min
+    owner_role: PLATFORM_OWNER
+    waf_pillar: performance_efficiency
+    linked_checks: [DX-COST-03]
+    synonyms: [cache, cache hit, result cache, warehouse cache, cache rate]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, WAREHOUSE_NAME AS DIMENSION, avg(coalesce(PERCENTAGE_SCANNED_FROM_CACHE, 0)) AS VALUE
+      FROM CURATED.FACT_QUERY WHERE WAREHOUSE_NAME IS NOT NULL AND QUERY_TYPE = 'SELECT' GROUP BY 1, 2, 3
+
+  - id: KPI-PERF-006
+    name: Compilation time p95
+    domain: performance
+    tier: extended
+    status: implemented
+    definition: 95th-percentile compilation time (ms) per warehouse and day.
+    unit: ms
+    grain: [account, warehouse, day]
+    dimension: warehouse
+    aggregation: avg
+    direction: lower_is_better
+    sources: [QUERY_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.performance
+    owner_role: PLATFORM_OWNER
+    waf_pillar: performance_efficiency
+    linked_checks: [DX-ARCH-01]
+    synonyms: [compilation, compile time, planning time]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, WAREHOUSE_NAME AS DIMENSION, quantile_cont(COMPILATION_TIME, 0.95) AS VALUE
+      FROM CURATED.FACT_QUERY WHERE WAREHOUSE_NAME IS NOT NULL GROUP BY 1, 2, 3
+
+  - id: KPI-PERF-007
+    name: Execution time per query signature
+    domain: performance
+    tier: advanced
+    status: implemented
+    definition: >-
+      Average execution time (ms) per parameterised query signature and day — the series the regression alert
+      compares against its forecast band.
+    unit: ms
+    grain: [account, query_signature, day]
+    dimension: query_signature
+    aggregation: avg
+    direction: lower_is_better
+    sources: [QUERY_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.performance
+    owner_role: PLATFORM_OWNER
+    waf_pillar: performance_efficiency
+    linked_checks: [DX-PERF-04, DX-PERF-02]
+    synonyms: [regression, signature performance, query regression, slower than usual]
+    measures: [EXECUTIONS]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, SIGNATURE AS DIMENSION, avg(EXECUTION_TIME) AS VALUE, count(*) AS EXECUTIONS
+      FROM CURATED.FACT_QUERY WHERE EXECUTION_STATUS = 'SUCCESS' AND SIGNATURE <> '(none)' GROUP BY 1, 2, 3
+
+  - id: KPI-PERF-008
+    name: Warehouse load (average running)
+    domain: performance
+    tier: extended
+    status: implemented
+    definition: Average number of running queries per active hour, per warehouse and day (WAREHOUSE_LOAD_HISTORY).
+    unit: queries
+    grain: [account, warehouse, day]
+    dimension: warehouse
+    aggregation: avg
+    direction: neutral
+    sources: [WAREHOUSE_LOAD_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.performance
+    owner_role: PLATFORM_OWNER
+    waf_pillar: performance_efficiency
+    linked_checks: [DX-COST-02]
+    synonyms: [load, concurrency, utilisation, utilization, running queries]
+    measures: [AVG_QUEUED_LOAD]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, WAREHOUSE_NAME AS DIMENSION, AVG_RUNNING AS VALUE, AVG_QUEUED_LOAD
+      FROM CURATED.FACT_WAREHOUSE_DAILY
+
+  - id: KPI-PERF-009
+    name: Failed query rate
+    domain: performance
+    tier: extended
+    status: implemented
+    definition: Share of queries that did not succeed, per warehouse and day.
+    unit: ratio
+    grain: [account, warehouse, day]
+    dimension: warehouse
+    aggregation: avg
+    direction: lower_is_better
+    sources: [QUERY_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.performance
+    owner_role: PLATFORM_OWNER
+    waf_pillar: reliability
+    linked_checks: []
+    synonyms: [failed queries, query errors, error rate]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, coalesce(WAREHOUSE_NAME, '(serverless)') AS DIMENSION,
+             avg(CASE WHEN EXECUTION_STATUS = 'SUCCESS' THEN 0.0 ELSE 1.0 END) AS VALUE
+      FROM CURATED.FACT_QUERY GROUP BY 1, 2, 3
+
+  - id: KPI-PERF-010
+    name: Query acceleration eligible time
+    domain: performance
+    tier: extended
+    status: planned
+    definition: Seconds of eligible query acceleration per warehouse (QUERY_ACCELERATION_ELIGIBLE; not in the harvest contract yet).
+    unit: seconds
+    grain: [account, warehouse, day]
+    dimension: warehouse
+    aggregation: sum
+    direction: neutral
+    sources: [QUERY_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.performance
+    owner_role: PLATFORM_OWNER
+    waf_pillar: performance_efficiency
+    linked_checks: [DX-PERF-01]
+
+  - id: KPI-PERF-011
+    name: Long-running queries
+    domain: performance
+    tier: extended
+    status: implemented
+    definition: Number of queries whose elapsed time exceeds the rubric long-query limit, per warehouse and day.
+    unit: queries
+    grain: [account, warehouse, day]
+    dimension: warehouse
+    aggregation: sum
+    direction: lower_is_better
+    sources: [QUERY_HISTORY]
+    freshness_sla_ref: rubric.obs.freshness.performance
+    owner_role: PLATFORM_OWNER
+    waf_pillar: performance_efficiency
+    linked_checks: [DX-COST-04, DX-PERF-02]
+    synonyms: [long running, long queries, runaway queries]
+    sql: >-
+      SELECT ACCOUNT_NAME, DAY AS PERIOD, WAREHOUSE_NAME AS DIMENSION,
+             count(*) FILTER (WHERE TOTAL_ELAPSED_TIME > ${rubric.obs.performance.long_query_seconds} * 1000) AS VALUE
+      FROM CURATED.FACT_QUERY WHERE WAREHOUSE_NAME IS NOT NULL GROUP BY 1, 2, 3
