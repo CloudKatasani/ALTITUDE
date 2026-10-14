@@ -1,0 +1,42 @@
+id: CONN-ORACLE
+source: oracle
+dialect: oracle
+version: 1.0.0
+description: >
+  Read-only harvest of an Oracle (incl. Exadata) database through the data dictionary and the unified
+  audit trail. AWR/ASH are deliberately not read: they require the Diagnostics Pack licence (OR-11).
+principal:
+  name: ALTITUDE_HARVEST
+  kind: user
+  notes: Dedicated database user with no object privileges on application schemas.
+required_grants:
+  - privilege: CREATE SESSION
+    "on": DATABASE
+    why: Log on; grants no read or write access to any schema object by itself.
+    grant_sql: GRANT CREATE SESSION TO ALTITUDE_HARVEST;
+  - privilege: SELECT_CATALOG_ROLE
+    "on": DATABASE
+    why: Read DBA_* dictionary views (objects, source, columns, dependencies, scheduler jobs, privileges).
+    grant_sql: GRANT SELECT_CATALOG_ROLE TO ALTITUDE_HARVEST;
+  - privilege: AUDIT_VIEWER
+    "on": DATABASE
+    why: Read UNIFIED_AUDIT_TRAIL for object-level usage and distinct users.
+    optional: true
+    grant_sql: GRANT AUDIT_VIEWER TO ALTITUDE_HARVEST;
+objects_read:
+  - {name: "DBA_OBJECTS", why: "Object inventory with status and timestamps", contains: catalog}
+  - {name: "DBA_TABLES", why: "Table statistics (NUM_ROWS, BLOCKS) and temporary flag", contains: statistics}
+  - {name: "DBA_VIEWS", why: "View definitions", contains: code}
+  - {name: "DBA_SOURCE", why: "PL/SQL source (procedures, functions, packages, triggers)", contains: code}
+  - {name: "DBA_TAB_COLUMNS", why: "Column names, types, precision/scale, char semantics", contains: catalog}
+  - {name: "DBA_DEPENDENCIES", why: "Dependency graph between objects", contains: dependencies}
+  - {name: "DBA_SCHEDULER_JOBS", why: "DBMS_SCHEDULER job inventory and schedules", contains: schedule}
+  - {name: "DBA_SCHEDULER_JOB_RUN_DETAILS", why: "Scheduler job run history", contains: usage}
+  - {name: "DBA_TAB_PRIVS", why: "Object grants for the target RBAC mapping", contains: grants}
+  - {name: "DBA_ROLES", why: "Distinguish role grantees from user grantees", contains: grants}
+  - {name: "UNIFIED_AUDIT_TRAIL", why: "Object-level access events (counts and distinct users only)", contains: usage}
+  - {name: "PRODUCT_COMPONENT_VERSION", why: "Database version", contains: catalog}
+row_data: false
+never_shipped:
+  - user-table rows
+  - audit SQL text and bind values

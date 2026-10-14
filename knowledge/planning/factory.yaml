@@ -1,0 +1,37 @@
+version: 1.0.0
+description: >
+  Section 9.2 factory state machine. Every transition is recorded append-only with actor, timestamp,
+  evidence reference and confidence. Agent transitions below the review threshold are refused (a human must
+  make them); gated transitions require a passing gate decision.
+initial: discovered
+lanes: [schema, code, etl, data, validation, bi, security, ops]
+states:
+  - {state: discovered, label: Discovered}
+  - {state: classified, label: "Classified (keep/retire/rewrite)"}
+  - {state: converted, label: Converted}
+  - {state: ai_remediated, label: AI-remediated}
+  - {state: reviewed, label: Reviewed}
+  - {state: unit_tested, label: Unit-tested}
+  - {state: loaded, label: Loaded}
+  - {state: reconciled, label: Reconciled}
+  - {state: performance_tested, label: Performance-tested}
+  - {state: uat_passed, label: UAT-passed}
+  - {state: cut_over, label: Cut over}
+  - {state: legacy_retired, label: Legacy retired}
+transitions:
+  - {from: discovered, to: classified}
+  - {from: classified, to: converted}
+  - {from: converted, to: ai_remediated}
+  - {from: converted, to: reviewed, actor_types: [human]}
+  - {from: ai_remediated, to: reviewed, actor_types: [human]}
+  - {from: reviewed, to: ai_remediated, rework: true}
+  - {from: reviewed, to: unit_tested}
+  - {from: unit_tested, to: loaded}
+  - {from: loaded, to: reconciled}
+  - {from: reconciled, to: loaded, rework: true}
+  - {from: reconciled, to: performance_tested}
+  - {from: performance_tested, to: uat_passed, actor_types: [human]}
+  - {from: uat_passed, to: cut_over, actor_types: [human], requires_gate: cutover_go}
+  - {from: cut_over, to: legacy_retired, actor_types: [human]}
+  - {from: classified, to: legacy_retired, actor_types: [human], when_disposition: retire}
+agent_confidence_threshold_ref: rubric.ai.review_confidence_min

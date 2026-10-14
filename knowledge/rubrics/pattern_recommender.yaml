@@ -1,0 +1,58 @@
+namespace: pattern_recommender
+version: 1.0.0
+description: >
+  Section 8.3 pattern recommender as data. Rules are evaluated in order by a safe expression evaluator
+  (no eval); the first rule that matches wins, otherwise the default applies. Every recommendation carries
+  a confidence (rule confidence scaled by input completeness), a rationale and the review-board dissent.
+calibration:
+  - date: "2026-10-01"
+    sample_size: 0
+    note: Seed rules from Section 8.1/8.3; validate on the first engagements.
+values:
+  inputs: [deadline_weeks, procedural_code_share, dead_object_share, model_quality_score, appetite_for_change,
+           etl_tool_complexity, regulatory_freeze_windows, budget_band]
+  # Inputs computed from evidence (harvest + assessment); the rest come from the Appendix B questionnaire.
+  evidence_inputs: [procedural_code_share, dead_object_share, etl_tool_complexity, regulatory_freeze_windows]
+  rules:
+    - id: deadline_procedural
+      when: "deadline_weeks < 26 and procedural_code_share > 0.4"
+      recommend: lift_and_shift
+      confidence: 0.82
+      rationale: "Deadline cannot absorb procedural refactor; schedule refactor backlog post-cutover"
+    - id: broken_model_with_appetite
+      when: "model_quality_score < 40 and appetite_for_change >= 3"
+      recommend: re_architect
+      confidence: 0.78
+      rationale: "Model is fundamentally broken and the organisation has appetite to modernise"
+    - id: complex_etl_modernise
+      when: "etl_tool_complexity > 0.5 and appetite_for_change >= 4 and deadline_weeks >= 52"
+      recommend: re_architect
+      confidence: 0.72
+      rationale: "Spaghetti ETL with time and appetite to rebuild on dbt/dynamic tables"
+    - id: regulated_long_tail
+      when: "regulatory_freeze_windows > 0 and deadline_weeks >= 52 and budget_band in ['large', 'enterprise']"
+      recommend: hybrid
+      confidence: 0.7
+      rationale: "Regulatory freeze windows on a large estate: coexist with a dated decommission plan"
+  default:
+    recommend: re_platform
+    confidence: 0.76
+    rationale: "Default for most EDWs: Snowflake idioms where cheap, keep the data model; best value/risk ratio"
+  completeness_floor: 0.6   # confidence x (floor + (1 - floor) x share of inputs provided)
+  review_board:
+    - lens: speed
+      prefers: lift_and_shift
+      when: "deadline_weeks < 26"
+      rationale: "Hard deadline: minimise logic change and exit first"
+    - lens: cost
+      prefers: re_platform
+      when: "dead_object_share > 0.25"
+      rationale: "Large dead-object share: prune ruthlessly and convert to Snowflake idioms to avoid carrying legacy cost"
+    - lens: risk
+      prefers: hybrid
+      when: "regulatory_freeze_windows > 0"
+      rationale: "Regulatory/month-end processes in scope: reduce cutover risk with coexistence"
+    - lens: value
+      prefers: re_architect
+      when: "appetite_for_change >= 4 or procedural_code_share > 0.6"
+      rationale: "High appetite or heavily procedural code: refactor now rather than migrate debt"

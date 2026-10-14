@@ -1,0 +1,15 @@
+description: Procedural row-by-row processing that becomes slow and expensive on Snowflake (Sections 8.2.2, 31).
+anti_patterns:
+  - id: AP-01
+    name: row_by_row
+    title: Row-by-row processing (cursor, WHILE or FOR loops issuing DML)
+    severity: S3
+    applies_to: [procedure, function, package, trigger, macro, script]
+    detector: row_by_row
+    size_sensitive: true
+    credits_per_run_ref: rubric.assessment.anti_patterns.credits_per_run.row_by_row
+    recommendation: >
+      Rewrite as one set-based statement (INSERT ... SELECT or MERGE); keep row-level error capture with
+      a rejected-rows table rather than per-row exception handling.
+    known_issues: [OR-05, MS-09]
+    last_verified: "2026-10-01"
