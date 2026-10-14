@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sherpa challenges and next actions",
+  "x-altitude-globs": ["advisory/sherpa.yaml"],
+  "type": "object",
+  "required": ["challenges", "next_actions"],
+  "additionalProperties": false,
+  "properties": {
+    "challenges": {"type": "array", "items": {
+      "type": "object", "required": ["id", "title", "when", "severity", "message"], "additionalProperties": false,
+      "properties": {"id": {"type": "string", "pattern": "^SH-CH-\\d{3}$"}, "title": {"type": "string"},
+        "when": {"type": "string"}, "severity": {"enum": ["low", "medium", "high"]}, "message": {"type": "string"}}}},
+    "next_actions": {"type": "object", "additionalProperties": {"type": "array", "items": {
+      "type": "object", "required": ["when", "action"], "additionalProperties": false,
+      "properties": {"when": {"type": "string"}, "action": {"type": "string"}}}}}
+  }
+}

@@ -1,0 +1,12 @@
+# Specialist advisors (Section 17.2): each is Sherpa restricted to a slice of the evidence and Pattern Library.
+advisors:
+  - {id: ADV-TERADATA, name: Teradata Advisor, expertise: "BTEQ/SPL/TPT, SET/case semantics", kinds: [known_issue, mapping, drift], tags: [teradata]}
+  - {id: ADV-ORACLE, name: Oracle Advisor, expertise: "PL/SQL packages, NLS, numeric policy", kinds: [known_issue, mapping, drift], tags: [oracle]}
+  - {id: ADV-SQLSERVER, name: SQL Server Advisor, expertise: "T-SQL, SSIS, SSRS, Agent", kinds: [known_issue, mapping, drift, etl], tags: [sqlserver, ssis]}
+  - {id: ADV-HADOOP, name: Hadoop/Spark Advisor, expertise: "Hive, Spark, Ranger", kinds: [known_issue, mapping], tags: [hadoop, spark, hive]}
+  - {id: ADV-ETL, name: ETL Advisor, expertise: "Informatica/DataStage/ODI", kinds: [etl, mapping], tags: [informatica, datastage, odi, ssis]}
+  - {id: ADV-ARCHITECT, name: Snowflake Architect, expertise: "Well-Architected, Iceberg, DR", kinds: [suggestion, wa_check, decision], tags: [architecture, reliability, performance]}
+  - {id: ADV-FINOPS, name: FinOps Advisor, expertise: "Credits, warehouses, serverless costs", kinds: [suggestion, kpi], tags: [cost, finops]}
+  - {id: ADV-SECURITY, name: Security Advisor, expertise: "RBAC, policies, network, compliance", kinds: [suggestion, kpi, wa_check], tags: [security]}
+  - {id: ADV-GOVERNANCE, name: Governance & DQ Advisor, expertise: "Classification, ownership, DMFs", kinds: [suggestion, kpi], tags: [governance, quality]}
+  - {id: ADV-CORTEX, name: Cortex/AI Advisor, expertise: "Semantic views, Cortex Search/Agents", kinds: [suggestion, kpi, airready], tags: [ai]}

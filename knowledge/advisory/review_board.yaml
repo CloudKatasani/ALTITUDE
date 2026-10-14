@@ -1,0 +1,53 @@
+# Architecture Review Board (Section 17.3): one decision, seven lenses, one recommendation, dissent recorded.
+# Each concern's `when` is evaluated against the decision facts; `blocking` concerns make the lens oppose.
+lenses:
+  - id: CFO
+    name: CFO
+    weight: 1.0
+    key_question: "Does the value case hold, with a stated method, and is the run cost bounded?"
+    concerns:
+      - {when: "annual_value_usd is not None and annual_cost_usd is not None and annual_value_usd < annual_cost_usd", concern: "Annual value is below annual cost.", blocking: true}
+      - {when: "value_method_missing", concern: "Value has no stated method.", blocking: false}
+      - {when: "coexistence and not decommission_date", concern: "Double run cost with no end date.", blocking: false}
+  - id: CISO
+    name: CISO
+    weight: 1.0
+    key_question: "Does this keep least privilege, protect classified data and keep evidence auditable?"
+    concerns:
+      - {when: "requires_accountadmin", concern: "Requires ACCOUNTADMIN; use SNOWFLAKE database roles.", blocking: true}
+      - {when: "row_data_leaves_boundary", concern: "Row data leaves the client boundary.", blocking: true}
+      - {when: "unmasked_classified_columns > 0", concern: "Classified columns without masking remain.", blocking: false}
+  - id: ARCHITECT
+    name: Platform Architect
+    weight: 1.0
+    key_question: "Is this consistent with the Well-Architected baseline and the target architecture ADRs?"
+    concerns:
+      - {when: "wa_critical_findings > 0", concern: "Critical Well-Architected findings are open.", blocking: false}
+      - {when: "pattern == 'lift_and_shift' and not modernise_backlog", concern: "No 'modernise later' backlog with owners.", blocking: false}
+  - id: STEWARD
+    name: Data Steward
+    weight: 0.8
+    key_question: "Are ownership, classification and KPI definitions settled?"
+    concerns:
+      - {when: "kpi_definition_conflicts > 0", concern: "KPIs with conflicting definitions.", blocking: false}
+      - {when: "tier1_without_owner > 0", concern: "Tier-1 objects without an owner.", blocking: false}
+  - id: DELIVERY
+    name: Delivery Lead
+    weight: 1.0
+    key_question: "Can the team deliver this within the deadline and the estimate's confidence band?"
+    concerns:
+      - {when: "estimate_p80_weeks is not None and deadline_weeks is not None and estimate_p80_weeks > deadline_weeks", concern: "p80 estimate exceeds the deadline.", blocking: true}
+      - {when: "estimate_confidence is not None and estimate_confidence < 0.6", concern: "Estimate confidence is low; harvest more evidence first.", blocking: false}
+  - id: BUSINESS
+    name: Business Owner
+    weight: 0.8
+    key_question: "Will users get something they use, without a regulatory blackout clash?"
+    concerns:
+      - {when: "in_quarter_end_blackout", concern: "Cutover falls in a quarter-end blackout window.", blocking: true}
+      - {when: "not business_user_outcome", concern: "The wave ends with nothing a business user uses.", blocking: false}
+  - id: SNOWFLAKE
+    name: Snowflake Account Team
+    weight: 0.6
+    key_question: "Does this use Snowflake-native capabilities and fund new workloads?"
+    concerns:
+      - {when: "emulates_legacy_physical_design", concern: "Emulates legacy distribution/index design.", blocking: false}

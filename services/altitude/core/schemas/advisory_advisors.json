@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Specialist advisors",
+  "x-altitude-globs": ["advisory/advisors.yaml"],
+  "type": "object",
+  "required": ["advisors"],
+  "properties": {
+    "advisors": {"type": "array", "items": {
+      "type": "object", "required": ["id", "name", "expertise", "kinds", "tags"], "additionalProperties": false,
+      "properties": {"id": {"type": "string", "pattern": "^ADV-[A-Z]+$"}, "name": {"type": "string"},
+        "expertise": {"type": "string"}, "kinds": {"type": "array", "items": {"type": "string"}},
+        "tags": {"type": "array", "items": {"type": "string"}}}}}
+  }
+}

@@ -1,0 +1,18 @@
+namespace: advisory
+version: 1.0.0
+description: Grounding, challenge and review-board parameters for Sherpa, the specialist advisors and the Architecture Review Board.
+values:
+  grounding:
+    min_score: 1.2            # BM25 score of the best evidence below which Sherpa refuses
+    max_citations: 4
+    k1: 1.5                   # BM25 term-frequency saturation
+    b: 0.75                   # BM25 length normalisation
+    confidence_scale: 6.0     # score at which grounding confidence saturates to 1.0
+  challenges:
+    procedural_scripts_high: 1000
+    procedural_share_high: 0.4
+    dead_object_share_high: 0.3
+    deadline_weeks_tight: 26
+    coexistence_cost_ratio_high: 0.25
+  review_board:
+    proceed_support_min: 0.6  # weighted support share needed to recommend proceeding
