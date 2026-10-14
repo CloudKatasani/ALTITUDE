@@ -9,7 +9,7 @@
     "offers": {"type": "array", "items": {"type": "object", "required": ["id", "name", "package", "duration_weeks", "fee_usd", "buyer", "scope"],
       "properties": {"id": {"type": "string", "pattern": "^OFF-"}, "fee_usd": {"type": "array", "minItems": 2, "maxItems": 2},
         "duration_weeks": {"type": "array", "minItems": 2, "maxItems": 2}}}},
-    "tiers": {"type": "array", "items": {"type": "object", "required": ["id", "package", "fee_usd", "weeks"]}},
+    "tiers": {"type": "array", "items": {"type": "object", "required": ["tier", "package", "fee_usd", "weeks"]}},
     "guarantees": {"type": "array", "items": {"type": "object", "required": ["id", "name", "applies_to", "terms"],
       "properties": {"id": {"type": "string", "pattern": "^GUA-"}}}}
   }

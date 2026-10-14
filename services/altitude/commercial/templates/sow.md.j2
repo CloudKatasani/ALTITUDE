@@ -3,7 +3,7 @@
 **Client:** {{ client }} · **Provider:** {{ '{{' }}COMPANY_NAME{{ '}}' }} · **Draft for review** — not an offer until signed.
 
 ## Scope
-{{ offer.scope }}{% if tier %} — tier **{{ tier.id }}** ({{ tier.weeks }} weeks{% if tier.accounts %}, up to {{ tier.accounts }} account(s){% endif %}{% if tier.domains %}, domains {{ tier.domains | join(", ") }}{% endif %}){% endif %}.
+{{ offer.scope }}{% if tier %} — tier **{{ tier.tier }}** ({{ tier.weeks }} weeks{% if tier.accounts %}, up to {{ tier.accounts }} account(s){% endif %}{% if tier.domains %}, domains {{ tier.domains | join(", ") }}{% endif %}){% endif %}.
 {% for n in scope_notes %}
 - {{ n }}{% endfor %}
 

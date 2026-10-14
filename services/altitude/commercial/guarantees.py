@@ -13,7 +13,7 @@ def catalog() -> dict:
 
 
 def tier(tier_id: str) -> dict:
-    return next(t for t in catalog()["tiers"] if t["id"] == tier_id)
+    return next(t for t in catalog()["tiers"] if t["tier"] == tier_id)
 
 
 def qualifies(annual_spend_usd: float, rubrics: RubricSet | None = None) -> bool:

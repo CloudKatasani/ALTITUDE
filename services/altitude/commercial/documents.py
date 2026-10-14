@@ -25,7 +25,7 @@ def draft_sow(offer_id: str, client: str, tier_id: str | None = None, scope_note
     offer = next((o for o in cat["offers"] if o["id"] == offer_id), None)
     if offer is None:
         raise KeyError(f"unknown offer {offer_id}")
-    t = next((x for x in cat["tiers"] if x["id"] == tier_id), None) if tier_id else None
+    t = next((x for x in cat["tiers"] if x["tier"] == tier_id), None) if tier_id else None
     fee_range = (t or offer)["fee_usd"]
     guarantees = [g for g in cat["guarantees"] if tier_id and tier_id in g["applies_to"]]
     nxt = next((o for o in cat["offers"] if o["id"] == offer.get("next")), None)

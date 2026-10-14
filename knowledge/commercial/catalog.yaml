@@ -12,13 +12,13 @@ offers:
   - {id: OFF-AI, name: "AI-Ready Programme", package: ai_ready, duration_weeks: [10, 12], fee_usd: [90000, 250000], buyer: "CDO", next: OFF-RUN, scope: "Score, fix, semantic views, Cortex agent pilot"}
   - {id: OFF-RUN, name: "Managed Run Service", package: managed_run, duration_weeks: [52, 52], fee_usd: [0, 0], monthly_usd: [12000, 25000], buyer: "CIO", next: OFF-FACTORY, scope: "Package O3 + L2/L3 support + quarterly optimisation"}
 tiers:
-  - {id: D0, package: D, fee_usd: [0, 0], weeks: 1, accounts: 1, domains: [D1, D2, D3, D4, D5], top_findings: 10}
-  - {id: D1, package: D, fee_usd: [20000, 30000], weeks: 2, accounts: 1, domains: [D1, D2, D3, D4, D5, D6, D7]}
-  - {id: D2, package: D, fee_usd: [45000, 75000], weeks: 4, accounts: 3, domains: [D1, D2, D3, D4, D5, D6, D7, D8, D9, D10]}
-  - {id: D3, package: D, fee_usd: [90000, 150000], weeks: 6, accounts: 99, domains: [D1, D2, D3, D4, D5, D6, D7, D8, D9, D10]}
-  - {id: O1, package: O, fee_usd: [15000, 25000], monthly_usd: [3000, 5000], weeks: 4, accounts: 2}
-  - {id: O2, package: O, fee_usd: [30000, 45000], monthly_usd: [6000, 10000], weeks: 6, accounts: 5}
-  - {id: O3, package: O, fee_usd: [40000, 60000], monthly_usd: [12000, 25000], weeks: 8, accounts: 5}
+  - {tier: D0, package: D, fee_usd: [0, 0], weeks: 1, accounts: 1, domains: [D1, D2, D3, D4, D5], top_findings: 10}
+  - {tier: D1, package: D, fee_usd: [20000, 30000], weeks: 2, accounts: 1, domains: [D1, D2, D3, D4, D5, D6, D7]}
+  - {tier: D2, package: D, fee_usd: [45000, 75000], weeks: 4, accounts: 3, domains: [D1, D2, D3, D4, D5, D6, D7, D8, D9, D10]}
+  - {tier: D3, package: D, fee_usd: [90000, 150000], weeks: 6, accounts: 99, domains: [D1, D2, D3, D4, D5, D6, D7, D8, D9, D10]}
+  - {tier: O1, package: O, fee_usd: [15000, 25000], monthly_usd: [3000, 5000], weeks: 4, accounts: 2}
+  - {tier: O2, package: O, fee_usd: [30000, 45000], monthly_usd: [6000, 10000], weeks: 6, accounts: 5}
+  - {tier: O3, package: O, fee_usd: [40000, 60000], monthly_usd: [12000, 25000], weeks: 8, accounts: 5}
 guarantees:
   - {id: GUA-FEE-CREDIT, name: "Fee credit", applies_to: [D1, D2], terms: "100% of the fee credited against a remediation sprint or Package O signed within the window", once_per_account: true}
   - {id: GUA-VALUE-FLOOR, name: "Value floor", applies_to: [D2, D3], terms: "If identified annualised opportunity (p50) is below the multiple of the fee, credit the difference, capped at the fee"}
