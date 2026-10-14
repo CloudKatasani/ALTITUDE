@@ -15,7 +15,7 @@
     <ol>{% for a in actions %}<li>{{ a }}</li>{% else %}<li class="muted">Nothing pending.</li>{% endfor %}</ol>
   </section>
   <section class="card">
-    <h2>{{ theme.COPILOT_NAME }} challenges</h2>
+    <h2>{{ theme.COPILOT_NAME }} challenges <small class="muted"><a href="/facts">edit facts</a></small></h2>
     {% for c in challenges %}<p class="flag {{ c.severity }}"><b>[{{ c.id }}]</b> {{ c.message }}</p>
     {% else %}<p class="muted">No risks flagged from the current evidence.</p>{% endfor %}
   </section>

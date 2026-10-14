@@ -22,6 +22,7 @@
   {% if principal %}
   <nav>
     <a href="/">Outcome path</a>
+    <a href="/facts">Engagement facts</a>
     {% for path, label in nav %}<a href="{{ path }}">{{ label }}</a>{% endfor %}
     <a href="/review">Review queue</a>
     <a href="/sherpa">{{ theme.COPILOT_NAME }}</a>

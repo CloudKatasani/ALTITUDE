@@ -128,6 +128,63 @@ def mount(app: FastAPI) -> None:
         audit.record(ctx.store, p.user, f"review.{decision}", subject_type="review_item", subject_id=item_id)
         return RedirectResponse("/review", status_code=303)
 
+    def _engagement(engagement_id: str | None) -> dict | None:
+        if engagement_id:
+            return ctx.store.get("engagement", engagement_id=engagement_id)
+        rows = ctx.store.query("SELECT * FROM engagement ORDER BY created_at LIMIT 1")
+        return rows[0] if rows else None
+
+    def _facts_page(request: Request, p: Principal, eng: dict | None, values: dict | None = None,
+                    errors: dict | None = None, saved: list | None = None) -> HTMLResponse:
+        from altitude.advisory import Sherpa
+        from altitude.advisory.facts import catalogue
+
+        from .routes.engagement import current_facts, fact_history
+
+        current = current_facts(ctx.store, eng["engagement_id"]) if eng else {}
+        history = fact_history(ctx.store, eng["engagement_id"]) if eng else {}
+        shown = {**current, **(values or {})}
+        challenges = Sherpa(ctx.extras["grounding"](ctx)).challenges(_facts(ctx, eng)) if eng else []
+        engagements = ctx.store.query("SELECT engagement_id, name FROM engagement ORDER BY created_at")
+        status = 422 if errors else 200
+        resp = page(env, "facts.html", request, p, engagement=eng, engagements=engagements, groups=catalogue(),
+                    values=shown, current=current, history=history, errors=errors or {}, saved=saved or [],
+                    challenges=challenges, editable=p.can("run"))
+        resp.status_code = status
+        return resp
+
+    @app.get("/facts", response_class=HTMLResponse)
+    def facts_get(request: Request, engagement: str | None = None) -> HTMLResponse:
+        p = portal_principal(request)
+        if p is None:
+            return RedirectResponse("/login", status_code=303)
+        saved = [k for k in request.query_params.get("saved", "").split(",") if k]
+        return _facts_page(request, p, _engagement(engagement), saved=saved)
+
+    @app.post("/facts", response_class=HTMLResponse)
+    async def facts_post(request: Request) -> HTMLResponse:
+        p = portal_principal(request)
+        if p is None:
+            return RedirectResponse("/login", status_code=303)
+        if not p.can("run"):
+            return HTMLResponse("Forbidden: your role cannot edit engagement facts", status_code=403)
+        from altitude.advisory.facts import parse
+
+        from .routes.engagement import current_facts, write_facts
+
+        form = await request.form()
+        eng = _engagement(form.get("engagement_id"))
+        if eng is None:
+            return HTMLResponse("No such engagement", status_code=404)
+        submitted = {k: v for k, v in form.items() if k != "engagement_id"}
+        changes, errors = parse(submitted, current_facts(ctx.store, eng["engagement_id"]))
+        if errors:
+            return _facts_page(request, p, eng, values=submitted, errors=errors)
+        if changes:
+            write_facts(ctx.store, eng["engagement_id"], changes, p.user)
+        return RedirectResponse(f"/facts?engagement={eng['engagement_id']}&saved={','.join(sorted(changes))}"
+                                if changes else f"/facts?engagement={eng['engagement_id']}", status_code=303)
+
     @app.get("/sherpa", response_class=HTMLResponse)
     def sherpa_page(request: Request, q: str = "") -> HTMLResponse:
         p = portal_principal(request)
