@@ -1,0 +1,90 @@
+# Evaluation harness for the semantic layer / Cortex Agent (Section 15.2 AI pack): golden questions with
+# expected SQL and expected answers over a small fixture. A candidate (the offline semantic compiler, or a
+# Cortex Agent via an answer function) is scored on answer equivalence; out-of-scope questions must be refused.
+version: 1.0.0
+fixtures:
+  - table: EDW.FINANCE.FCT_REVENUE
+    columns: {REVENUE_DATE: DATE, PRODUCT_ID: INTEGER, REGION: VARCHAR, GROSS_AMOUNT: DOUBLE, NET_AMOUNT: DOUBLE, TAX_AMOUNT: DOUBLE}
+    rows:
+      - ["2026-09-01", 1, EAST, 120.0, 100.0, 10.0]
+      - ["2026-09-01", 2, WEST, 60.0, 50.0, 5.0]
+      - ["2026-09-02", 1, EAST, 240.0, 200.0, 20.0]
+      - ["2026-09-02", 3, NORTH, 36.0, 30.0, 3.0]
+  - table: EDW.SALES.DIM_PRODUCT
+    columns: {PRODUCT_ID: INTEGER, NAME: VARCHAR, CATEGORY: VARCHAR}
+    rows:
+      - [1, Smart meter, HARDWARE]
+      - [2, Installation, SERVICES]
+      - [3, Support plan, SERVICES]
+  - table: EDW.SALES.FCT_ORDERS
+    columns: {ORDER_ID: INTEGER, ORDER_DATE: DATE, CUSTOMER_ID: INTEGER, REGION: VARCHAR, NET_AMOUNT: DOUBLE, GROSS_AMOUNT: DOUBLE}
+    rows:
+      - [1, "2026-09-01", 10, EAST, 100.0, 110.0]
+      - [1, "2026-09-01", 10, EAST, 50.0, 55.0]
+      - [2, "2026-09-01", 11, WEST, 80.0, 90.0]
+      - [3, "2026-09-02", 10, EAST, 20.0, 22.0]
+  - table: EDW.SALES.DIM_CUSTOMER
+    columns: {CUSTOMER_ID: INTEGER, SEGMENT: VARCHAR, REGION: VARCHAR}
+    rows:
+      - [10, ENTERPRISE, EAST]
+      - [11, SMB, WEST]
+      - [12, SMB, NORTH]
+
+questions:
+  - id: GQ-001
+    question: What was revenue by region?
+    expected:
+      kpi: KPI-REVENUE
+      dimensions: [region]
+      sql: SELECT REGION, SUM(NET_AMOUNT) FROM EDW.FINANCE.FCT_REVENUE GROUP BY REGION
+      answer: [[EAST, 300.0], [NORTH, 30.0], [WEST, 50.0]]
+  - id: GQ-002
+    question: What is total gross revenue?
+    expected:
+      kpi: KPI-GROSS-REVENUE
+      dimensions: []
+      sql: SELECT SUM(GROSS_AMOUNT) FROM EDW.FINANCE.FCT_REVENUE
+      answer: [[456.0]]
+  - id: GQ-003
+    question: How many orders by customer segment?
+    expected:
+      kpi: KPI-ORDERS
+      dimensions: [segment]
+      sql: >
+        SELECT c.SEGMENT, COUNT(DISTINCT o.ORDER_ID) FROM EDW.SALES.FCT_ORDERS o
+        JOIN EDW.SALES.DIM_CUSTOMER c ON o.CUSTOMER_ID = c.CUSTOMER_ID GROUP BY c.SEGMENT
+      answer: [[ENTERPRISE, 2], [SMB, 1]]
+  - id: GQ-004
+    question: What is the average order value by region?
+    expected:
+      kpi: KPI-AOV
+      dimensions: [region]
+      sql: SELECT REGION, SUM(NET_AMOUNT) / COUNT(DISTINCT ORDER_ID) FROM EDW.SALES.FCT_ORDERS GROUP BY REGION
+      answer: [[EAST, 85.0], [WEST, 80.0]]
+  - id: GQ-005
+    question: Show revenue by product category
+    expected:
+      kpi: KPI-REVENUE
+      dimensions: [category]
+      sql: >
+        SELECT p.CATEGORY, SUM(r.NET_AMOUNT) FROM EDW.FINANCE.FCT_REVENUE r
+        JOIN EDW.SALES.DIM_PRODUCT p ON r.PRODUCT_ID = p.PRODUCT_ID GROUP BY p.CATEGORY
+      answer: [[HARDWARE, 300.0], [SERVICES, 80.0]]
+  - id: GQ-006
+    question: What were bookings per day?
+    expected:
+      kpi: KPI-BOOKINGS
+      dimensions: [order_date]
+      sql: SELECT ORDER_DATE, SUM(NET_AMOUNT) FROM EDW.SALES.FCT_ORDERS GROUP BY ORDER_DATE
+      answer: [["2026-09-01", 230.0], ["2026-09-02", 20.0]]
+  - id: GQ-007
+    question: Tax collected by territory
+    expected:
+      kpi: KPI-TAX
+      dimensions: [region]
+      sql: SELECT REGION, SUM(TAX_AMOUNT) FROM EDW.FINANCE.FCT_REVENUE GROUP BY REGION
+      answer: [[EAST, 30.0], [NORTH, 3.0], [WEST, 5.0]]
+  - id: GQ-008
+    question: What will the weather be in Boston tomorrow?
+    expected:
+      refuse: true

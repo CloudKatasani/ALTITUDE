@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Certified KPI registry (Section 26) — one definition per KPI",
+  "x-altitude-globs": ["semantic/*.yaml"],
+  "type": "object",
+  "required": ["version", "domains", "kpis"],
+  "additionalProperties": false,
+  "$defs": {
+    "name": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+    "fq": {"type": "string", "pattern": "^[A-Z_][A-Z0-9_$]*\\.[A-Z_][A-Z0-9_$]*\\.[A-Z_][A-Z0-9_$]*$"},
+    "col": {"type": "string", "pattern": "^[A-Z_][A-Z0-9_$]*$"},
+    "synonyms": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "member": {
+      "type": "object", "required": ["name", "table", "expr", "description"], "additionalProperties": false,
+      "properties": {"name": {"$ref": "#/$defs/name"}, "table": {"$ref": "#/$defs/name"}, "expr": {"type": "string"},
+                     "synonyms": {"$ref": "#/$defs/synonyms"}, "description": {"type": "string"}}
+    }
+  },
+  "properties": {
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "domains": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "semantic_view", "description", "owner", "tables", "relationships", "facts", "dimensions"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^DOM-[A-Z0-9-]+$"},
+          "name": {"$ref": "#/$defs/name"},
+          "semantic_view": {"$ref": "#/$defs/fq"},
+          "description": {"type": "string"},
+          "owner": {"type": "string"},
+          "tables": {"type": "array", "minItems": 1, "items": {
+            "type": "object", "required": ["alias", "table", "primary_key", "description"], "additionalProperties": false,
+            "properties": {"alias": {"$ref": "#/$defs/name"}, "table": {"$ref": "#/$defs/fq"},
+                           "primary_key": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/col"}},
+                           "synonyms": {"$ref": "#/$defs/synonyms"}, "description": {"type": "string"}}}},
+          "relationships": {"type": "array", "items": {
+            "type": "object", "required": ["name", "from", "columns", "to"], "additionalProperties": false,
+            "properties": {"name": {"$ref": "#/$defs/name"}, "from": {"$ref": "#/$defs/name"},
+                           "columns": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/col"}},
+                           "to": {"$ref": "#/$defs/name"}}}},
+          "facts": {"type": "array", "items": {"$ref": "#/$defs/member"}},
+          "dimensions": {"type": "array", "items": {"$ref": "#/$defs/member"}}
+        }
+      }
+    },
+    "kpis": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "domain", "table", "expression", "certified", "owner", "synonyms", "description"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^KPI-[A-Z0-9-]+$"},
+          "name": {"type": "string", "minLength": 1},
+          "domain": {"$ref": "#/$defs/name"},
+          "table": {"$ref": "#/$defs/name"},
+          "expression": {"type": "string", "minLength": 1},
+          "certified": {"type": "boolean"},
+          "owner": {"type": "string"},
+          "synonyms": {"$ref": "#/$defs/synonyms"},
+          "description": {"type": "string"}
+        }
+      }
+    }
+  }
+}

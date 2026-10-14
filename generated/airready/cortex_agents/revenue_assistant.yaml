@@ -1,0 +1,47 @@
+# AUTO-GENERATED — DO NOT EDIT. Source: knowledge/airready/cortex_templates.yaml, knowledge/semantic/kpi_registry.yaml. Regenerate with `altitude generate`.
+# Cortex Agent specification EDW.AGENTS.REVENUE_ASSISTANT (role ALT_AGENT_REVENUE_ASSISTANT).
+# Deploy with CREATE AGENT ... FROM SPECIFICATION after the golden-question harness passes.
+models:
+  orchestration: auto
+instructions:
+  orchestration: Answer questions about bookings, orders, customers and recognised revenue using only the certified
+    semantic views; cite the KPI definition used. Use policy search only for definitions and procedures, filtered
+    to the user's ACL group. If a question cannot be answered from these sources, say so.
+  response: Cite the certified KPI (id) or document used; say when the sources do not answer.
+  sample_questions:
+  - question: What was revenue by region?
+  - question: How many orders by customer segment?
+  - question: What is the average order value by region?
+tools:
+- tool_spec:
+    type: cortex_analyst_text_to_sql
+    name: analyst_sales
+    description: 'Orders and customers — booked sales. Certified KPIs: Order Count, Bookings, Average Order Value,
+      Active Customers.'
+- tool_spec:
+    type: cortex_analyst_text_to_sql
+    name: analyst_finance
+    description: 'Recognised revenue by day, product and region. Certified KPIs: Revenue, Gross Revenue, Tax.'
+- tool_spec:
+    type: cortex_search
+    name: search_css_policy_docs
+    description: Governed policy and procedure documents, chunked; ACL group per chunk mirrors the source system.
+tool_resources:
+  analyst_sales:
+    semantic_view: EDW.SEMANTIC.SV_SALES
+    execution_environment:
+      type: warehouse
+      warehouse: WH_AGENTS
+  analyst_finance:
+    semantic_view: EDW.SEMANTIC.SV_FINANCE
+    execution_environment:
+      type: warehouse
+      warehouse: WH_AGENTS
+  search_css_policy_docs:
+    name: DOCS.SEARCH.CSS_POLICY_DOCS
+    max_results: 5
+    id_column: DOC_ID
+    title_column: DOC_ID
+    filter:
+      '@eq':
+        ACL_GROUP: '{{ user.acl_group }}'

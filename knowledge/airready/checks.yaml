@@ -1,0 +1,357 @@
+# EAIRN-style AI-readiness checks on Snowflake (Section 19.1), eight pillars.
+# Each query runs read-only on a sealed snapshot and returns exactly one row: NUMERATOR, DENOMINATOR and an
+# optional GAPS list (objects that miss). Score = NUMERATOR / DENOMINATOR (DENOMINATOR = 0 => not applicable).
+# A check passes when its score >= the rubric pass mark (threshold_ref). Bound parameters: $as_of, and
+# $kpi_names (certified KPI names + synonyms from knowledge/semantic/kpi_registry.yaml).
+version: 1.0.0
+checks:
+  # ------------------------------------------------------------------ Data Quality
+  - id: AIR-DQ-001
+    pillar: data_quality
+    title: DMFs attached to Tier-1 tables
+    query: |
+      WITH t1 AS (SELECT DISTINCT unnest(from_json("VALUE", '["VARCHAR"]')) AS FQ FROM CLIENT_INPUTS WHERE "KEY" = 'tier1_tables')
+      SELECT count(*) FILTER (WHERE EXISTS (SELECT 1 FROM DATA_METRIC_FUNCTION_REFERENCES d WHERE d.REF_ENTITY_NAME = t1.FQ)) AS NUMERATOR,
+             count(*) AS DENOMINATOR,
+             list(FQ ORDER BY FQ) FILTER (WHERE NOT EXISTS (SELECT 1 FROM DATA_METRIC_FUNCTION_REFERENCES d WHERE d.REF_ENTITY_NAME = t1.FQ)) AS GAPS
+      FROM t1
+    threshold_ref: rubric.airready.pass_marks.dmf_coverage_min
+    weight: critical
+    rationale: Agents answering from Tier-1 data need monitored quality signals.
+    playbook: PB-ENG-DMF
+
+  - id: AIR-DQ-002
+    pillar: data_quality
+    title: Freshness SLAs measured and met
+    query: |
+      WITH s AS (SELECT unnest(from_json("VALUE", '[{"table":"VARCHAR","loaded_by":"VARCHAR","deadline_utc":"VARCHAR"}]')) AS S
+                 FROM CLIENT_INPUTS WHERE "KEY" = 'freshness_slas'),
+           runs AS (SELECT s.S."table" AS TBL, h.STATE, h.COMPLETED_TIME, s.S.deadline_utc AS DEADLINE
+                    FROM s JOIN TASK_HISTORY h ON h.FQ_NAME = s.S.loaded_by)
+      SELECT count(*) FILTER (WHERE STATE = 'SUCCEEDED' AND strftime(COMPLETED_TIME, '%H:%M') <= DEADLINE) AS NUMERATOR,
+             count(*) AS DENOMINATOR,
+             list(DISTINCT TBL) FILTER (WHERE NOT (STATE = 'SUCCEEDED' AND strftime(COMPLETED_TIME, '%H:%M') <= DEADLINE)) AS GAPS
+      FROM runs
+    threshold_ref: rubric.airready.pass_marks.freshness_on_time_min
+    weight: default
+    rationale: Stale data produces confidently wrong AI answers; freshness must be measured against SLAs.
+    playbook: PB-OPS-PIPELINE-TRIAGE
+
+  - id: AIR-DQ-003
+    pillar: data_quality
+    title: Data metric expectations passing
+    query: |
+      SELECT count(*) FILTER (WHERE NOT EXPECTATION_VIOLATED) AS NUMERATOR, count(*) AS DENOMINATOR,
+             list(DISTINCT TABLE_NAME) FILTER (WHERE EXPECTATION_VIOLATED) AS GAPS
+      FROM DATA_QUALITY_MONITORING_RESULTS
+    threshold_ref: rubric.airready.pass_marks.dmf_pass_rate_min
+    weight: default
+    rationale: Failing expectations on monitored tables must be resolved before those tables back agents.
+    playbook: PB-ENG-DMF
+
+  # ------------------------------------------------------------------ Governance
+  - id: AIR-GOV-001
+    pillar: governance
+    title: Tier-1 tables have a data owner
+    query: |
+      WITH t1 AS (SELECT DISTINCT unnest(from_json("VALUE", '["VARCHAR"]')) AS FQ FROM CLIENT_INPUTS WHERE "KEY" = 'tier1_tables'),
+           owned AS (SELECT OBJECT_DATABASE || '.' || OBJECT_SCHEMA || '.' || OBJECT_NAME AS FQ FROM TAG_REFERENCES
+                     WHERE TAG_NAME = 'DATA_OWNER' AND DOMAIN = 'TABLE')
+      SELECT count(*) FILTER (WHERE FQ IN (SELECT FQ FROM owned)) AS NUMERATOR, count(*) AS DENOMINATOR,
+             list(FQ ORDER BY FQ) FILTER (WHERE FQ NOT IN (SELECT FQ FROM owned)) AS GAPS
+      FROM t1
+    threshold_ref: rubric.airready.pass_marks.owner_tag_coverage_min
+    weight: critical
+    rationale: Every AI-consumed dataset needs an accountable owner for corrections and access decisions.
+    playbook: PB-ENG-OWNERSHIP
+
+  - id: AIR-GOV-002
+    pillar: governance
+    title: Compute attributed to cost centres
+    query: |
+      SELECT count(*) FILTER (WHERE WAREHOUSE_NAME IN (SELECT OBJECT_NAME FROM TAG_REFERENCES WHERE DOMAIN = 'WAREHOUSE' AND TAG_NAME = 'COST_CENTER')) AS NUMERATOR,
+             count(*) AS DENOMINATOR,
+             list(WAREHOUSE_NAME ORDER BY WAREHOUSE_NAME) FILTER (WHERE WAREHOUSE_NAME NOT IN (SELECT OBJECT_NAME FROM TAG_REFERENCES WHERE DOMAIN = 'WAREHOUSE' AND TAG_NAME = 'COST_CENTER')) AS GAPS
+      FROM WAREHOUSES
+    threshold_ref: rubric.airready.pass_marks.cost_center_coverage_min
+    weight: default
+    rationale: AI workloads must be chargeable to a cost centre from day one.
+    playbook: PB-COST-TAGGING
+
+  - id: AIR-GOV-003
+    pillar: governance
+    title: Tier-1 tables carry a TIER tag
+    query: |
+      WITH t1 AS (SELECT DISTINCT unnest(from_json("VALUE", '["VARCHAR"]')) AS FQ FROM CLIENT_INPUTS WHERE "KEY" = 'tier1_tables'),
+           tagged AS (SELECT OBJECT_DATABASE || '.' || OBJECT_SCHEMA || '.' || OBJECT_NAME AS FQ FROM TAG_REFERENCES
+                      WHERE TAG_NAME = 'TIER' AND DOMAIN = 'TABLE')
+      SELECT count(*) FILTER (WHERE FQ IN (SELECT FQ FROM tagged)) AS NUMERATOR, count(*) AS DENOMINATOR,
+             list(FQ ORDER BY FQ) FILTER (WHERE FQ NOT IN (SELECT FQ FROM tagged)) AS GAPS
+      FROM t1
+    threshold_ref: rubric.airready.pass_marks.tier_tag_coverage_min
+    weight: default
+    rationale: Tiering as metadata lets policies, monitoring and agent scopes follow criticality mechanically.
+    playbook: PB-ENG-OWNERSHIP
+
+  # ------------------------------------------------------------------ Metadata
+  - id: AIR-META-001
+    pillar: metadata
+    title: Comment coverage on Tier-1 columns
+    query: |
+      WITH t1 AS (SELECT DISTINCT unnest(from_json("VALUE", '["VARCHAR"]')) AS FQ FROM CLIENT_INPUTS WHERE "KEY" = 'tier1_tables')
+      SELECT count(*) FILTER (WHERE c.COMMENT IS NOT NULL) AS NUMERATOR, count(*) AS DENOMINATOR,
+             list(DISTINCT c.FQ_NAME) FILTER (WHERE c.COMMENT IS NULL) AS GAPS
+      FROM COLUMNS c JOIN t1 ON t1.FQ = c.FQ_NAME
+    threshold_ref: rubric.airready.pass_marks.column_comment_coverage_min
+    weight: critical
+    rationale: Text-to-SQL quality depends on column descriptions.
+    playbook: PB-AI-DOCUMENTATION
+
+  - id: AIR-META-002
+    pillar: metadata
+    title: Comment coverage on Tier-1 tables
+    query: |
+      WITH t1 AS (SELECT DISTINCT unnest(from_json("VALUE", '["VARCHAR"]')) AS FQ FROM CLIENT_INPUTS WHERE "KEY" = 'tier1_tables')
+      SELECT count(*) FILTER (WHERE t.COMMENT IS NOT NULL) AS NUMERATOR, count(*) AS DENOMINATOR,
+             list(t1.FQ ORDER BY t1.FQ) FILTER (WHERE t.COMMENT IS NULL) AS GAPS
+      FROM t1 LEFT JOIN TABLES t ON t.FQ_NAME = t1.FQ
+    threshold_ref: rubric.airready.pass_marks.table_comment_coverage_min
+    weight: default
+    rationale: Table descriptions route questions to the right dataset.
+    playbook: PB-ENG-OWNERSHIP
+
+  - id: AIR-META-003
+    pillar: metadata
+    title: BI measures linked to the certified KPI glossary
+    query: |
+      WITH k AS (SELECT DISTINCT KPI_NAME FROM BI_MEASURES)
+      SELECT count(*) FILTER (WHERE list_contains($kpi_names, lower(KPI_NAME))) AS NUMERATOR, count(*) AS DENOMINATOR,
+             list(KPI_NAME ORDER BY KPI_NAME) FILTER (WHERE NOT list_contains($kpi_names, lower(KPI_NAME))) AS GAPS
+      FROM k
+    threshold_ref: rubric.airready.pass_marks.glossary_linkage_min
+    weight: default
+    rationale: Business terms used in reports should resolve to one certified KPI definition.
+    playbook: PB-AI-SEMANTIC-VIEWS
+
+  # ------------------------------------------------------------------ Security
+  - id: AIR-SEC-001
+    pillar: security
+    title: Classified columns are masked
+    query: |
+      WITH pii AS (SELECT OBJECT_DATABASE AS D, OBJECT_SCHEMA AS S, OBJECT_NAME AS T, COLUMN_NAME AS C FROM TAG_REFERENCES
+                   WHERE TAG_NAME = 'PII' AND DOMAIN = 'COLUMN'),
+           masked AS (SELECT pii.* FROM pii WHERE EXISTS (
+                        SELECT 1 FROM POLICY_REFERENCES p WHERE p.POLICY_KIND = 'MASKING_POLICY'
+                          AND ((p.REF_DATABASE_NAME = pii.D AND p.REF_SCHEMA_NAME = pii.S AND p.REF_ENTITY_NAME = pii.T
+                                AND p.REF_COLUMN_NAME = pii.C) OR p.TAG_NAME = 'PII')))
+      SELECT (SELECT count(*) FROM masked) AS NUMERATOR, (SELECT count(*) FROM pii) AS DENOMINATOR,
+             (SELECT list(D || '.' || S || '.' || T || '.' || C ORDER BY C) FROM pii WHERE (D, S, T, C) NOT IN (SELECT D, S, T, C FROM masked)) AS GAPS
+    threshold_ref: rubric.airready.pass_marks.masking_coverage_min
+    weight: critical
+    rationale: Classified columns must be 100% masked before agents can reach them.
+    playbook: PB-NET-TAG-MASKING
+
+  - id: AIR-SEC-002
+    pillar: security
+    title: Human users protected by MFA or SSO
+    query: |
+      SELECT count(*) FILTER (WHERE HAS_MFA OR EXT_AUTHN_UID IS NOT NULL OR NOT HAS_PASSWORD) AS NUMERATOR, count(*) AS DENOMINATOR,
+             list(NAME ORDER BY NAME) FILTER (WHERE NOT (HAS_MFA OR EXT_AUTHN_UID IS NOT NULL OR NOT HAS_PASSWORD)) AS GAPS
+      FROM USERS WHERE TYPE = 'PERSON' AND NOT DISABLED
+    threshold_ref: rubric.airready.pass_marks.mfa_coverage_min
+    weight: default
+    rationale: Agents inherit the blast radius of the identities that can reconfigure them.
+    playbook: PB-IAM-MFA
+
+  - id: AIR-SEC-003
+    pillar: security
+    title: Row-access policies on entitlement-sensitive (Tier-1) tables
+    query: |
+      WITH t1 AS (SELECT DISTINCT unnest(from_json("VALUE", '["VARCHAR"]')) AS FQ FROM CLIENT_INPUTS WHERE "KEY" = 'tier1_tables'),
+           rap AS (SELECT REF_DATABASE_NAME || '.' || REF_SCHEMA_NAME || '.' || REF_ENTITY_NAME AS FQ FROM POLICY_REFERENCES
+                   WHERE POLICY_KIND = 'ROW_ACCESS_POLICY')
+      SELECT count(*) FILTER (WHERE FQ IN (SELECT FQ FROM rap)) AS NUMERATOR, count(*) AS DENOMINATOR,
+             list(FQ ORDER BY FQ) FILTER (WHERE FQ NOT IN (SELECT FQ FROM rap)) AS GAPS
+      FROM t1
+    threshold_ref: rubric.airready.pass_marks.row_access_coverage_min
+    weight: default
+    rationale: Agents answer for many users; entitlement filtering must live in the data, not the prompt.
+    playbook: PB-NET-TAG-MASKING
+
+  - id: AIR-SEC-004
+    pillar: security
+    title: Account network policy in place
+    query: |
+      SELECT count(*) FILTER (WHERE NETWORK_POLICY IS NOT NULL) AS NUMERATOR, count(*) AS DENOMINATOR,
+             list(ACCOUNT_NAME) FILTER (WHERE NETWORK_POLICY IS NULL) AS GAPS
+      FROM ACCOUNT_INFO
+    threshold_ref: rubric.airready.pass_marks.network_policy_min
+    weight: default
+    rationale: Agent and service endpoints must not be reachable from arbitrary networks.
+    playbook: PB-NET-POLICY
+
+  # ------------------------------------------------------------------ AI Engineering
+  - id: AIR-AIE-001
+    pillar: ai_engineering
+    title: Cortex spend governed by a budget
+    query: |
+      SELECT CASE WHEN EXISTS (SELECT 1 FROM BUDGETS WHERE SCOPE = 'CORTEX') THEN 1 ELSE 0 END AS NUMERATOR,
+             CASE WHEN EXISTS (SELECT 1 FROM CORTEX_USAGE_HISTORY) THEN 1 ELSE 0 END AS DENOMINATOR,
+             CASE WHEN EXISTS (SELECT 1 FROM BUDGETS WHERE SCOPE = 'CORTEX') THEN [] ELSE ['CORTEX'] END AS GAPS
+    threshold_ref: rubric.airready.pass_marks.cortex_budget_min
+    weight: default
+    rationale: AI spend grows with adoption and must be bounded and visible.
+    playbook: PB-AI-AGENT-CONTROLS
+
+  - id: AIR-AIE-002
+    pillar: ai_engineering
+    title: AI calls attributed to named agents
+    query: |
+      SELECT count(*) FILTER (WHERE AGENT_NAME IS NOT NULL) AS NUMERATOR, count(*) AS DENOMINATOR,
+             list(DISTINCT ROLE_NAME) FILTER (WHERE AGENT_NAME IS NULL) AS GAPS
+      FROM CORTEX_USAGE_HISTORY
+    threshold_ref: rubric.airready.pass_marks.agent_attribution_min
+    weight: default
+    rationale: Cost per accepted answer and drift monitoring need every call attributed to an agent.
+    playbook: PB-AI-AGENT-CONTROLS
+
+  - id: AIR-AIE-003
+    pillar: ai_engineering
+    title: Agent workloads run on the dedicated agents warehouse class
+    query: |
+      SELECT count(*) FILTER (WHERE w.WORKLOAD_CLASS = 'agents') AS NUMERATOR, count(*) AS DENOMINATOR,
+             list(DISTINCT q.WAREHOUSE_NAME) FILTER (WHERE coalesce(w.WORKLOAD_CLASS, '') <> 'agents') AS GAPS
+      FROM QUERY_HISTORY q LEFT JOIN WAREHOUSES w ON w.WAREHOUSE_NAME = q.WAREHOUSE_NAME
+      WHERE q.CLIENT_APPLICATION_ID = 'Cortex Agents'
+    threshold_ref: rubric.airready.pass_marks.agent_warehouse_min
+    weight: default
+    rationale: Isolating agent compute keeps its cost, concurrency and blast radius separate.
+    playbook: PB-AI-AGENT-CONTROLS
+
+  # ------------------------------------------------------------------ Semantic Layer
+  - id: AIR-SEM-001
+    pillar: semantic_layer
+    title: Semantic views cover the top KPI domains
+    query: |
+      WITH d AS (SELECT DISTINCT unnest(from_json("VALUE", '["VARCHAR"]')) AS DOMAIN FROM CLIENT_INPUTS WHERE "KEY" = 'top_kpi_domains')
+      SELECT count(*) FILTER (WHERE lower(DOMAIN) IN (SELECT lower(KPI_DOMAIN) FROM SEMANTIC_VIEWS)) AS NUMERATOR,
+             count(*) AS DENOMINATOR,
+             list(DOMAIN ORDER BY DOMAIN) FILTER (WHERE lower(DOMAIN) NOT IN (SELECT lower(KPI_DOMAIN) FROM SEMANTIC_VIEWS)) AS GAPS
+      FROM d
+    threshold_ref: rubric.airready.pass_marks.semantic_domain_coverage_min
+    weight: critical
+    rationale: Cortex Analyst answers are only as good as the semantic views behind them.
+    playbook: PB-AI-SEMANTIC-VIEWS
+
+  - id: AIR-SEM-002
+    pillar: semantic_layer
+    title: One definition per KPI across the BI layer
+    query: |
+      WITH k AS (SELECT lower(KPI_NAME) AS K, count(DISTINCT upper(regexp_replace(EXPRESSION, '\s+', '', 'g'))) AS N
+                 FROM BI_MEASURES GROUP BY 1)
+      SELECT count(*) FILTER (WHERE N = 1) AS NUMERATOR, count(*) AS DENOMINATOR,
+             list(K ORDER BY K) FILTER (WHERE N > 1) AS GAPS
+      FROM k
+    threshold_ref: rubric.airready.pass_marks.single_definition_min
+    weight: critical
+    rationale: Conflicting KPI logic makes any AI answer contestable.
+    playbook: PB-AI-SEMANTIC-VIEWS
+
+  - id: AIR-SEM-003
+    pillar: semantic_layer
+    title: Semantic views are documented
+    query: |
+      SELECT count(*) FILTER (WHERE COMMENT IS NOT NULL) AS NUMERATOR, count(*) AS DENOMINATOR,
+             list(NAME ORDER BY NAME) FILTER (WHERE COMMENT IS NULL) AS GAPS
+      FROM SEMANTIC_VIEWS
+    threshold_ref: rubric.airready.pass_marks.semantic_documented_min
+    weight: default
+    rationale: Semantic view descriptions guide routing between domains.
+    playbook: PB-AI-SEMANTIC-VIEWS
+
+  # ------------------------------------------------------------------ Agent Readiness
+  - id: AIR-AGT-001
+    pillar: agent_readiness
+    title: Agent roles hold no direct write privileges
+    query: |
+      WITH ar AS (SELECT NAME FROM ROLES WHERE NAME LIKE '%AGENT%'),
+           w AS (SELECT DISTINCT GRANTEE_NAME FROM GRANTS_TO_ROLES
+                 WHERE PRIVILEGE IN ('INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'OWNERSHIP') AND GRANTED_ON <> 'ROLE')
+      SELECT count(*) FILTER (WHERE NAME NOT IN (SELECT GRANTEE_NAME FROM w)) AS NUMERATOR, count(*) AS DENOMINATOR,
+             list(NAME ORDER BY NAME) FILTER (WHERE NAME IN (SELECT GRANTEE_NAME FROM w)) AS GAPS
+      FROM ar
+    threshold_ref: rubric.airready.pass_marks.agent_read_only_min
+    weight: critical
+    rationale: No agent holds write privileges outside an approval workflow (Section 18.1).
+    playbook: PB-AI-AGENT-CONTROLS
+
+  - id: AIR-AGT-002
+    pillar: agent_readiness
+    title: Agent identities use key-pair authentication
+    query: |
+      SELECT count(*) FILTER (WHERE HAS_RSA_PUBLIC_KEY AND NOT HAS_PASSWORD) AS NUMERATOR, count(*) AS DENOMINATOR,
+             list(NAME ORDER BY NAME) FILTER (WHERE NOT (HAS_RSA_PUBLIC_KEY AND NOT HAS_PASSWORD)) AS GAPS
+      FROM USERS WHERE TYPE <> 'PERSON' AND NAME LIKE '%AGENT%'
+    threshold_ref: rubric.airready.pass_marks.agent_keypair_min
+    weight: default
+    rationale: Distinct machine identities with key-pair auth make agent actions attributable and revocable.
+    playbook: PB-AI-AGENT-CONTROLS
+
+  - id: AIR-AGT-003
+    pillar: agent_readiness
+    title: Agent activity is tagged and reconstructable
+    query: |
+      SELECT count(*) FILTER (WHERE q.QUERY_TAG IS NOT NULL) AS NUMERATOR, count(*) AS DENOMINATOR,
+             list(DISTINCT q.USER_NAME) FILTER (WHERE q.QUERY_TAG IS NULL) AS GAPS
+      FROM QUERY_HISTORY q JOIN USERS u ON u.NAME = q.USER_NAME
+      WHERE u.TYPE <> 'PERSON' AND u.NAME LIKE '%AGENT%'
+    threshold_ref: rubric.airready.pass_marks.agent_tagged_min
+    weight: default
+    rationale: Action audit must be reconstructable from query history.
+    playbook: PB-AI-AGENT-CONTROLS
+
+  # ------------------------------------------------------------------ RAG Readiness
+  - id: AIR-RAG-001
+    pillar: rag_readiness
+    title: Cortex Search over governed corpora exists
+    query: |
+      SELECT CASE WHEN count(*) > 0 THEN 1 ELSE 0 END AS NUMERATOR, 1 AS DENOMINATOR,
+             CASE WHEN count(*) > 0 THEN [] ELSE ['no Cortex Search service'] END AS GAPS
+      FROM CORTEX_SEARCH_SERVICES
+    threshold_ref: rubric.airready.pass_marks.search_services_min
+    weight: default
+    rationale: Retrieval over governed documents is the foundation of grounded answers.
+    playbook: PB-AI-AGENT-CONTROLS
+
+  - id: AIR-RAG-002
+    pillar: rag_readiness
+    title: Search services refresh within the SLA
+    query: |
+      WITH s AS (SELECT NAME,
+                   CASE WHEN TARGET_LAG ILIKE '%minute%' THEN try_cast(split_part(TARGET_LAG, ' ', 1) AS DOUBLE) / 60
+                        WHEN TARGET_LAG ILIKE '%hour%' THEN try_cast(split_part(TARGET_LAG, ' ', 1) AS DOUBLE)
+                        WHEN TARGET_LAG ILIKE '%day%' THEN try_cast(split_part(TARGET_LAG, ' ', 1) AS DOUBLE) * 24
+                        ELSE NULL END AS LAG_HOURS
+                 FROM CORTEX_SEARCH_SERVICES)
+      SELECT count(*) FILTER (WHERE LAG_HOURS <= $lag_hours) AS NUMERATOR, count(*) AS DENOMINATOR,
+             list(NAME ORDER BY NAME) FILTER (WHERE LAG_HOURS IS NULL OR LAG_HOURS > $lag_hours) AS GAPS
+      FROM s
+    threshold_ref: rubric.airready.pass_marks.search_lag_min
+    params: {lag_hours: rubric.airready.rag_target_lag_max_hours}
+    weight: default
+    rationale: Search indexes must refresh within the content SLA or answers cite stale documents.
+    playbook: PB-AI-AGENT-CONTROLS
+
+  - id: AIR-RAG-003
+    pillar: rag_readiness
+    title: Search sources are owned and governed
+    query: |
+      WITH owned AS (SELECT OBJECT_DATABASE || '.' || OBJECT_SCHEMA || '.' || OBJECT_NAME AS FQ FROM TAG_REFERENCES
+                     WHERE TAG_NAME = 'DATA_OWNER' AND DOMAIN = 'TABLE')
+      SELECT count(*) FILTER (WHERE SOURCE_TABLE IN (SELECT FQ FROM owned)) AS NUMERATOR, count(*) AS DENOMINATOR,
+             list(SOURCE_TABLE ORDER BY SOURCE_TABLE) FILTER (WHERE SOURCE_TABLE NOT IN (SELECT FQ FROM owned)) AS GAPS
+      FROM CORTEX_SEARCH_SERVICES
+    threshold_ref: rubric.airready.pass_marks.search_governed_min
+    weight: default
+    rationale: Source ownership is the precondition for reflecting source ACLs in search filters.
+    playbook: PB-ENG-OWNERSHIP

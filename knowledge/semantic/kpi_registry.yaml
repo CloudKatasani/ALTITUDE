@@ -1,0 +1,117 @@
+# Certified KPI registry (Section 26): ONE definition per KPI. Names and synonyms are unique across the whole
+# registry (case- and punctuation-insensitive); a second, different definition under the same name fails
+# validation with a precise error. Semantic views (CREATE SEMANTIC VIEW) are generated per domain from here.
+version: 1.0.0
+domains:
+  - id: DOM-SALES
+    name: sales
+    semantic_view: EDW.SEMANTIC.SV_SALES
+    description: Orders and customers — booked sales.
+    owner: sales-data@example.com
+    tables:
+      - {alias: orders, table: EDW.SALES.FCT_ORDERS, primary_key: [ORDER_ID], synonyms: [order lines, sales orders],
+         description: Order facts, one row per order line}
+      - {alias: customers, table: EDW.SALES.DIM_CUSTOMER, primary_key: [CUSTOMER_ID], synonyms: [clients],
+         description: Current and historical customer attributes}
+    relationships:
+      - {name: orders_to_customers, from: orders, columns: [CUSTOMER_ID], to: customers}
+    facts:
+      - {name: net_amount, table: orders, expr: NET_AMOUNT, description: Order line amount net of discounts}
+      - {name: order_id, table: orders, expr: ORDER_ID, description: Order identifier}
+      - {name: customer_id, table: customers, expr: CUSTOMER_ID, description: Customer identifier}
+    dimensions:
+      - {name: order_date, table: orders, expr: ORDER_DATE, synonyms: [date, day], description: Date the order was placed}
+      - {name: region, table: orders, expr: REGION, synonyms: [sales region, territory], description: Sales region}
+      - {name: segment, table: customers, expr: SEGMENT, synonyms: [customer segment], description: Customer segment}
+
+  - id: DOM-FINANCE
+    name: finance
+    semantic_view: EDW.SEMANTIC.SV_FINANCE
+    description: Recognised revenue by day, product and region.
+    owner: finance-data@example.com
+    tables:
+      - {alias: revenue_lines, table: EDW.FINANCE.FCT_REVENUE, primary_key: [REVENUE_DATE, PRODUCT_ID, REGION],
+         synonyms: [ledger revenue], description: Recognised revenue by day and product}
+      - {alias: products, table: EDW.SALES.DIM_PRODUCT, primary_key: [PRODUCT_ID], synonyms: [catalogue],
+         description: Product catalogue}
+    relationships:
+      - {name: revenue_to_products, from: revenue_lines, columns: [PRODUCT_ID], to: products}
+    facts:
+      - {name: net_amount, table: revenue_lines, expr: NET_AMOUNT, description: Recognised revenue net of tax}
+      - {name: gross_amount, table: revenue_lines, expr: GROSS_AMOUNT, description: Recognised revenue before deductions}
+      - {name: tax_amount, table: revenue_lines, expr: TAX_AMOUNT, description: Tax on recognised revenue}
+    dimensions:
+      - {name: revenue_date, table: revenue_lines, expr: REVENUE_DATE, synonyms: [date, day], description: Recognition date}
+      - {name: region, table: revenue_lines, expr: REGION, synonyms: [region, territory], description: Region}
+      - {name: category, table: products, expr: CATEGORY, synonyms: [product category], description: Product category}
+
+kpis:
+  - id: KPI-REVENUE
+    name: Revenue
+    domain: finance
+    table: revenue_lines
+    expression: SUM(revenue_lines.net_amount)
+    certified: true
+    owner: cfo-office@example.com
+    synonyms: [net revenue, recognised revenue, recognized revenue]
+    description: Recognised revenue net of discounts and tax (the certified definition; gross is a separate KPI).
+
+  - id: KPI-GROSS-REVENUE
+    name: Gross Revenue
+    domain: finance
+    table: revenue_lines
+    expression: SUM(revenue_lines.gross_amount)
+    certified: true
+    owner: cfo-office@example.com
+    synonyms: [gross sales]
+    description: Recognised revenue before deductions.
+
+  - id: KPI-TAX
+    name: Tax
+    domain: finance
+    table: revenue_lines
+    expression: SUM(revenue_lines.tax_amount)
+    certified: true
+    owner: cfo-office@example.com
+    synonyms: [tax collected]
+    description: Tax on recognised revenue.
+
+  - id: KPI-ORDERS
+    name: Order Count
+    domain: sales
+    table: orders
+    expression: COUNT(DISTINCT orders.order_id)
+    certified: true
+    owner: sales-ops@example.com
+    synonyms: [orders, number of orders]
+    description: Distinct orders placed.
+
+  - id: KPI-BOOKINGS
+    name: Bookings
+    domain: sales
+    table: orders
+    expression: SUM(orders.net_amount)
+    certified: true
+    owner: sales-ops@example.com
+    synonyms: [booked sales, order value]
+    description: Net value of orders booked (not yet recognised revenue).
+
+  - id: KPI-AOV
+    name: Average Order Value
+    domain: sales
+    table: orders
+    expression: SUM(orders.net_amount) / NULLIF(COUNT(DISTINCT orders.order_id), 0)
+    certified: true
+    owner: sales-ops@example.com
+    synonyms: [aov, basket size]
+    description: Bookings divided by orders.
+
+  - id: KPI-ACTIVE-CUSTOMERS
+    name: Active Customers
+    domain: sales
+    table: customers
+    expression: COUNT(DISTINCT customers.customer_id)
+    certified: true
+    owner: crm-data@example.com
+    synonyms: [customer count, customers]
+    description: Distinct customers with at least one order in the period (filter by order_date).
