@@ -1,0 +1,210 @@
+# Detectors for the sqlglot fallback converter (used when the SnowConvert AI CLI is not installed).
+# Each rule scans a source statement (regex, case-insensitive, multiline) and emits a conversion issue.
+# action: flag        -> keep converting; annotate the output with an EWI marker
+#         keep        -> emit the original statement unchanged (procedural code sqlglot must not mangle)
+#         comment_out -> emit the original commented out (no SQL equivalent, e.g. BTEQ dot-commands)
+# Severity: P1 = output cannot run / blocks convert_exit; P2 = rewrite required; P3 = review; P4 = cosmetic.
+last_verified: "2026-10-01"
+verified_by: practice-lead-conversion
+generic:
+  - id: FB-GEN-0001
+    code: ALT-EWI-0001
+    severity: P2
+    message: "Statement not recognised by the transpiler; passed through unchanged - verify Snowflake syntax"
+  - id: FB-GEN-0002
+    code: ALT-EWI-0002
+    severity: P1
+    message: "Construct not supported by the target dialect: {detail}"
+  - id: FB-GEN-0003
+    code: ALT-EWI-0003
+    severity: P1
+    message: "Statement could not be parsed and was left unconverted: {detail}"
+rules:
+  # ------------------------------------------------------------------ Teradata
+  - id: FB-TD-01
+    dialects: [teradata]
+    code: ALT-EWI-TD0001
+    severity: P1
+    action: comment_out
+    pattern: '^\s*\.(LOGON|LOGOFF|QUIT|EXIT|SET\s+\w+|SESSIONS|WIDTH|TITLEDASHES|RETRY|OS)\b'
+    message: "BTEQ session dot-command '{match}' has no Snowflake SQL equivalent (connection/session handled by the client or orchestrator)"
+    known_issue: TD-06
+  - id: FB-TD-02
+    dialects: [teradata]
+    code: ALT-EWI-TD0002
+    severity: P1
+    action: comment_out
+    pattern: '^\s*\.(IF|GOTO|LABEL)\b'
+    message: "BTEQ control flow '{match}' must be rebuilt in Snowflake Scripting or the orchestrator"
+    known_issue: TD-06
+  - id: FB-TD-03
+    dialects: [teradata]
+    code: ALT-EWI-TD0003
+    severity: P1
+    action: comment_out
+    pattern: '^\s*\.(EXPORT|IMPORT|REPEAT|RUN)\b'
+    message: "BTEQ file operation '{match}' must be replaced with COPY INTO / stages"
+    known_issue: TD-06
+  - id: FB-TD-04
+    dialects: [teradata]
+    code: ALT-EWI-TD0004
+    severity: P1
+    action: flag
+    pattern: '\bACTIVITYCOUNT\b'
+    message: "ACTIVITYCOUNT has no direct equivalent; use SQLROWCOUNT inside Snowflake Scripting"
+    known_issue: TD-06
+  - id: FB-TD-05
+    dialects: [teradata]
+    code: ALT-FDM-TD0005
+    severity: P2
+    action: flag
+    pattern: '\bCREATE\s+SET\s+(?:VOLATILE\s+|GLOBAL\s+TEMPORARY\s+)?TABLE\b'
+    message: "SET table: Snowflake keeps duplicate rows that Teradata silently discarded - add explicit dedupe in the load (programme-level decision)"
+    known_issue: TD-01
+  - id: FB-TD-06
+    dialects: [teradata]
+    code: ALT-EWI-TD0006
+    severity: P4
+    action: keep
+    pattern: '^\s*COLLECT\s+STAT(?:ISTICS|S)?\b'
+    message: "COLLECT STATISTICS is not applicable in Snowflake"
+  - id: FB-TD-07
+    dialects: [teradata]
+    code: ALT-FDM-TD0007
+    severity: P2
+    action: flag
+    pattern: '\bNOT\s+CASESPECIFIC\b'
+    message: "NOT CASESPECIFIC column becomes case-sensitive; apply collation policy or normalise at ingestion"
+    known_issue: TD-02
+  - id: FB-TD-08
+    dialects: [teradata]
+    code: ALT-EWI-TD0008
+    severity: P2
+    action: keep
+    pattern: '^\s*UPD(?:ATE)?\s+\w+\s+FROM\b'
+    message: "Teradata UPDATE ... FROM join syntax; Snowflake requires UPDATE ... SET ... FROM and is nondeterministic on multi-match sources"
+    known_issue: TD-08
+  - id: FB-TD-09
+    dialects: [teradata]
+    code: ALT-EWI-TD0009
+    severity: P1
+    action: keep
+    pattern: '^\s*(?:CREATE|REPLACE)\s+PROCEDURE\b'
+    message: "SPL stored procedure must be rewritten in Snowflake Scripting"
+  # ------------------------------------------------------------------ Oracle
+  - id: FB-OR-01
+    dialects: [oracle]
+    code: ALT-EWI-OR0001
+    severity: P1
+    action: keep
+    pattern: '\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:EDITIONABLE\s+)?PACKAGE\b'
+    message: "PL/SQL packages do not exist in Snowflake; decompose into schema-scoped procedures/UDFs and state tables"
+    known_issue: OR-04
+  - id: FB-OR-02
+    dialects: [oracle]
+    code: ALT-EWI-OR0002
+    severity: P1
+    action: keep
+    pattern: '\bCREATE\s+(?:OR\s+REPLACE\s+)?TRIGGER\b'
+    message: "Triggers are not supported; move logic to streams + tasks or pipeline code"
+    known_issue: OR-07
+  - id: FB-OR-03
+    dialects: [oracle]
+    code: ALT-EWI-OR0003
+    severity: P2
+    action: flag
+    pattern: '\(\+\)'
+    message: "Legacy (+) outer join must be converted to ANSI join syntax"
+    known_issue: OR-06
+  - id: FB-OR-04
+    dialects: [oracle]
+    code: ALT-EWI-OR0004
+    severity: P2
+    action: flag
+    pattern: '\bROWNUM\b'
+    message: "ROWNUM pseudo-column; rewrite with LIMIT or ROW_NUMBER()"
+  - id: FB-OR-05
+    dialects: [oracle]
+    code: ALT-EWI-OR0005
+    severity: P2
+    action: flag
+    pattern: '\b(?:CURSOR\s+\w+\s+IS|BULK\s+COLLECT|FORALL)\b'
+    message: "Row-by-row cursor processing; refactor to set-based SQL"
+    known_issue: OR-05
+  - id: FB-OR-06
+    dialects: [oracle]
+    code: ALT-EWI-OR0006
+    severity: P2
+    action: flag
+    pattern: '\bDBMS_\w+'
+    message: "Oracle-supplied package '{match}' must be rewritten case by case"
+  - id: FB-OR-07
+    dialects: [oracle]
+    code: ALT-FDM-OR0007
+    severity: P2
+    action: flag
+    pattern: '\bNUMBER\b(?!\s*\()'
+    message: "Unscaled NUMBER maps to scale 0 in Snowflake; profile max scale and set it explicitly"
+    known_issue: OR-02
+  # ------------------------------------------------------------------ SQL Server
+  - id: FB-MS-01
+    dialects: [tsql]
+    code: ALT-EWI-MS0001
+    severity: P1
+    action: keep
+    pattern: '@@ROWCOUNT\b'
+    message: "@@ROWCOUNT is not valid in Snowflake; use SQLROWCOUNT inside Snowflake Scripting"
+    known_issue: MS-05
+  - id: FB-MS-02
+    dialects: [tsql]
+    code: ALT-EWI-MS0002
+    severity: P2
+    action: keep
+    pattern: '(@@ERROR\b|\bRAISERROR\b|\bBEGIN\s+TRY\b)'
+    message: "T-SQL error handling '{match}' must be rebuilt with Snowflake Scripting exception blocks"
+    known_issue: MS-05
+  - id: FB-MS-03
+    dialects: [tsql]
+    code: ALT-EWI-MS0003
+    severity: P2
+    action: keep
+    pattern: '\bDECLARE\s+@?\w+\s+CURSOR\b'
+    message: "Cursor loop; refactor to set-based SQL or a Snowflake Scripting RESULTSET cursor"
+  - id: FB-MS-04
+    dialects: [tsql]
+    code: ALT-EWI-MS0004
+    severity: P1
+    action: keep
+    pattern: '\bCREATE\s+(?:OR\s+ALTER\s+)?TRIGGER\b'
+    message: "Triggers are not supported; Snowflake does not enforce integrity - move to DQ rules and pipeline logic"
+    known_issue: MS-08
+  - id: FB-MS-05
+    dialects: [tsql]
+    code: ALT-FDM-MS0005
+    severity: P4
+    action: flag
+    pattern: '\bWITH\s*\(\s*NOLOCK\s*\)'
+    message: "NOLOCK hint removed; Snowflake reads are snapshot-consistent"
+    known_issue: MS-03
+  - id: FB-MS-06
+    dialects: [tsql]
+    code: ALT-EWI-MS0006
+    severity: P2
+    action: keep
+    pattern: '(\bsp_executesql\b|\bEXEC(?:UTE)?\s*\(\s*@)'
+    message: "Dynamic SQL built from strings; review and port to EXECUTE IMMEDIATE"
+    known_issue: MS-06
+  - id: FB-MS-07
+    dialects: [tsql]
+    code: ALT-EWI-MS0007
+    severity: P1
+    action: keep
+    pattern: '\bCREATE\s+(?:OR\s+ALTER\s+)?PROC(?:EDURE)?\b'
+    message: "T-SQL procedure body must be wrapped as a Snowflake Scripting procedure"
+  - id: FB-MS-08
+    dialects: [tsql]
+    code: ALT-FDM-MS0008
+    severity: P3
+    action: flag
+    pattern: '#\w+'
+    message: "Local temp table '{match}' becomes a session TEMPORARY table"

@@ -1,0 +1,9 @@
+dialect: redshift
+version: 1.0.0
+description: Redshift to Snowflake conversion map (Section 10.5 highlights).
+mappings:
+  - {id: MAP-RS-001, category: ddl, source_construct: "DISTKEY / SORTKEY", target_construct: "Remove / clustering key", note: "", related_issues: [RS-05], last_verified: "2026-10-01", verified_by: practice-lead-redshift}
+  - {id: MAP-RS-002, category: types, source_construct: "SUPER", target_construct: "VARIANT", note: "", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-redshift}
+  - {id: MAP-RS-003, category: integration, source_construct: "Spectrum external tables", target_construct: "External / Iceberg tables", note: "", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-redshift}
+  - {id: MAP-RS-004, category: workload, source_construct: "WLM queues", target_construct: "Warehouses", note: "", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-redshift}
+  - {id: MAP-RS-005, category: procedural, source_construct: "Stored procedures (PL/pgSQL)", target_construct: "Snowflake Scripting", note: "", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-redshift}

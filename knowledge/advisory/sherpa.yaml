@@ -1,0 +1,61 @@
+# Sherpa: opinionated delivery co-pilot (Section 17.1). Challenges are evaluated
+# against engagement facts; messages are formatted with those facts.
+challenges:
+  - id: SH-CH-001
+    title: Procedural lift-and-shift without a test harness
+    when: "pattern == 'lift_and_shift' and procedural_object_count > rubric.advisory.challenges.procedural_scripts_high and not test_harness"
+    severity: high
+    message: "Lift-and-shifting {procedural_object_count} procedural scripts with no test harness will put the cutover date at risk: every S1 semantic difference surfaces in UAT instead of in CI. Generate unit tests and L1-L3 reconciliation suites before converting."
+  - id: SH-CH-002
+    title: Migrating dead code
+    when: "dead_object_share > rubric.advisory.challenges.dead_object_share_high and not pruning_done"
+    severity: high
+    message: "{dead_object_share_pct}% of harvested objects show no use in the evidence window. Prune before converting; migrating dead code inflates scope 1.5-2x."
+  - id: SH-CH-003
+    title: Re-architecture against a tight deadline
+    when: "pattern == 're_architect' and deadline_weeks < rubric.advisory.challenges.deadline_weeks_tight"
+    severity: medium
+    message: "A re-architecture with a {deadline_weeks}-week deadline rarely survives; consider re-platforming wave 1 and moving refactors to a funded backlog."
+  - id: SH-CH-004
+    title: Coexistence without a decommission date
+    when: "coexistence and not decommission_date"
+    severity: medium
+    message: "Coexistence has no decommission date or exit criteria. Every coexistence arrangement needs both in the plan, otherwise double run cost becomes permanent."
+  - id: SH-CH-005
+    title: Cutover with unaccepted Tier-1 mismatches
+    when: "phase == 'cutover' and tier1_open_mismatches > 0"
+    severity: high
+    message: "{tier1_open_mismatches} Tier-1 reconciliation mismatches are neither fixed nor accepted by a data owner; the go/no-go gate will fail."
+  - id: SH-CH-006
+    title: Unreviewed AI changes
+    when: "ai_changes_unreviewed > 0"
+    severity: medium
+    message: "{ai_changes_unreviewed} AI-generated changes have no reviewer yet; none of them can be promoted."
+  - id: SH-CH-007
+    title: Quick wins not started
+    when: "phase == 'fix' and quick_wins_open > 0 and quick_wins_implemented == 0"
+    severity: low
+    message: "{quick_wins_open} quick-win suggestions are open and none are implemented; start with them to show realised value at the 90-day re-baseline."
+next_actions:
+  diagnose:
+    - {when: "not access_confirmed", action: "Run the access bootstrap script and confirm the read-only role (no ACCOUNTADMIN)."}
+    - {when: "not snapshot_sealed", action: "Harvest and seal the baseline snapshot."}
+    - {when: "review_items_open > 0", action: "Clear the {review_items_open} low-confidence items in the review queue."}
+    - {when: "true", action: "Hold the validation workshop to remove false positives before the readout."}
+  fix:
+    - {when: "quick_wins_open > 0", action: "Implement the {quick_wins_open} quick-win suggestions (remediation pack is ready)."}
+    - {when: "true", action: "Agree kpis_to_watch with the platform owner so realised value can be measured."}
+    - {when: "true", action: "Schedule the 90-day re-baseline."}
+  observe:
+    - {when: "not alerts_routed", action: "Test alert routing for every alert class."}
+    - {when: "true", action: "Review identified vs realised value in the monthly FinOps review."}
+    - {when: "true", action: "Agree the chargeback model with finance."}
+  migrate:
+    - {when: "ai_changes_unreviewed > 0", action: "Review the {ai_changes_unreviewed} pending AI changes."}
+    - {when: "open_p1_issues > 0", action: "Close the {open_p1_issues} open P1 conversion issues."}
+    - {when: "tier1_open_mismatches > 0", action: "Triage the {tier1_open_mismatches} Tier-1 mismatches with the data owners."}
+    - {when: "true", action: "Rehearse the rollback plan."}
+  ai_ready:
+    - {when: "true", action: "Close metadata and masking gaps on Tier-1 objects."}
+    - {when: "true", action: "Build semantic views for the top KPI domains."}
+    - {when: "true", action: "Run the agent evaluation harness on the golden questions."}

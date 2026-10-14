@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Rubric namespace",
+  "x-altitude-globs": ["rubrics/*.yaml"],
+  "type": "object",
+  "required": ["namespace", "version", "values"],
+  "additionalProperties": false,
+  "properties": {
+    "namespace": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "description": {"type": "string"},
+    "calibration": {
+      "type": "array",
+      "description": "Calibration history: sample sizes and dates per factor change",
+      "items": {
+        "type": "object",
+        "required": ["date", "note"],
+        "properties": {"date": {"type": "string"}, "sample_size": {"type": "integer"}, "note": {"type": "string"}}
+      }
+    },
+    "values": {"type": "object"}
+  }
+}

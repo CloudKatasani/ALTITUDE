@@ -1,0 +1,146 @@
+# Well-Architected baseline — 14.1 Organisation & Accounts, 14.2 Identity & Access, 14.3 Network & Data Protection.
+# Format per Section 14.9. `query` runs read-only over a sealed snapshot (harvest-contract tables) and returns one row
+# per affected object (OBJECT_NAME, optional OBSERVED / DETAIL). Bound parameters: $threshold (threshold_ref),
+# $as_of (snapshot window end) and any `params` (rubric references).
+version: 1.0.0
+checks:
+  - id: WA-ORG-001
+    pillar: organisation
+    waf_pillar: reliability
+    section: "14.1"
+    title: Production database without replication / failover group
+    query: |
+      WITH prod AS (SELECT unnest(from_json("VALUE", '["VARCHAR"]')) AS DB FROM CLIENT_INPUTS WHERE "KEY" = 'production_databases')
+      SELECT DB AS OBJECT_NAME, 'no failover group covers this database' AS DETAIL FROM prod
+      WHERE NOT EXISTS (SELECT 1 FROM REPLICATION_GROUPS g
+                        WHERE list_contains(string_split(replace(coalesce(g.ALLOWED_DATABASES, ''), ' ', ''), ','), prod.DB))
+      ORDER BY 1
+    severity: high
+    rationale: Tier-1 data without replication or failover cannot meet an RPO/RTO and has no tested DR path.
+    remediation: {auto_fix_available: false, autonomy: L1, playbook: PB-ORG-FAILOVER}
+
+  - id: WA-ORG-002
+    pillar: organisation
+    waf_pillar: operational_excellence
+    section: "14.1"
+    title: Database name does not follow <ENV>_<DOMAIN>_<LAYER>
+    query: |
+      SELECT DISTINCT TABLE_CATALOG AS OBJECT_NAME, 'naming convention' AS DETAIL FROM TABLES
+      WHERE NOT regexp_matches(TABLE_CATALOG, '^(DEV|TEST|UAT|PROD)_[A-Z0-9]+_(RAW|CONFORMED|CURATED|SEMANTIC)$')
+        AND TABLE_CATALOG NOT IN ('GOVERNANCE', 'OBS', 'SNOWFLAKE')
+      ORDER BY 1
+    severity: low
+    rationale: Naming conventions as data make environments, domains and layers machine-readable for RBAC and cost attribution.
+    remediation: {auto_fix_available: false, autonomy: L1, playbook: PB-ORG-NAMING}
+
+  - id: WA-IAM-001
+    pillar: identity
+    waf_pillar: security_governance
+    section: "14.2"
+    title: Human user signs in with a password and no MFA or SSO
+    query: |
+      SELECT NAME AS OBJECT_NAME, 'password, no MFA, no SSO' AS DETAIL FROM USERS
+      WHERE TYPE = 'PERSON' AND HAS_PASSWORD AND NOT HAS_MFA AND EXT_AUTHN_UID IS NULL AND NOT DISABLED
+      ORDER BY 1
+    severity: critical
+    rationale: Single-factor human access is the most common account-takeover path.
+    remediation: {auto_fix_available: true, autonomy: L2, playbook: PB-IAM-MFA}
+
+  - id: WA-IAM-002
+    pillar: identity
+    waf_pillar: security_governance
+    section: "14.2"
+    title: Service user authenticates with a password
+    query: |
+      SELECT NAME AS OBJECT_NAME, TYPE AS DETAIL FROM USERS
+      WHERE TYPE IN ('SERVICE', 'LEGACY_SERVICE') AND HAS_PASSWORD AND NOT DISABLED ORDER BY 1
+    severity: high
+    rationale: Services must use key-pair, OAuth or workload identity; static passwords leak and cannot carry MFA.
+    remediation: {auto_fix_available: false, autonomy: L1, playbook: PB-IAM-SERVICE-KEYPAIR}
+
+  - id: WA-IAM-003
+    pillar: identity
+    waf_pillar: security_governance
+    section: "14.2"
+    title: ACCOUNTADMIN granted beyond the break-glass limit
+    query: |
+      WITH h AS (SELECT DISTINCT GRANTEE_NAME FROM GRANTS_TO_USERS WHERE ROLE = 'ACCOUNTADMIN')
+      SELECT GRANTEE_NAME AS OBJECT_NAME, (SELECT count(*) FROM h) AS OBSERVED FROM h
+      WHERE (SELECT count(*) FROM h) > $threshold ORDER BY 1
+    threshold_ref: rubric.foundation.accountadmin_max_holders
+    severity: high
+    rationale: ACCOUNTADMIN is for break-glass users with alerting on use; day-to-day administration uses SYSADMIN/SECURITYADMIN.
+    remediation: {auto_fix_available: true, autonomy: L2, playbook: PB-IAM-BREAK-GLASS}
+
+  - id: WA-IAM-004
+    pillar: identity
+    waf_pillar: security_governance
+    section: "14.2"
+    title: Dormant user still enabled
+    query: |
+      SELECT NAME AS OBJECT_NAME, date_diff('day', LAST_SUCCESS_LOGIN, CAST($as_of AS TIMESTAMP)) AS OBSERVED FROM USERS
+      WHERE NOT DISABLED AND (LAST_SUCCESS_LOGIN IS NULL
+            OR LAST_SUCCESS_LOGIN < CAST($as_of AS TIMESTAMP) - to_days(CAST($threshold AS INTEGER)))
+      ORDER BY 1
+    threshold_ref: rubric.foundation.dormant_user_days
+    severity: medium
+    rationale: Dormant identities keep privileges nobody reviews.
+    remediation: {auto_fix_available: true, autonomy: L2, playbook: PB-IAM-ACCESS-REVIEW}
+
+  - id: WA-IAM-005
+    pillar: identity
+    waf_pillar: security_governance
+    section: "14.2"
+    title: Orphan role (granted to no user and no role)
+    query: |
+      SELECT r.NAME AS OBJECT_NAME, 'no users, no parent role' AS DETAIL FROM ROLES r
+      WHERE r.NAME NOT IN ('ACCOUNTADMIN', 'SECURITYADMIN', 'SYSADMIN', 'USERADMIN', 'ORGADMIN', 'PUBLIC')
+        AND NOT EXISTS (SELECT 1 FROM GRANTS_TO_USERS u WHERE u.ROLE = r.NAME)
+        AND NOT EXISTS (SELECT 1 FROM GRANTS_TO_ROLES g WHERE g.GRANTED_ON = 'ROLE' AND g.NAME = r.NAME)
+      ORDER BY 1
+    severity: low
+    rationale: Roles outside the access-role -> functional-role hierarchy are unmanaged privilege containers.
+    remediation: {auto_fix_available: true, autonomy: L2, playbook: PB-IAM-ACCESS-REVIEW}
+
+  - id: WA-NET-001
+    pillar: network
+    waf_pillar: security_governance
+    section: "14.3"
+    title: Account has no network policy
+    query: |
+      SELECT ACCOUNT_NAME AS OBJECT_NAME, 'no account-level network policy' AS DETAIL FROM ACCOUNT_INFO
+      WHERE NETWORK_POLICY IS NULL ORDER BY 1
+    severity: high
+    rationale: Without network rules any IP can attempt authentication.
+    remediation: {auto_fix_available: false, autonomy: L2, playbook: PB-NET-POLICY}
+
+  - id: WA-NET-002
+    pillar: network
+    waf_pillar: security_governance
+    section: "14.3"
+    title: Service user without a network policy
+    query: |
+      SELECT NAME AS OBJECT_NAME, TYPE AS DETAIL FROM USERS
+      WHERE TYPE <> 'PERSON' AND NETWORK_POLICY IS NULL AND NOT DISABLED ORDER BY 1
+    severity: medium
+    rationale: Service credentials should only be usable from the networks the service runs in.
+    remediation: {auto_fix_available: false, autonomy: L2, playbook: PB-NET-POLICY}
+
+  - id: WA-NET-003
+    pillar: network
+    waf_pillar: security_governance
+    section: "14.3"
+    title: Classified (PII-tagged) column without masking
+    query: |
+      SELECT t.OBJECT_DATABASE || '.' || t.OBJECT_SCHEMA || '.' || t.OBJECT_NAME || '.' || t.COLUMN_NAME AS OBJECT_NAME,
+             t.TAG_VALUE AS DETAIL
+      FROM TAG_REFERENCES t
+      WHERE t.TAG_NAME = 'PII' AND t.DOMAIN = 'COLUMN'
+        AND NOT EXISTS (SELECT 1 FROM POLICY_REFERENCES p WHERE p.POLICY_KIND = 'MASKING_POLICY'
+                        AND p.REF_DATABASE_NAME = t.OBJECT_DATABASE AND p.REF_SCHEMA_NAME = t.OBJECT_SCHEMA
+                        AND p.REF_ENTITY_NAME = t.OBJECT_NAME AND p.REF_COLUMN_NAME = t.COLUMN_NAME)
+        AND NOT EXISTS (SELECT 1 FROM POLICY_REFERENCES p WHERE p.POLICY_KIND = 'MASKING_POLICY' AND p.TAG_NAME = 'PII')
+      ORDER BY 1
+    severity: critical
+    rationale: Classification must propagate mechanically to masking (principle 7); tag-based masking closes the gap.
+    remediation: {auto_fix_available: true, autonomy: L2, playbook: PB-NET-TAG-MASKING}

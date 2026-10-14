@@ -1,0 +1,132 @@
+# AUTO-GENERATED — DO NOT EDIT. Source: knowledge/agents/catalogue.yaml. Regenerate with `altitude generate`.
+# Cortex Agent specification for DQ Incident Agent — deploy with CREATE AGENT ... FROM SPECIFICATION.
+models:
+  orchestration: auto
+instructions:
+  orchestration: 'You are the DQ Incident Agent (AG-DQ-INCIDENT). Clusters failures, finds probable cause, notifies
+    owner, opens incident, drafts quarantine. Maximum autonomy: L2. Guardrails: never_deletes_data. Use only the
+    provided read-only tools; cite evidence IDs for every claim; state confidence and rationale. Never execute a
+    change yourself: draft it for the ALTITUDE action gateway, which enforces approvals (L2) and the pre-approved
+    catalogue (L3: none).'
+  response: Lead with the decision, then evidence IDs, confidence and the drafted action.
+tools:
+- tool_spec:
+    type: generic
+    name: dq_violations
+    description: Data metric function expectation violations.
+    input_schema:
+      type: object
+      properties:
+        days:
+          type: number
+      required:
+      - days
+- tool_spec:
+    type: generic
+    name: table_lineage
+    description: Upstream -> downstream edges from access history (read->write), object dependencies and task targets.
+    input_schema:
+      type: object
+      properties:
+        days:
+          type: number
+      required:
+      - days
+- tool_spec:
+    type: generic
+    name: task_failures
+    description: Failed task runs in the lookback window, with the task's latest state.
+    input_schema:
+      type: object
+      properties:
+        days:
+          type: number
+      required:
+      - days
+- tool_spec:
+    type: generic
+    name: load_errors
+    description: Files loaded with errors or not loaded in the window.
+    input_schema:
+      type: object
+      properties:
+        days:
+          type: number
+      required:
+      - days
+- tool_spec:
+    type: generic
+    name: recent_ddl
+    description: DDL statements touching the given objects within a window.
+    input_schema:
+      type: object
+      properties:
+        objects:
+          type: string
+        before:
+          type: string
+        hours:
+          type: number
+      required:
+      - objects
+      - before
+      - hours
+- tool_spec:
+    type: generic
+    name: table_owners
+    description: DATA_OWNER tag per table.
+    input_schema:
+      type: object
+      properties: {}
+      required: []
+- tool_spec:
+    type: generic
+    name: tier1_tables
+    description: Tier-1 tables (TIER tag or client input).
+    input_schema:
+      type: object
+      properties: {}
+      required: []
+tool_resources:
+  dq_violations:
+    type: procedure
+    identifier: ALTITUDE_AGENTS.TOOLS.DQ_VIOLATIONS
+    execution_environment:
+      type: warehouse
+      warehouse: WH_AGENTS
+  table_lineage:
+    type: procedure
+    identifier: ALTITUDE_AGENTS.TOOLS.TABLE_LINEAGE
+    execution_environment:
+      type: warehouse
+      warehouse: WH_AGENTS
+  task_failures:
+    type: procedure
+    identifier: ALTITUDE_AGENTS.TOOLS.TASK_FAILURES
+    execution_environment:
+      type: warehouse
+      warehouse: WH_AGENTS
+  load_errors:
+    type: procedure
+    identifier: ALTITUDE_AGENTS.TOOLS.LOAD_ERRORS
+    execution_environment:
+      type: warehouse
+      warehouse: WH_AGENTS
+  recent_ddl:
+    type: procedure
+    identifier: ALTITUDE_AGENTS.TOOLS.RECENT_DDL
+    execution_environment:
+      type: warehouse
+      warehouse: WH_AGENTS
+  table_owners:
+    type: procedure
+    identifier: ALTITUDE_AGENTS.TOOLS.TABLE_OWNERS
+    execution_environment:
+      type: warehouse
+      warehouse: WH_AGENTS
+  tier1_tables:
+    type: procedure
+    identifier: ALTITUDE_AGENTS.TOOLS.TIER1_TABLES
+    execution_environment:
+      type: warehouse
+      warehouse: WH_AGENTS

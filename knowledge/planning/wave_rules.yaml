@@ -1,0 +1,39 @@
+version: 1.0.0
+description: >
+  Section 9.3 wave design rules as data. Each rule names an executable rule in
+  altitude.planning.waves.RULES; thresholds are rubric references. The planner applies the rules while
+  building waves and validates the finished plan against the same rules.
+rules:
+  - id: WR-01
+    rule: dependency_clusters
+    title: Group by dependency clusters from the lineage graph, not by schema name
+    # Scheduler jobs run many unrelated subject areas, so they are placed by dependency order (like shared
+    # hubs, see rubric.gates.waves.hub_degree_min) instead of chaining every cluster together.
+    params: {edge_kinds: [reads, writes, calls], hub_types: [schedule]}
+  - id: WR-02
+    rule: thin_vertical_slice_first
+    title: Wave 1 is a thin vertical slice (one subject area, source to BI) proving the whole pipeline
+    params:
+      source_types: [table]
+      transform_types: [procedure, function, package, macro, script, etl_job, schedule]
+      consumer_types: [view, report]
+  - id: WR-03
+    rule: max_wave_weeks
+    title: Each wave fits the maximum wave duration
+    weeks_threshold_ref: rubric.gates.waves.max_weeks_per_wave
+  - id: WR-04
+    rule: quarter_end_freeze
+    title: Regulatory reports and month-end processes never cut over in the last business days of a quarter
+    applies_to_tags: [regulatory, month_end]
+    business_days_threshold_ref: rubric.gates.waves.quarter_end_freeze_business_days
+  - id: WR-05
+    rule: ends_with_business_consumable
+    title: Each wave ends with something a business user uses
+    params: {consumable_types: [view, report], direct_use_counts: true}
+  - id: WR-06
+    rule: dependency_order
+    title: Producers move in the same or an earlier wave than their consumers
+  - id: WR-07
+    rule: requires_gate
+    title: A plan is only baselined after the assessment exit gate passed on the same snapshot
+    params: {gate: assess_exit}

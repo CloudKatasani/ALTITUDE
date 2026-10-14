@@ -1,0 +1,88 @@
+# Snowflake behaviour-change bundle entries mapped to usage signatures (Release Change Watcher, Section 18.2 #10).
+#
+# THESE ARE ILLUSTRATIVE SAMPLE ENTRIES used to exercise the watcher; they paraphrase the *kind* of change
+# Snowflake announces in its behaviour-change log and must be replaced by (and verified against) the
+# official bundle notes before use on an engagement.
+#
+# Signature kinds (all read-only, evaluated over the telemetry snapshot):
+#   query_text      — regex over QUERY_HISTORY.QUERY_TEXT within the lookback window
+#   view_definition — regex over VIEWS.VIEW_DEFINITION
+#   sql             — SELECT returning OBJECT_NAME (and optional DETAIL) for each impacted object
+version: 1.0.0
+entries:
+  - id: BCB-SAMPLE-2026_07-01
+    bundle: "2026_07 (sample)"
+    title: Implicit cast when comparing TIMESTAMP expressions with DATE values
+    category: sql_semantics
+    summary: Comparisons mixing CURRENT_TIMESTAMP()/DATEADD results with DATE columns follow a stricter casting rule.
+    signatures:
+      - kind: query_text
+        pattern: "CURRENT_TIMESTAMP\\(\\)"
+    test_guidance: Re-run the impacted query signatures in non-prod with the bundle enabled and compare row counts.
+    last_verified: "2026-10-01"
+
+  - id: BCB-SAMPLE-2026_07-02
+    bundle: "2026_07 (sample)"
+    title: CREATE OR REPLACE TABLE ... AS SELECT and grant preservation
+    category: ddl
+    summary: Replacing a table without COPY GRANTS drops its grants; the bundle changes the default warning behaviour.
+    signatures:
+      - kind: query_text
+        pattern: "CREATE\\s+OR\\s+REPLACE\\s+TABLE"
+    test_guidance: Run the pipeline in non-prod and diff SHOW GRANTS on the replaced tables before/after.
+    last_verified: "2026-10-01"
+
+  - id: BCB-SAMPLE-2026_08-01
+    bundle: "2026_08 (sample)"
+    title: Password sign-in blocked for LEGACY_SERVICE users
+    category: security
+    summary: Users of TYPE = LEGACY_SERVICE can no longer authenticate with a password; key-pair or OAuth is required.
+    signatures:
+      - kind: sql
+        sql: "SELECT NAME AS OBJECT_NAME, 'user type ' || TYPE AS DETAIL FROM USERS WHERE TYPE = 'LEGACY_SERVICE' AND HAS_PASSWORD AND NOT DISABLED"
+    test_guidance: Rotate the service user to key-pair authentication in non-prod and run its integration end to end.
+    last_verified: "2026-10-01"
+
+  - id: BCB-SAMPLE-2026_08-02
+    bundle: "2026_08 (sample)"
+    title: Nondeterministic MERGE raises an error by default
+    category: sql_semantics
+    summary: A MERGE whose source matches a target row more than once fails instead of updating nondeterministically.
+    signatures:
+      - kind: query_text
+        pattern: "\\bMERGE\\s+INTO\\b"
+    test_guidance: Check MERGE sources for duplicate keys (QUALIFY ROW_NUMBER() = 1) and replay in non-prod.
+    last_verified: "2026-10-01"
+
+  - id: BCB-SAMPLE-2026_08-03
+    bundle: "2026_08 (sample)"
+    title: Single-factor password sign-in deprecated for human users
+    category: security
+    summary: PERSON users signing in with a password must enrol a second factor.
+    signatures:
+      - kind: sql
+        sql: "SELECT NAME AS OBJECT_NAME, 'password without MFA' AS DETAIL FROM USERS WHERE TYPE = 'PERSON' AND HAS_PASSWORD AND NOT HAS_MFA AND EXT_AUTHN_UID IS NULL AND NOT DISABLED"
+    test_guidance: Enrol MFA for the impacted users before the bundle is enabled.
+    last_verified: "2026-10-01"
+
+  - id: BCB-SAMPLE-2026_09-01
+    bundle: "2026_09 (sample)"
+    title: SELECT * in view definitions resolves columns at creation time
+    category: ddl
+    summary: Views defined with SELECT * no longer pick up columns added to the base table without re-creation.
+    signatures:
+      - kind: view_definition
+        pattern: "SELECT\\s+\\*"
+    test_guidance: Recreate the impacted views in non-prod after adding a column to the base table and compare.
+    last_verified: "2026-10-01"
+
+  - id: BCB-SAMPLE-2026_09-02
+    bundle: "2026_09 (sample)"
+    title: Output format change for SYSTEM$CLUSTERING_INFORMATION
+    category: functions
+    summary: The JSON returned by SYSTEM$CLUSTERING_INFORMATION gains and renames fields.
+    signatures:
+      - kind: query_text
+        pattern: "SYSTEM\\$CLUSTERING_INFORMATION"
+    test_guidance: Update any parser of the function output and test in non-prod.
+    last_verified: "2026-10-01"

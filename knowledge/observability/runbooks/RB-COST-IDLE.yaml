@@ -1,0 +1,21 @@
+# Package O runbook (Section 7.6) — referenced by knowledge/observability/alerts.yaml
+id: RB-COST-IDLE
+title: Idle credit share above rubric
+alert_classes:
+- idle_share
+owner_role: PLATFORM_OWNER
+autonomy: L2
+linked_kpis:
+- KPI-COST-007
+- KPI-COST-001
+linked_checks:
+- DX-COST-01
+- DX-COST-02
+steps:
+- action: Confirm the idle-share trend in KPI-COST-007 for the warehouse over the last 14 days.
+- action: Check AUTO_SUSPEND and the query arrival pattern; propose a shorter auto-suspend (Package D DX-COST-01
+    remediation).
+- action: Apply the change through the IaC pipeline with the generated rollback.
+escalation: Platform owner if cache-dependent workloads are affected.
+verification: KPI-COST-007 below the rubric idle share within a week; realised value measured by the suggestion-to-value
+  loop.

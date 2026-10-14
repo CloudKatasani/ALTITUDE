@@ -1,0 +1,6 @@
+Partition Key,File Type,Category,Code Unit,Code Unit Id,File Name,Line Number,Lines of Code,EWI Count,FDM Count,PRF Count,Highest EWI Severity,Conversion Status
+a1f3,bteq,TABLE,stg.customer_delta,CU-0001,C:\migration\input\teradata\load_customer_dim.bteq,6,8,0,1,1,None,Converted with FDMs
+a1f3,bteq,DML,INSERT stg.customer_delta,CU-0002,C:\migration\input\teradata\load_customer_dim.bteq,17,4,0,0,0,None,Converted
+a1f3,bteq,DML,UPDATE edw.dim_customer,CU-0003,C:\migration\input\teradata\load_customer_dim.bteq,22,3,1,0,0,High,Partially converted
+a1f3,bteq,QUERY,SELECT edw.dim_customer,CU-0004,C:\migration\input\teradata\load_customer_dim.bteq,26,3,1,0,0,Medium,Converted with EWIs
+b7c2,sql,PACKAGE,sales_pkg,CU-0005,C:\migration\input\oracle\sales_pkg.sql,1,"1,204",14,3,2,High,Partially converted

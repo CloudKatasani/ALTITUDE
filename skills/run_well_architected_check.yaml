@@ -1,0 +1,17 @@
+name: run_well_architected_check
+description: Run the Well-Architected (WA-*) checks on a sealed Snowflake snapshot; findings carry severity, objects and remediation
+  playbooks.
+permission: run
+entrypoint: altitude.skills.impl_platform:run_well_architected_check
+input_schema:
+  type: object
+  properties:
+    snapshot_id:
+      type: string
+      minLength: 3
+      description: snapshot id registered in the store, or a sealed .duckdb path
+    persist:
+      type: boolean
+  required:
+  - snapshot_id
+  additionalProperties: false

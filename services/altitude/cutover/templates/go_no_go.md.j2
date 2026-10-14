@@ -1,0 +1,19 @@
+# Go/No-Go evidence pack — {{ pack.scope }}
+
+{{ '{{' }}PRODUCT_NAME{{ '}}' }} · plan `{{ pack.plan_id }}` · strategy **{{ pack.strategy }}** · snapshot `{{ pack.snapshot_id }}` · rubric `{{ pack.rubric_version }}` · pack hash `{{ pack.pack_hash }}`
+
+## Recommendation: **{{ pack.recommendation | upper }}**
+
+| Criterion | Target | Actual | Result |
+|---|---|---|---|
+{% for c in pack.criteria -%}
+| {{ c.metric }} | {{ c.op }} {{ c.target }}{% if c.target_ref %} (`{{ c.target_ref }}`){% endif %} | {{ c.actual }} | {{ "PASS" if c.passed else "FAIL" }} |
+{% endfor %}
+{% for s in layout %}
+## {{ s.title }}
+
+```json
+{{ pack.sections[s.id] | tojson(indent=2) }}
+```
+{% endfor %}
+_The recommendation is evidence; the go/no-go decision is recorded separately with a named approver._

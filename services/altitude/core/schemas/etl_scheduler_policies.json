@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Scheduler conversion policies (retry, SLA, placement)",
+  "x-altitude-globs": ["schedulers/policies.yaml"],
+  "type": "object",
+  "required": ["id", "defaults", "snowflake", "airflow"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {"type": "string"},
+    "defaults": {
+      "type": "object",
+      "required": ["retries", "retry_delay_minutes", "timeout_minutes", "suspend_after_failures", "timezone", "start_date"],
+      "additionalProperties": false,
+      "properties": {
+        "retries": {"type": "integer", "minimum": 0},
+        "retry_delay_minutes": {"type": "integer", "minimum": 0},
+        "timeout_minutes": {"type": "integer", "minimum": 1},
+        "suspend_after_failures": {"type": "integer", "minimum": 0},
+        "timezone": {"type": "string"},
+        "start_date": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"}
+      }
+    },
+    "snowflake": {
+      "type": "object",
+      "required": ["database", "schema", "warehouse", "dbt_project", "script_stage"],
+      "properties": {
+        "database": {"type": "string"},
+        "schema": {"type": "string"},
+        "warehouse": {"type": "string"},
+        "dbt_project": {"type": "string"},
+        "script_stage": {"type": "string", "pattern": "^@"},
+        "sla_alerts": {"type": "boolean"},
+        "alert_warehouse": {"type": "string"},
+        "notification_integration": {"type": "string"},
+        "default_alert_recipient": {"type": "string"}
+      }
+    },
+    "airflow": {
+      "type": "object",
+      "required": ["conn_id", "owner"],
+      "properties": {
+        "conn_id": {"type": "string"},
+        "owner": {"type": "string"},
+        "catchup": {"type": "boolean"},
+        "max_active_runs": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

@@ -1,0 +1,34 @@
+namespace: gates
+version: 1.0.0
+description: >
+  Appendix C readiness gates as data plus the Section 9.3 wave thresholds. Gate criteria compare an
+  evidence metric with a literal value or a rubric reference; decisions are recorded append-only against
+  a snapshot.
+values:
+  assess_classified_min: 95
+  unit_test_min: 98
+  parallel_cycles_min: 2
+  waves:
+    max_weeks_per_wave: 12
+    quarter_end_freeze_business_days: 10
+    fiscal_year_start_month: 1
+    hub_degree_min: 6               # shared objects linked to at least this many in-scope objects are placed
+                                    # by dependency order instead of merging every cluster into one
+  definitions:
+    assess_exit:
+      - {metric: objects_classified_pct, op: ">=", ref: rubric.gates.assess_classified_min}
+      - {metric: tier1_identified, op: "==", value: true}
+      - {metric: business_case_approved, op: "==", value: true}
+    plan_exit:
+      - {metric: wave1_scope_frozen, op: "==", value: true}
+      - {metric: wave_rule_violations, op: "==", value: 0}
+      - {metric: architecture_board_approved, op: "==", value: true}
+    convert_exit:
+      - {metric: open_p1_ewis, op: "==", value: 0}
+      - {metric: ai_changes_unreviewed, op: "==", value: 0}
+      - {metric: unit_test_pass_rate, op: ">=", ref: rubric.gates.unit_test_min}
+    cutover_go:
+      - {metric: tier1_l3_mismatches_unaccepted, op: "==", value: 0}
+      - {metric: consecutive_clean_parallel_cycles, op: ">=", ref: rubric.gates.parallel_cycles_min}
+      - {metric: rollback_rehearsed, op: "==", value: true}
+      - {metric: grants_mapped_pct, op: "==", value: 100}

@@ -1,0 +1,113 @@
+dialect: teradata
+description: Detector and profile tests (hits and non-hits) for the Teradata register.
+test_cases:
+  - id: TC-TD-01-101
+    issue_id: TD-01
+    kind: detector
+    description: MULTISET tables and UPDATE ... SET are not SET tables
+    source_sql: |
+      CREATE MULTISET TABLE sales.orders_m (order_id INTEGER) PRIMARY INDEX (order_id);
+      UPDATE sales.orders_m SET order_id = order_id + 1 WHERE order_id = 0;
+      -- CREATE SET TABLE in a comment must not count
+    expect_issues: []
+    expect_absent: [TD-01]
+
+  - id: TC-TD-01-102
+    issue_id: TD-01
+    kind: profile
+    description: DBC.TablesV reports a SET table and the target holds more rows than distinct source rows
+    source_sql: ""
+    profile:
+      tables:
+        - {name: sales.orders, kind: SET, source_row_count: 3, target_row_count: 5}
+        - {name: sales.lines, kind: MULTISET, source_row_count: 9, target_row_count: 9}
+    expect_issues: [TD-01]
+
+  - id: TC-TD-02-101
+    issue_id: TD-02
+    kind: detector
+    description: CASESPECIFIC columns in ANSI mode are not flagged; NOT CASESPECIFIC on another column is
+    source_sql: |
+      CREATE MULTISET TABLE crm.codes (code VARCHAR(10) CASESPECIFIC, label VARCHAR(40));
+      SELECT code FROM crm.codes WHERE code = 'Ab';
+      CREATE MULTISET TABLE crm.people (name VARCHAR(40) NOT CASESPECIFIC);
+    expect_issues: [TD-02]
+    expect_lines: {TD-02: [3]}
+
+  - id: TC-TD-05-101
+    issue_id: TD-05
+    kind: detector
+    description: Decimal division and explicitly truncated division are not integer-division drift
+    source_sql: |
+      CREATE MULTISET TABLE fin.t (amount DECIMAL(12,2), qty INTEGER);
+      SELECT amount / 2 FROM fin.t;
+      SELECT FLOOR(qty / 4) FROM fin.t;
+      SELECT CAST(qty AS DECIMAL(12,4)) / 3 FROM fin.t;
+    expect_issues: []
+    expect_absent: [TD-05]
+
+  - id: TC-TD-06-101
+    issue_id: TD-06
+    kind: detector
+    description: BTEQ error handling dot-commands
+    source_sql: |
+      .LOGON tdprod/etl_user,$PASSWORD;
+      DELETE FROM stage.orders_batch;
+      .IF ERRORCODE <> 0 THEN .GOTO FAILED;
+      INSERT INTO sales.orders SELECT * FROM stage.orders_batch;
+      .IF ACTIVITYCOUNT = 0 THEN .QUIT 4;
+      .LABEL FAILED
+      .QUIT 8;
+    expect_issues: [TD-06]
+
+  - id: TC-TD-07-101
+    issue_id: TD-07
+    kind: profile
+    description: View stack deeper than the rubric limit
+    source_sql: ""
+    profile:
+      views:
+        - {name: rpt.v_sales_summary, depth: 8}
+        - {name: rpt.v_simple, depth: 1}
+    expect_issues: [TD-07]
+
+  - id: TC-TD-08-101
+    issue_id: TD-08
+    kind: profile
+    description: Update source is not unique on the join key
+    source_sql: ""
+    profile:
+      update_sources:
+        - {statement: upd_balance, source: fin.adjustment, key: [acct_id], row_count: 3, distinct_keys: 2}
+    expect_issues: [TD-08]
+
+  - id: TC-TD-09-101
+    issue_id: TD-09
+    kind: profile
+    description: TASM workload definitions in the harvest
+    source_sql: ""
+    profile:
+      workloads:
+        - {name: WD-Tactical, priority: tactical}
+        - {name: WD-Batch, priority: low}
+    expect_issues: [TD-09]
+
+  - id: TC-TD-10-101
+    issue_id: TD-10
+    kind: detector
+    description: Identity columns
+    source_sql: |
+      CREATE MULTISET TABLE dim.customer (
+        customer_sk INTEGER GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1),
+        customer_id VARCHAR(20)
+      );
+    expect_issues: [TD-10]
+
+  - id: TC-TD-11-101
+    issue_id: TD-11
+    kind: profile
+    description: Non-UTC session time zone in the settings harvest
+    source_sql: ""
+    profile:
+      settings: {time_zone: "America Eastern"}
+    expect_issues: [TD-11]

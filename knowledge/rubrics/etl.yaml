@@ -1,0 +1,40 @@
+namespace: etl
+version: 1.0.0
+description: >
+  ETL & scheduler converters (M9): component complexity weights, job classification thresholds,
+  recommendation confidence and synthetic-data volume for the dbt compile/run harness.
+calibration:
+  - date: "2026-10-14"
+    note: Initial weights from the Section 11.1 known issues; calibrate on the first Informatica/SSIS estates.
+values:
+  complexity_weights:
+    source: 0
+    target: 0
+    passthrough: 0
+    project: 1
+    filter: 1
+    sort: 0
+    union: 1
+    lookup: 2
+    join: 2
+    aggregate: 2
+    split: 2
+    sequence: 2
+    unsupported: 10
+  issue_weights:
+    S1: 4
+    S2: 3
+    S3: 1
+    S4: 0
+  classification:
+    passthrough_max_score: 0   # at or below: passthrough (rename/retype only)
+    complex_min_score: 25      # at or above: complex even when every component is SQL-expressible
+  usage:
+    retire_max_runs_90d: 0     # jobs with at most this many runs in 90 days are proposed for retirement
+  confidence:
+    passthrough: 0.95
+    transform: 0.85
+    complex: 0.75
+    retire: 0.70
+  synthetic:
+    rows_per_table: 40

@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Guided outcome path",
+  "x-altitude-globs": ["advisory/outcome_path.yaml"],
+  "type": "object",
+  "required": ["phases"],
+  "properties": {"phases": {"type": "array", "items": {"type": "object", "required": ["id", "name", "package", "gate"],
+    "additionalProperties": false, "properties": {"id": {"type": "string"}, "name": {"type": "string"},
+    "package": {"type": "string"}, "gate": {"type": "string"}}}}}
+}

@@ -1,0 +1,165 @@
+{
+  "_generated": "AUTO-GENERATED — DO NOT EDIT. Source: knowledge/observability/alerts.yaml",
+  "alerts": [
+    {
+      "id": "ALR-COST-ANOMALY",
+      "class": "credit_anomaly",
+      "name": "Credit anomaly against the forecast band",
+      "severity": "high",
+      "kpi": "KPI-COST-001",
+      "rule": "forecast_band",
+      "route_ref": "tenant.alert_routes.finops",
+      "runbook": "RB-COST-ANOMALY",
+      "runbook_title": "Credit anomaly against the forecast band",
+      "suppression_hours": 24,
+      "owner_role": "FINOPS_LEAD"
+    },
+    {
+      "id": "ALR-COST-BUDGET",
+      "class": "budget_breach",
+      "name": "Budget threshold breach (month-end forecast)",
+      "severity": "high",
+      "kpi": "KPI-COST-005",
+      "rule": "threshold",
+      "route_ref": "tenant.alert_routes.finops",
+      "runbook": "RB-COST-BUDGET",
+      "runbook_title": "Budget threshold breach (forecast month-end overrun)",
+      "suppression_hours": 168,
+      "owner_role": "FINOPS_LEAD"
+    },
+    {
+      "id": "ALR-COST-IDLE",
+      "class": "idle_share",
+      "name": "Idle credit share above rubric",
+      "severity": "low",
+      "kpi": "KPI-COST-007",
+      "rule": "threshold",
+      "route_ref": "tenant.alert_routes.finops",
+      "runbook": "RB-COST-IDLE",
+      "runbook_title": "Idle credit share above rubric",
+      "suppression_hours": 168,
+      "owner_role": "PLATFORM_OWNER"
+    },
+    {
+      "id": "ALR-REL-TIER1-TASK",
+      "class": "tier1_task_failure",
+      "name": "Failed Tier-1 task",
+      "severity": "critical",
+      "kpi": "KPI-REL-002",
+      "rule": "query",
+      "route_ref": "tenant.alert_routes.dataops",
+      "runbook": "RB-REL-TASK-FAILED",
+      "runbook_title": "Failed Tier-1 task",
+      "suppression_hours": 6,
+      "owner_role": "DATAOPS_LEAD"
+    },
+    {
+      "id": "ALR-REL-FRESHNESS",
+      "class": "freshness_breach",
+      "name": "Freshness SLA breach",
+      "severity": "high",
+      "kpi": "KPI-REL-003",
+      "rule": "query",
+      "route_ref": "tenant.alert_routes.dataops",
+      "runbook": "RB-REL-FRESHNESS",
+      "runbook_title": "Freshness SLA breach",
+      "suppression_hours": 12,
+      "owner_role": "DATAOPS_LEAD"
+    },
+    {
+      "id": "ALR-SEC-ACCOUNTADMIN",
+      "class": "accountadmin_use",
+      "name": "ACCOUNTADMIN use",
+      "severity": "high",
+      "kpi": "KPI-SEC-007",
+      "rule": "threshold",
+      "route_ref": "tenant.alert_routes.security",
+      "runbook": "RB-SEC-ACCOUNTADMIN",
+      "runbook_title": "ACCOUNTADMIN use",
+      "suppression_hours": 24,
+      "owner_role": "SECURITY_LEAD"
+    },
+    {
+      "id": "ALR-SEC-NO-MFA",
+      "class": "new_user_without_mfa",
+      "name": "New user without MFA",
+      "severity": "medium",
+      "kpi": "KPI-SEC-006",
+      "rule": "query",
+      "route_ref": "tenant.alert_routes.security",
+      "runbook": "RB-SEC-NO-MFA",
+      "runbook_title": "New user without MFA",
+      "suppression_hours": 168,
+      "owner_role": "SECURITY_LEAD"
+    },
+    {
+      "id": "ALR-GOV-MASKING-GAP",
+      "class": "masking_gap",
+      "name": "Masking gap on a classified column",
+      "severity": "high",
+      "kpi": "KPI-GOV-003",
+      "rule": "query",
+      "route_ref": "tenant.alert_routes.security",
+      "runbook": "RB-GOV-MASKING-GAP",
+      "runbook_title": "Masking gap on a classified column",
+      "suppression_hours": 168,
+      "owner_role": "DATA_GOVERNANCE_LEAD"
+    },
+    {
+      "id": "ALR-AI-CORTEX-SPIKE",
+      "class": "cortex_spend_spike",
+      "name": "Cortex spend spike",
+      "severity": "medium",
+      "kpi": "KPI-AI-001",
+      "rule": "forecast_band",
+      "route_ref": "tenant.alert_routes.ai",
+      "runbook": "RB-AI-CORTEX-SPIKE",
+      "runbook_title": "Cortex spend spike",
+      "suppression_hours": 24,
+      "owner_role": "AI_LEAD"
+    },
+    {
+      "id": "ALR-PERF-REGRESSION",
+      "class": "signature_regression",
+      "name": "Query-signature performance regression",
+      "severity": "medium",
+      "kpi": "KPI-PERF-007",
+      "rule": "forecast_band",
+      "route_ref": "tenant.alert_routes.platform",
+      "runbook": "RB-PERF-REGRESSION",
+      "runbook_title": "Query-signature performance regression",
+      "suppression_hours": 24,
+      "owner_role": "PLATFORM_OWNER"
+    }
+  ],
+  "routing_test": {
+    "interval_ref": "rubric.obs.routing.test_interval_days",
+    "message": "Monthly routing test — no action required"
+  },
+  "severities": {
+    "critical": {
+      "pagerduty": "critical",
+      "servicenow_impact": 1,
+      "servicenow_urgency": 1,
+      "slack_prefix": ":rotating_light:"
+    },
+    "high": {
+      "pagerduty": "error",
+      "servicenow_impact": 2,
+      "servicenow_urgency": 1,
+      "slack_prefix": ":red_circle:"
+    },
+    "medium": {
+      "pagerduty": "warning",
+      "servicenow_impact": 2,
+      "servicenow_urgency": 2,
+      "slack_prefix": ":large_orange_circle:"
+    },
+    "low": {
+      "pagerduty": "info",
+      "servicenow_impact": 3,
+      "servicenow_urgency": 3,
+      "slack_prefix": ":large_blue_circle:"
+    }
+  }
+}

@@ -1,0 +1,25 @@
+# Service catalogue, tiers and guarantees (Sections 5.3, 6.7, 6.8, 7.7, 34). Indicative hypotheses — calibrate.
+offers:
+  - {id: OFF-D0, name: "D0 Diagnostics Snapshot", package: D0, duration_weeks: [1, 1], fee_usd: [0, 0], buyer: "Platform owner", next: OFF-D, scope: "Automated in-account D1-D5 checks; top-10 findings; 1-hour readout"}
+  - {id: OFF-D, name: "Package D — Platform Deep Diagnostics", package: D, duration_weeks: [2, 6], fee_usd: [20000, 150000], buyer: "CDO / CIO / CFO", next: OFF-REM, scope: "Section 6"}
+  - {id: OFF-O, name: "Package O — Platform Observability add-on", package: O, duration_weeks: [3, 8], fee_usd: [15000, 60000], monthly_usd: [3000, 25000], buyer: "Platform owner / FinOps", next: OFF-RUN, scope: "Section 7"}
+  - {id: OFF-REM, name: "Remediation Sprint", package: remediation, duration_weeks: [4, 8], fee_usd: [40000, 150000], buyer: "Platform owner", next: OFF-O, scope: "Implements accepted Package D suggestions"}
+  - {id: OFF-BI, name: "BI Rationalisation Programme", package: bi, duration_weeks: [6, 12], fee_usd: [60000, 250000], buyer: "CDO", next: OFF-AI, scope: "Report rationalisation, KPI lineage, certified semantic layer"}
+  - {id: OFF-ASSESS, name: "Migration Assessment", package: assessment, duration_weeks: [3, 6], fee_usd: [40000, 120000], buyer: "CIO", next: OFF-MIG, scope: "Harvest, disposition, waves, pattern, estimate with confidence bands, TCO"}
+  - {id: OFF-MIG, name: "Migration Sprint (mid-market)", package: migration_sprint, duration_weeks: [8, 16], fee_usd: [150000, 600000], buyer: "CIO", next: OFF-RUN, scope: "One source, up to N objects, foundation to cutover"}
+  - {id: OFF-FACTORY, name: "Migration Factory (enterprise)", package: migration_factory, duration_weeks: [26, 104], fee_usd: [500000, 5000000], buyer: "CIO / CDO", next: OFF-RUN, scope: "Multi-wave programme"}
+  - {id: OFF-FOUND, name: "Snowflake Foundation (greenfield)", package: foundation, duration_weeks: [6, 10], fee_usd: [80000, 200000], buyer: "CDO", next: OFF-O, scope: "Landing zone + first data product, Package O Core from day one"}
+  - {id: OFF-AI, name: "AI-Ready Programme", package: ai_ready, duration_weeks: [10, 12], fee_usd: [90000, 250000], buyer: "CDO", next: OFF-RUN, scope: "Score, fix, semantic views, Cortex agent pilot"}
+  - {id: OFF-RUN, name: "Managed Run Service", package: managed_run, duration_weeks: [52, 52], fee_usd: [0, 0], monthly_usd: [12000, 25000], buyer: "CIO", next: OFF-FACTORY, scope: "Package O3 + L2/L3 support + quarterly optimisation"}
+tiers:
+  - {tier: D0, package: D, fee_usd: [0, 0], weeks: 1, accounts: 1, domains: [D1, D2, D3, D4, D5], top_findings: 10}
+  - {tier: D1, package: D, fee_usd: [20000, 30000], weeks: 2, accounts: 1, domains: [D1, D2, D3, D4, D5, D6, D7]}
+  - {tier: D2, package: D, fee_usd: [45000, 75000], weeks: 4, accounts: 3, domains: [D1, D2, D3, D4, D5, D6, D7, D8, D9, D10]}
+  - {tier: D3, package: D, fee_usd: [90000, 150000], weeks: 6, accounts: 99, domains: [D1, D2, D3, D4, D5, D6, D7, D8, D9, D10]}
+  - {tier: O1, package: O, fee_usd: [15000, 25000], monthly_usd: [3000, 5000], weeks: 4, accounts: 2}
+  - {tier: O2, package: O, fee_usd: [30000, 45000], monthly_usd: [6000, 10000], weeks: 6, accounts: 5}
+  - {tier: O3, package: O, fee_usd: [40000, 60000], monthly_usd: [12000, 25000], weeks: 8, accounts: 5}
+guarantees:
+  - {id: GUA-FEE-CREDIT, name: "Fee credit", applies_to: [D1, D2], terms: "100% of the fee credited against a remediation sprint or Package O signed within the window", once_per_account: true}
+  - {id: GUA-VALUE-FLOOR, name: "Value floor", applies_to: [D2, D3], terms: "If identified annualised opportunity (p50) is below the multiple of the fee, credit the difference, capped at the fee"}
+  - {id: GUA-REBASELINE, name: "Re-baseline", applies_to: [D1, D2, D3], terms: "Free D0 re-run at 90 days to show realised improvement"}

@@ -1,0 +1,27 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e '.[dev]'
+      - name: Knowledge base validates (schemas, rubric refs, unique ids)
+        run: altitude knowledge validate
+      - name: No numeric thresholds in application code
+        run: python tools/lint_thresholds.py
+      - name: De-branding lint (white-label tokens only)
+        run: python tools/lint_branding.py
+      - name: Generated artifacts are stamped and regeneration produces no diff
+        run: altitude generate --check
+      - name: Tests (incl. connector and append-only kill-tests)
+        run: pytest

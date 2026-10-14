@@ -1,0 +1,75 @@
+name: generate_reconciliation_suite
+description: Generate tiered L0-L5 reconciliation suites (schema, counts, aggregates, keys, business outputs, performance)
+  for migrated tables.
+permission: run
+entrypoint: altitude.skills.impl_validation:generate_reconciliation_suite
+input_schema:
+  type: object
+  properties:
+    tables:
+      type: array
+      minItems: 1
+      items:
+        type: object
+        required:
+        - object_id
+        - source_table
+        additionalProperties: false
+        properties:
+          object_id:
+            type: string
+          source_table:
+            type: string
+          target_table:
+            type: string
+          tier:
+            enum:
+            - tier1
+            - tier2
+            - tier3
+          key_columns:
+            type: array
+            items:
+              type: string
+          partition_column:
+            type: string
+          columns:
+            type: array
+            items:
+              type: string
+          policies:
+            type: array
+            items:
+              type: string
+          source_dialect:
+            type: string
+          engagement_id:
+            type: string
+          data_owner:
+            type: string
+          queries:
+            type: array
+            items:
+              type: object
+              required:
+              - id
+              - source_sql
+              additionalProperties: false
+              properties:
+                id:
+                  type: string
+                source_sql:
+                  type: string
+                target_sql:
+                  type: string
+                description:
+                  type: string
+          perf:
+            type: array
+            items:
+              type: object
+    persist:
+      type: boolean
+  required:
+  - tables
+  additionalProperties: false

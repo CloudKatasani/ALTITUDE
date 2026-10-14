@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ theme.PRODUCT_NAME }}{% endblock %}</title>
+<style>
+:root {
+  --primary: {{ theme.COLOR_PRIMARY }};
+  --accent: {{ theme.COLOR_ACCENT }};
+  --warn: {{ theme.COLOR_WARN }};
+  --danger: {{ theme.COLOR_DANGER }};
+  --surface: {{ theme.COLOR_SURFACE }};
+  --text: {{ theme.COLOR_TEXT }};
+}
+</style>
+<link rel="stylesheet" href="/static/portal.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/">{{ theme.PRODUCT_NAME }}</a>
+  {% if principal %}
+  <nav>
+    <a href="/">Outcome path</a>
+    {% for path, label in nav %}<a href="{{ path }}">{{ label }}</a>{% endfor %}
+    <a href="/review">Review queue</a>
+    <a href="/sherpa">{{ theme.COPILOT_NAME }}</a>
+    <a href="/decisions">{{ theme.REVIEW_BOARD_NAME }}</a>
+  </nav>
+  <span class="who">{{ principal.user }} · {{ principal.role }} · <a href="/logout">sign out</a></span>
+  {% endif %}
+</header>
+<main>{% block content %}{% endblock %}</main>
+<footer>{{ theme.COMPANY_NAME }} · evidence-first · every number links to its evidence</footer>
+</body>
+</html>

@@ -1,0 +1,122 @@
+# Snowflake Foundation landing zone (Sections 14 and 15.2) — the tool-neutral source of truth.
+# `altitude generate` renders it to Terraform (Snowflake provider) under generated/foundation/terraform/.
+#
+# Role model: access roles (object privileges, one RO/RW pair per database) -> functional roles (job function)
+# -> users. Users only ever receive functional roles; object privileges are never granted to users.
+id: LZ-DEFAULT
+name: Default Snowflake Foundation
+version: 1.0.0
+provider:
+  source: snowflakedb/snowflake
+  version: "~> 2.0"
+
+naming:
+  database_pattern: "{env}_{domain}_{layer}"
+  database_regex: "^(DEV|TEST|UAT|PROD)_[A-Z0-9]+_(RAW|CONFORMED|CURATED|SEMANTIC)$"
+  access_role_pattern: "AR_{database}_{level}"
+
+environments:
+  - {name: DEV, managed_access: false}
+  - {name: PROD, managed_access: true}
+
+layers:
+  - {name: RAW, retention_days: 7, description: "Immutable landing (bronze)"}
+  - {name: CONFORMED, retention_days: 1, description: "Conformed, de-duplicated (silver)"}
+  - {name: CURATED, retention_days: 1, description: "Business-ready facts and dimensions (gold)"}
+  - {name: SEMANTIC, retention_days: 1, description: "Semantic views and data products"}
+
+domains:
+  - {name: SALES, owner: sales-data@example.com, cost_center: SALES_ANALYTICS}
+  - {name: FINANCE, owner: finance-data@example.com, cost_center: FINANCE_BI}
+
+schemas: [CORE, STAGING]
+
+access_levels:
+  RO:
+    database: [USAGE]
+    schema: [USAGE]
+    future_objects: {TABLES: [SELECT], VIEWS: [SELECT], "SEMANTIC VIEWS": [SELECT]}
+  RW:
+    database: [USAGE]
+    schema: [USAGE, CREATE TABLE, CREATE VIEW]
+    future_objects: {TABLES: [SELECT, INSERT, UPDATE, DELETE, TRUNCATE], VIEWS: [SELECT]}
+
+functional_roles:
+  - name: FR_ENGINEER
+    description: Data engineers and pipeline service users
+    access: [{env: "*", domain: "*", layer: "*", level: RW}]
+    warehouses: [WH_ELT, WH_ADHOC]
+  - name: FR_ANALYST
+    description: Analysts — curated and semantic layers, read-only, production
+    access: [{env: PROD, domain: "*", layer: CURATED, level: RO}, {env: PROD, domain: "*", layer: SEMANTIC, level: RO}]
+    warehouses: [WH_ADHOC]
+  - name: FR_BI
+    description: BI service accounts — semantic layer only
+    access: [{env: PROD, domain: "*", layer: SEMANTIC, level: RO}]
+    warehouses: [WH_BI]
+  - name: FR_DATA_SCIENTIST
+    description: Data science — conformed and curated, read-only
+    access: [{env: PROD, domain: "*", layer: CONFORMED, level: RO}, {env: PROD, domain: "*", layer: CURATED, level: RO}]
+    warehouses: [WH_DS]
+  - name: FR_PRIVACY_OFFICER
+    description: Sees unmasked PII (tag-based masking exemption)
+    access: [{env: PROD, domain: "*", layer: CURATED, level: RO}]
+    warehouses: [WH_ADHOC]
+
+users:
+  - {name: SVC_DBT, type: SERVICE, functional_roles: [FR_ENGINEER], default_warehouse: WH_ELT, network_policy: NP_SERVICES}
+  - {name: SVC_INGEST, type: SERVICE, functional_roles: [FR_ENGINEER], default_warehouse: WH_ELT, network_policy: NP_SERVICES}
+  - {name: SVC_BI, type: SERVICE, functional_roles: [FR_BI], default_warehouse: WH_BI, network_policy: NP_SERVICES}
+
+warehouses:
+  - {name: WH_ELT, workload_class: elt, size: MEDIUM, auto_suspend: 60, min_clusters: 1, max_clusters: 1,
+     scaling_policy: STANDARD, statement_timeout_seconds: 7200, cost_center: DATA_PLATFORM,
+     monitor: {credit_quota: 1500, frequency: MONTHLY, notify_at: [75, 90], suspend_at: 100}}
+  - {name: WH_BI, workload_class: bi, size: SMALL, auto_suspend: 60, min_clusters: 1, max_clusters: 3,
+     scaling_policy: STANDARD, statement_timeout_seconds: 900, cost_center: FINANCE_BI,
+     monitor: {credit_quota: 800, frequency: MONTHLY, notify_at: [75, 90], suspend_at: 100}}
+  - {name: WH_DS, workload_class: data_science, size: LARGE, auto_suspend: 60, min_clusters: 1, max_clusters: 1,
+     scaling_policy: STANDARD, statement_timeout_seconds: 14400, cost_center: DATA_SCIENCE,
+     monitor: {credit_quota: 1200, frequency: MONTHLY, notify_at: [75, 90], suspend_at: 100}}
+  - {name: WH_ADHOC, workload_class: adhoc, size: XSMALL, auto_suspend: 60, min_clusters: 1, max_clusters: 2,
+     scaling_policy: ECONOMY, statement_timeout_seconds: 1800, cost_center: ANALYTICS,
+     monitor: {credit_quota: 300, frequency: MONTHLY, notify_at: [75, 90], suspend_at: 100}}
+  - {name: WH_AGENTS, workload_class: agents, size: XSMALL, auto_suspend: 60, min_clusters: 1, max_clusters: 1,
+     scaling_policy: STANDARD, statement_timeout_seconds: 600, cost_center: AI_PLATFORM,
+     monitor: {credit_quota: 200, frequency: MONTHLY, notify_at: [50, 75, 90], suspend_at: 100}}
+
+account_monitor: {name: RM_ACCOUNT, credit_quota: 6000, frequency: MONTHLY, notify_at: [80, 95], suspend_at: 100}
+
+network:
+  database: GOVERNANCE
+  schema: NETWORK
+  rules:
+    - {name: NR_CORPORATE, type: IPV4, mode: INGRESS, values: ["10.0.0.0/8"]}
+    - {name: NR_SERVICES, type: IPV4, mode: INGRESS, values: ["10.20.0.0/16"]}
+  policies:
+    - {name: NP_ACCOUNT, allowed_rules: [NR_CORPORATE], account_default: true}
+    - {name: NP_SERVICES, allowed_rules: [NR_SERVICES], account_default: false}
+
+governance:
+  database: GOVERNANCE
+  tag_schema: TAGS
+  policy_schema: POLICIES
+  admin_role: FR_GOVERNANCE_ADMIN
+  tags:
+    - {name: PII, allowed_values: [email, phone, ssn, name, address, dob]}
+    - {name: COST_CENTER, allowed_values: [DATA_PLATFORM, FINANCE_BI, DATA_SCIENCE, ANALYTICS, AI_PLATFORM, SALES_ANALYTICS]}
+    - {name: DATA_OWNER}
+    - {name: TIER, allowed_values: [tier1, tier2, tier3]}
+    - {name: DQ_STATUS, allowed_values: [QUARANTINED]}
+    - {name: IDEMPOTENT, allowed_values: ["true", "false"]}
+  masking:
+    - {name: MP_PII_STRING, tag: PII, data_type: VARCHAR, unmasked_roles: [FR_PRIVACY_OFFICER], masked_value: "***MASKED***"}
+
+budgets:
+  - {name: BUDGET_ACCOUNT, scope: ACCOUNT, monthly_limit_credits: 6000}
+  - {name: BUDGET_CORTEX, scope: CORTEX, monthly_limit_credits: 500, objects: [WH_AGENTS]}
+
+agents:
+  source: agents/catalogue.yaml
+  include: implemented
+  warehouse: WH_AGENTS

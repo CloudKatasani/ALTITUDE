@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Source scheduler vocabularies (Control-M, SQL Agent)",
+  "x-altitude-globs": ["schedulers/sources.yaml"],
+  "type": "object",
+  "required": ["id", "controlm", "sqlagent"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {"type": "string"},
+    "controlm": {
+      "type": "object",
+      "required": ["job_elements", "folder_elements", "folder_name_attrs", "calendar_attrs", "add_condition_signs", "interval_units"],
+      "properties": {
+        "job_elements": {"type": "array", "items": {"type": "string"}},
+        "folder_elements": {"type": "array", "items": {"type": "string"}},
+        "folder_name_attrs": {"type": "array", "items": {"type": "string"}},
+        "calendar_attrs": {"type": "array", "items": {"type": "string"}},
+        "add_condition_signs": {"type": "array", "items": {"type": "string"}},
+        "file_watch_tasktypes": {"type": "array", "items": {"type": "string"}},
+        "interval_units": {"type": "object", "additionalProperties": {"type": "integer"}}
+      }
+    },
+    "sqlagent": {
+      "type": "object",
+      "required": ["freq_types", "weekday_bits", "subday_types", "step_actions"],
+      "properties": {
+        "freq_types": {"type": "object", "additionalProperties": {"type": "string"}},
+        "weekday_bits": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0, "maximum": 6}},
+        "subday_types": {"type": "object", "additionalProperties": {"type": "string"}},
+        "step_actions": {"type": "object", "additionalProperties": {"enum": ["quit_success", "quit_failure", "next_step", "goto_step"]}}
+      }
+    }
+  }
+}

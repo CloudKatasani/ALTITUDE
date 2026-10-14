@@ -1,0 +1,83 @@
+name: triage_mismatches
+description: Cluster reconciliation mismatches by root-cause signature and map them to Pattern Library known issues, from
+  a stored run or a fresh run on two databases.
+permission: run
+entrypoint: altitude.skills.impl_validation:triage_mismatches
+input_schema:
+  type: object
+  properties:
+    run_id:
+      type: string
+    suite_id:
+      type: string
+    object_id:
+      type: string
+    source_path:
+      type: string
+    target_path:
+      type: string
+    table:
+      type: object
+      required:
+      - object_id
+      - source_table
+      additionalProperties: false
+      properties:
+        object_id:
+          type: string
+        source_table:
+          type: string
+        target_table:
+          type: string
+        tier:
+          enum:
+          - tier1
+          - tier2
+          - tier3
+        key_columns:
+          type: array
+          items:
+            type: string
+        partition_column:
+          type: string
+        columns:
+          type: array
+          items:
+            type: string
+        policies:
+          type: array
+          items:
+            type: string
+        source_dialect:
+          type: string
+        engagement_id:
+          type: string
+        data_owner:
+          type: string
+        queries:
+          type: array
+          items:
+            type: object
+            required:
+            - id
+            - source_sql
+            additionalProperties: false
+            properties:
+              id:
+                type: string
+              source_sql:
+                type: string
+              target_sql:
+                type: string
+              description:
+                type: string
+        perf:
+          type: array
+          items:
+            type: object
+    run_label:
+      type: string
+    as_of:
+      type: string
+      format: date
+  additionalProperties: false

@@ -1,0 +1,537 @@
+{
+  "_generated": "AUTO-GENERATED — DO NOT EDIT. Source: knowledge/diagnostics",
+  "checks": [
+    {
+      "autonomy": "L2",
+      "cluster_by": "theme",
+      "domain": "D9",
+      "id": "DX-AI-01",
+      "kpis_to_watch": [
+        "KPI-AI-001",
+        "KPI-PHI-001"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "medium",
+      "source": "knowledge/diagnostics/checks/ai.yaml",
+      "title": "No semantic views for top KPI domains",
+      "waf_pillar": "operational_excellence"
+    },
+    {
+      "autonomy": "L2",
+      "cluster_by": "object",
+      "domain": "D9",
+      "id": "DX-AI-02",
+      "kpis_to_watch": [
+        "KPI-AI-001",
+        "KPI-COST-008"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "medium",
+      "source": "knowledge/diagnostics/checks/ai.yaml",
+      "title": "Cortex usage without budgets or dedicated roles",
+      "waf_pillar": "cost_optimization"
+    },
+    {
+      "autonomy": "L2",
+      "cluster_by": "object",
+      "domain": "D9",
+      "id": "DX-AI-03",
+      "kpis_to_watch": [
+        "KPI-GOV-001",
+        "KPI-AI-001"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "low",
+      "source": "knowledge/diagnostics/checks/ai.yaml",
+      "title": "Low Tier-1 column comment coverage",
+      "waf_pillar": "security_governance"
+    },
+    {
+      "autonomy": "L2",
+      "cluster_by": "theme",
+      "domain": "D7",
+      "id": "DX-ARCH-01",
+      "kpis_to_watch": [
+        "KPI-COST-009",
+        "KPI-USE-003",
+        "KPI-PERF-001"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "medium",
+      "source": "knowledge/diagnostics/checks/arch.yaml",
+      "title": "Deep view stacks and duplicate tables",
+      "waf_pillar": "cost_optimization"
+    },
+    {
+      "autonomy": "L1",
+      "cluster_by": "dashboard",
+      "domain": "D8",
+      "id": "DX-BI-01",
+      "kpis_to_watch": [
+        "KPI-USE-002",
+        "KPI-COST-006"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "medium",
+      "source": "knowledge/diagnostics/checks/bi.yaml",
+      "title": "Duplicate reports",
+      "waf_pillar": "cost_optimization"
+    },
+    {
+      "autonomy": "L1",
+      "cluster_by": "object",
+      "domain": "D8",
+      "id": "DX-BI-02",
+      "kpis_to_watch": [
+        "KPI-USE-002"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "high",
+      "source": "knowledge/diagnostics/checks/bi.yaml",
+      "title": "Conflicting KPI definitions",
+      "waf_pillar": "security_governance"
+    },
+    {
+      "autonomy": "L1",
+      "cluster_by": "dashboard",
+      "domain": "D8",
+      "id": "DX-BI-03",
+      "kpis_to_watch": [
+        "KPI-COST-006",
+        "KPI-USE-002"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "medium",
+      "source": "knowledge/diagnostics/checks/bi.yaml",
+      "title": "Dashboards whose refresh cost exceeds their use",
+      "waf_pillar": "cost_optimization"
+    },
+    {
+      "autonomy": "L2",
+      "cluster_by": "theme",
+      "domain": "D1",
+      "id": "DX-COST-01",
+      "kpis_to_watch": [
+        "KPI-COST-007",
+        "KPI-COST-002",
+        "KPI-PERF-002"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "high",
+      "source": "knowledge/diagnostics/checks/cost.yaml",
+      "title": "Idle-heavy warehouses",
+      "waf_pillar": "cost_optimization"
+    },
+    {
+      "autonomy": "L2",
+      "cluster_by": "warehouse",
+      "domain": "D1",
+      "id": "DX-COST-02",
+      "kpis_to_watch": [
+        "KPI-COST-002",
+        "KPI-PERF-001",
+        "KPI-PERF-002"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "medium",
+      "source": "knowledge/diagnostics/checks/cost.yaml",
+      "title": "Oversized warehouses",
+      "waf_pillar": "cost_optimization"
+    },
+    {
+      "autonomy": "L2",
+      "cluster_by": "query_signature",
+      "domain": "D1",
+      "id": "DX-COST-03",
+      "kpis_to_watch": [
+        "KPI-COST-006",
+        "KPI-PERF-005",
+        "KPI-COST-002"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "medium",
+      "source": "knowledge/diagnostics/checks/cost.yaml",
+      "title": "Repeated identical queries bypass the result cache",
+      "waf_pillar": "cost_optimization"
+    },
+    {
+      "autonomy": "L2",
+      "cluster_by": "pipeline",
+      "domain": "D1",
+      "id": "DX-COST-04",
+      "kpis_to_watch": [
+        "KPI-COST-006",
+        "KPI-COST-001",
+        "KPI-REL-003"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "dbt",
+      "severity": "high",
+      "source": "knowledge/diagnostics/checks/cost.yaml",
+      "title": "Daily full reloads of large tables",
+      "waf_pillar": "cost_optimization"
+    },
+    {
+      "autonomy": "L2",
+      "cluster_by": "object",
+      "domain": "D1",
+      "id": "DX-COST-05",
+      "kpis_to_watch": [
+        "KPI-COST-008",
+        "KPI-PERF-004"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "high",
+      "source": "knowledge/diagnostics/checks/cost.yaml",
+      "title": "Serverless creep without benefit",
+      "waf_pillar": "cost_optimization"
+    },
+    {
+      "autonomy": "L2",
+      "cluster_by": "theme",
+      "domain": "D1",
+      "id": "DX-COST-06",
+      "kpis_to_watch": [
+        "KPI-COST-009",
+        "KPI-USE-003"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "medium",
+      "source": "knowledge/diagnostics/checks/cost.yaml",
+      "title": "Storage waste",
+      "waf_pillar": "cost_optimization"
+    },
+    {
+      "autonomy": "L2",
+      "cluster_by": "theme",
+      "domain": "D1",
+      "id": "DX-COST-07",
+      "kpis_to_watch": [
+        "KPI-COST-003",
+        "KPI-GOV-001"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "medium",
+      "source": "knowledge/diagnostics/checks/cost.yaml",
+      "title": "Untagged spend",
+      "waf_pillar": "cost_optimization"
+    },
+    {
+      "autonomy": "L1",
+      "cluster_by": "theme",
+      "domain": "D1",
+      "id": "DX-COST-08",
+      "kpis_to_watch": [
+        "KPI-COST-005",
+        "KPI-COST-004"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "high",
+      "source": "knowledge/diagnostics/checks/cost.yaml",
+      "title": "Capacity commitment mis-sized",
+      "waf_pillar": "cost_optimization"
+    },
+    {
+      "autonomy": "L2",
+      "cluster_by": "owner",
+      "domain": "D5",
+      "id": "DX-GOV-01",
+      "kpis_to_watch": [
+        "KPI-GOV-002",
+        "KPI-GOV-001"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "medium",
+      "source": "knowledge/diagnostics/checks/gov.yaml",
+      "title": "Tier-1 objects without owner or description",
+      "waf_pillar": "security_governance"
+    },
+    {
+      "autonomy": "L2",
+      "cluster_by": "object",
+      "domain": "D5",
+      "id": "DX-GOV-02",
+      "kpis_to_watch": [
+        "KPI-GOV-004"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "medium",
+      "source": "knowledge/diagnostics/checks/gov.yaml",
+      "title": "Tier-1 tables without data-quality monitoring",
+      "waf_pillar": "security_governance"
+    },
+    {
+      "autonomy": "L2",
+      "cluster_by": "theme",
+      "domain": "D5",
+      "id": "DX-GOV-03",
+      "kpis_to_watch": [
+        "KPI-USE-003",
+        "KPI-COST-009"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "low",
+      "source": "knowledge/diagnostics/checks/gov.yaml",
+      "title": "Unused objects",
+      "waf_pillar": "security_governance"
+    },
+    {
+      "autonomy": "L1",
+      "cluster_by": "owner",
+      "domain": "D6",
+      "id": "DX-OPS-01",
+      "kpis_to_watch": [
+        "KPI-PHI-001"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "medium",
+      "source": "knowledge/diagnostics/checks/ops.yaml",
+      "title": "Production DDL outside IaC/CI",
+      "waf_pillar": "operational_excellence"
+    },
+    {
+      "autonomy": "L2",
+      "cluster_by": "object",
+      "domain": "D6",
+      "id": "DX-OPS-02",
+      "kpis_to_watch": [
+        "KPI-COST-005",
+        "KPI-REL-002"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "high",
+      "source": "knowledge/diagnostics/checks/ops.yaml",
+      "title": "No alerting for credit spikes or failed Tier-1 tasks",
+      "waf_pillar": "operational_excellence"
+    },
+    {
+      "autonomy": "L2",
+      "cluster_by": "warehouse",
+      "domain": "D2",
+      "id": "DX-PERF-01",
+      "kpis_to_watch": [
+        "KPI-PERF-002",
+        "KPI-PERF-001",
+        "KPI-COST-002"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "high",
+      "source": "knowledge/diagnostics/checks/perf.yaml",
+      "title": "Queueing on interactive warehouses at peak",
+      "waf_pillar": "performance_efficiency"
+    },
+    {
+      "autonomy": "L2",
+      "cluster_by": "query_signature",
+      "domain": "D2",
+      "id": "DX-PERF-02",
+      "kpis_to_watch": [
+        "KPI-PERF-003",
+        "KPI-PERF-001",
+        "KPI-COST-006"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "medium",
+      "source": "knowledge/diagnostics/checks/perf.yaml",
+      "title": "Spilling to local or remote storage",
+      "waf_pillar": "performance_efficiency"
+    },
+    {
+      "autonomy": "L2",
+      "cluster_by": "object",
+      "domain": "D2",
+      "id": "DX-PERF-03",
+      "kpis_to_watch": [
+        "KPI-PERF-004",
+        "KPI-PERF-001",
+        "KPI-COST-008"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "medium",
+      "source": "knowledge/diagnostics/checks/perf.yaml",
+      "title": "Poor pruning on large, frequently filtered tables",
+      "waf_pillar": "performance_efficiency"
+    },
+    {
+      "autonomy": "L1",
+      "cluster_by": "query_signature",
+      "domain": "D2",
+      "id": "DX-PERF-04",
+      "kpis_to_watch": [
+        "KPI-COST-006",
+        "KPI-PERF-001"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "medium",
+      "source": "knowledge/diagnostics/checks/perf.yaml",
+      "title": "Costly query signatures with anti-patterns",
+      "waf_pillar": "performance_efficiency"
+    },
+    {
+      "autonomy": "L2",
+      "cluster_by": "pipeline",
+      "domain": "D3",
+      "id": "DX-REL-01",
+      "kpis_to_watch": [
+        "KPI-REL-001",
+        "KPI-REL-002",
+        "KPI-REL-003"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "high",
+      "source": "knowledge/diagnostics/checks/rel.yaml",
+      "title": "Failing or retried tasks",
+      "waf_pillar": "reliability"
+    },
+    {
+      "autonomy": "L2",
+      "cluster_by": "pipeline",
+      "domain": "D3",
+      "id": "DX-REL-02",
+      "kpis_to_watch": [
+        "KPI-REL-003",
+        "KPI-REL-001"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "high",
+      "source": "knowledge/diagnostics/checks/rel.yaml",
+      "title": "Freshness SLA misses on Tier-1 tables",
+      "waf_pillar": "reliability"
+    },
+    {
+      "autonomy": "L2",
+      "cluster_by": "owner",
+      "domain": "D3",
+      "id": "DX-REL-03",
+      "kpis_to_watch": [
+        "KPI-REL-001",
+        "KPI-SEC-003"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "high",
+      "source": "knowledge/diagnostics/checks/rel.yaml",
+      "title": "Pipelines running under personal credentials",
+      "waf_pillar": "reliability"
+    },
+    {
+      "autonomy": "L1",
+      "cluster_by": "object",
+      "domain": "D3",
+      "id": "DX-REL-04",
+      "kpis_to_watch": [
+        "KPI-REL-003",
+        "KPI-PHI-001"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "critical",
+      "source": "knowledge/diagnostics/checks/rel.yaml",
+      "title": "Tier-1 data without replication or failover",
+      "waf_pillar": "reliability"
+    },
+    {
+      "autonomy": "L2",
+      "cluster_by": "theme",
+      "domain": "D4",
+      "id": "DX-SEC-01",
+      "kpis_to_watch": [
+        "KPI-SEC-001",
+        "KPI-SEC-003"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "critical",
+      "source": "knowledge/diagnostics/checks/sec.yaml",
+      "title": "Weak authentication",
+      "waf_pillar": "security_governance"
+    },
+    {
+      "autonomy": "L2",
+      "cluster_by": "theme",
+      "domain": "D4",
+      "id": "DX-SEC-02",
+      "kpis_to_watch": [
+        "KPI-SEC-002"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "critical",
+      "source": "knowledge/diagnostics/checks/sec.yaml",
+      "title": "ACCOUNTADMIN sprawl",
+      "waf_pillar": "security_governance"
+    },
+    {
+      "autonomy": "L2",
+      "cluster_by": "theme",
+      "domain": "D4",
+      "id": "DX-SEC-03",
+      "kpis_to_watch": [
+        "KPI-SEC-004"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "medium",
+      "source": "knowledge/diagnostics/checks/sec.yaml",
+      "title": "Dormant users and orphan roles",
+      "waf_pillar": "security_governance"
+    },
+    {
+      "autonomy": "L1",
+      "cluster_by": "object",
+      "domain": "D4",
+      "id": "DX-SEC-04",
+      "kpis_to_watch": [
+        "KPI-SEC-005",
+        "KPI-SEC-003"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "high",
+      "source": "knowledge/diagnostics/checks/sec.yaml",
+      "title": "Missing network policy",
+      "waf_pillar": "security_governance"
+    },
+    {
+      "autonomy": "L2",
+      "cluster_by": "object",
+      "domain": "D4",
+      "id": "DX-SEC-05",
+      "kpis_to_watch": [
+        "KPI-GOV-003"
+      ],
+      "last_verified": "2026-10-01",
+      "remediation": "sql",
+      "severity": "critical",
+      "source": "knowledge/diagnostics/checks/sec.yaml",
+      "title": "Sensitive columns without masking",
+      "waf_pillar": "security_governance"
+    }
+  ],
+  "rubric": "diagnostics@1.0.0:ab0816fc4c"
+}

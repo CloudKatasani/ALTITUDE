@@ -1,0 +1,20 @@
+# Package O runbook (Section 7.6) — referenced by knowledge/observability/alerts.yaml
+id: RB-COST-BUDGET
+title: Budget threshold breach (forecast month-end overrun)
+alert_classes:
+- budget_breach
+owner_role: FINOPS_LEAD
+autonomy: L0
+linked_kpis:
+- KPI-COST-005
+- KPI-COST-003
+- KPI-COST-004
+linked_checks:
+- DX-COST-08
+steps:
+- action: Review month-to-date run rate and forecast (KPI-COST-005) and the cost-centre split (KPI-COST-003).
+- action: Identify cost centres whose average daily spend grew fastest versus the previous month.
+- action: Notify budget owners with their chargeback statement attached.
+- action: 'FinOps lead decides: accept the overrun, re-baseline the budget, or apply containment.'
+escalation: CFO delegate when the forecast exceeds budget for two consecutive weeks.
+verification: Forecast ratio back below the rubric warning ratio, or the budget formally re-baselined.

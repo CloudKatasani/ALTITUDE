@@ -1,0 +1,78 @@
+# Golden incidents for the DQ Incident Agent.
+agent_id: AG-DQ-INCIDENT
+version: 1.0.0
+cases:
+  - id: EVAL-DQ-001
+    description: >
+      A failed orders load causes NULLs in FCT_ORDERS that propagate to FCT_REVENUE. Both violations form one
+      cluster rooted at FCT_ORDERS; the failed task is the probable cause; a Tier-1 (SEV2) incident is opened for
+      the owner and both tables get L2 quarantine drafts.
+    telemetry:
+      synthetic: {profile: seeded}
+      append:
+        TASK_HISTORY:
+          - {NAME: LOAD_ORDERS_TASK, DATABASE_NAME: EDW, SCHEMA_NAME: SALES, FQ_NAME: EDW.SALES.LOAD_ORDERS_TASK, STATE: FAILED, ERROR_CODE: "100038", ERROR_MESSAGE: "100038 (22018): Numeric value 'N/A' is not recognized", SCHEDULED_TIME: "2026-09-30 01:30:00", QUERY_START_TIME: "2026-09-30 01:31:00", COMPLETED_TIME: "2026-09-30 01:33:00", ROOT_TASK_ID: EDW.SALES.LOAD_ORDERS_TASK, RUN_ID: dq001-load, ATTEMPT_NUMBER: 2}
+        DATA_QUALITY_MONITORING_RESULTS:
+          - {MEASUREMENT_TIME: "2026-09-30 07:00:00", TABLE_NAME: EDW.SALES.FCT_ORDERS, METRIC_NAME: NULL_COUNT, VALUE: 15230.0, EXPECTATION_VIOLATED: true}
+          - {MEASUREMENT_TIME: "2026-09-30 07:05:00", TABLE_NAME: EDW.FINANCE.FCT_REVENUE, METRIC_NAME: ROW_COUNT_CHANGE, VALUE: -0.31, EXPECTATION_VIOLATED: true}
+    expect:
+      findings:
+        - kind: dq_cluster
+          subject: EDW.SALES.FCT_ORDERS
+          detail:
+            tables: [EDW.FINANCE.FCT_REVENUE, EDW.SALES.FCT_ORDERS]
+            origin: EDW.SALES.FCT_ORDERS
+            probable_cause: {contains: EDW.SALES.LOAD_ORDERS_TASK}
+            owner: sales-data@acme
+      absent_findings:
+        - {kind: dq_cluster, subject: EDW.FINANCE.FCT_REVENUE}
+      incidents:
+        - {severity: SEV2, owner: sales-data@acme, tables: [EDW.SALES.FCT_ORDERS, EDW.FINANCE.FCT_REVENUE]}
+      actions:
+        - {action_type: table.quarantine, target: EDW.SALES.FCT_ORDERS, autonomy: L2}
+        - {action_type: table.quarantine, target: EDW.FINANCE.FCT_REVENUE, autonomy: L2}
+      absent_actions:
+        - {autonomy: L3}
+
+  - id: EVAL-DQ-002
+    description: Load errors on a non-Tier-1 raw table are the probable cause of a row-count violation (SEV3).
+    telemetry:
+      as_of: "2026-10-02T12:00:00"
+      tables:
+        DATA_QUALITY_MONITORING_RESULTS:
+          - {MEASUREMENT_TIME: "2026-10-02 06:30:00", TABLE_NAME: EDW.RAW.EVENTS_LOG, METRIC_NAME: ROW_COUNT, VALUE: 120.0, EXPECTATION_VIOLATED: true}
+        COPY_HISTORY:
+          - {FILE_NAME: events/2026-10-02/part-0000.parquet, TABLE_NAME: EDW.RAW.EVENTS_LOG, PIPE_NAME: EDW.RAW.EVENTS_PIPE, LAST_LOAD_TIME: "2026-10-02 06:00:00", ROW_COUNT: 120, ERROR_COUNT: 7999880, STATUS: Partially loaded}
+        TAG_REFERENCES:
+          - {TAG_DATABASE: GOVERNANCE, TAG_SCHEMA: TAGS, TAG_NAME: DATA_OWNER, TAG_VALUE: digital@acme, OBJECT_DATABASE: EDW, OBJECT_SCHEMA: RAW, OBJECT_NAME: EVENTS_LOG, DOMAIN: TABLE}
+    expect:
+      findings:
+        - {kind: dq_cluster, subject: EDW.RAW.EVENTS_LOG, needs_review: false, detail: {probable_cause: {contains: load error}}}
+      incidents:
+        - {severity: SEV3, owner: digital@acme}
+      actions:
+        - {action_type: table.quarantine, target: EDW.RAW.EVENTS_LOG, autonomy: L2}
+
+  - id: EVAL-DQ-003
+    description: A violation with no identifiable cause is low-confidence and goes to the human review queue.
+    telemetry:
+      as_of: "2026-10-02T12:00:00"
+      tables:
+        DATA_QUALITY_MONITORING_RESULTS:
+          - {MEASUREMENT_TIME: "2026-10-02 07:00:00", TABLE_NAME: EDW.SALES.DIM_PRODUCT, METRIC_NAME: DUPLICATE_COUNT, VALUE: 3.0, EXPECTATION_VIOLATED: true}
+          - {MEASUREMENT_TIME: "2026-09-20 07:00:00", TABLE_NAME: EDW.SALES.DIM_REGION, METRIC_NAME: NULL_COUNT, VALUE: 1.0, EXPECTATION_VIOLATED: true}
+    expect:
+      findings:
+        - {kind: dq_cluster, subject: EDW.SALES.DIM_PRODUCT, needs_review: true, detail: {probable_cause: {contains: unknown}}}
+      absent_findings:
+        - {subject: EDW.SALES.DIM_REGION}
+      incidents:
+        - {severity: SEV3}
+
+  - id: EVAL-DQ-004
+    description: Passing data metrics raise nothing.
+    telemetry:
+      synthetic: {profile: seeded}
+    expect:
+      max_findings: 0
+      max_actions: 0

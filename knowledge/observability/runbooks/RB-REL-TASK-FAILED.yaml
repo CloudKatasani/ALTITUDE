@@ -1,0 +1,20 @@
+# Package O runbook (Section 7.6) — referenced by knowledge/observability/alerts.yaml
+id: RB-REL-TASK-FAILED
+title: Failed Tier-1 task
+alert_classes:
+- tier1_task_failure
+owner_role: DATAOPS_LEAD
+autonomy: L1
+linked_kpis:
+- KPI-REL-001
+- KPI-REL-002
+- KPI-REL-003
+linked_checks:
+- DX-REL-01
+steps:
+- action: Read the error on the failed run (CURATED.FACT_TASK_RUN) and list downstream tasks that were skipped.
+- action: Fix or quarantine the offending input, then re-run the task graph from the failed task.
+- action: Confirm Tier-1 freshness for the day (KPI-REL-003); notify consumers if the SLA will be missed.
+- action: Record the root cause; repeated failures become a Package D DX-REL-01 suggestion.
+escalation: Data platform on-call manager after 60 minutes without recovery.
+verification: Next run SUCCEEDED and the freshness SLA is met.

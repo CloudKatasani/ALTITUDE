@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Scheduler command -> Snowflake task body mappings",
+  "x-altitude-globs": ["schedulers/command_mappings.yaml"],
+  "type": "object",
+  "required": ["mappings"],
+  "additionalProperties": false,
+  "properties": {
+    "mappings": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "pattern", "snowflake", "note"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^CMD-[A-Z0-9-]+$"},
+          "pattern": {"type": "string"},
+          "snowflake": {"type": "string"},
+          "note": {"type": "string"}
+        }
+      }
+    }
+  }
+}

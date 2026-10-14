@@ -1,0 +1,13 @@
+name: draft_business_case
+description: Draft a TCO business case (annual saving, NPV, payback) with every assumption stated.
+permission: run
+entrypoint: altitude.skills.impl:draft_business_case
+input_schema:
+  type: object
+  properties:
+    legacy_annual_costs: {type: object, additionalProperties: {type: number}}
+    snowflake_annual_cost: {type: number}
+    migration_cost: {type: number}
+    estimate: {type: object}
+  required: [legacy_annual_costs, snowflake_annual_cost, migration_cost]
+  additionalProperties: false

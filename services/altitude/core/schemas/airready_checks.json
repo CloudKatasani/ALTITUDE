@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AI-readiness (EAIRN 8-pillar) checks, Section 19.1",
+  "x-altitude-globs": ["airready/checks*.yaml"],
+  "type": "object",
+  "required": ["version", "checks"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "checks": {
+      "type": "array",
+      "minItems": 8,
+      "items": {
+        "type": "object",
+        "required": ["id", "pillar", "title", "query", "threshold_ref", "weight", "rationale", "playbook"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^AIR-[A-Z]+-\\d{3}$"},
+          "pillar": {"enum": ["data_quality", "governance", "metadata", "security", "ai_engineering", "semantic_layer",
+                              "agent_readiness", "rag_readiness"]},
+          "title": {"type": "string"},
+          "query": {"type": "string", "allOf": [{"pattern": "NUMERATOR"}, {"pattern": "DENOMINATOR"}]},
+          "threshold_ref": {"type": "string"},
+          "params": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^rubric\\."}},
+          "weight": {"enum": ["default", "critical"]},
+          "rationale": {"type": "string"},
+          "playbook": {"type": "string", "pattern": "^PB-[A-Z0-9-]+$"}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,8 @@
+# Guided outcome path (Section 2): phases, their gate criteria and the package that delivers them.
+phases:
+  - {id: diagnose, name: Diagnose, package: "Package D", gate: "Baseline snapshot sealed; findings validated in the workshop; readout delivered"}
+  - {id: fix, name: Fix, package: "Remediation sprint", gate: "Accepted quick wins implemented with rollback evidence"}
+  - {id: observe, name: Observe, package: "Package O", gate: "Core KPIs live; alerts routed and tested; first monthly review held"}
+  - {id: operate, name: Operate, package: "Managed Run", gate: "Agent fleet live at agreed autonomy; runbooks handed over"}
+  - {id: migrate, name: Migrate, package: "Migration Factory", gate: "Waves cut over with go/no-go evidence packs; legacy decommissioned"}
+  - {id: ai_ready, name: AI-Ready, package: "AI-Ready Programme", gate: "Readiness re-scored; semantic views and an evaluated agent live"}

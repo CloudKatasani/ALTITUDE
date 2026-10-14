@@ -1,0 +1,36 @@
+# Package D tiers (Section 6.7) as data: which domains are scored, how many findings are published,
+# and which deliverables are produced. Fees are indicative and live in the commercial catalogue, not here.
+version: 1.0.0
+tiers:
+  - id: TIER-D0
+    tier: D0
+    name: D0 Snapshot
+    domains: [D1, D2, D3, D4, D5]
+    top_findings: 10
+    max_accounts: 1
+    duration_weeks: 1
+    exports: [suggestions_json, findings_csv, findings_xlsx, report_html]
+  - id: TIER-D1
+    tier: D1
+    name: D1 Essentials
+    domains: [D1, D2, D3, D4, D5, D6, D7]
+    top_findings: null
+    max_accounts: 1
+    duration_weeks: 2
+    exports: [suggestions_json, findings_csv, findings_xlsx, jira_csv, ado_csv, report_html, deck_pptx, savings_xlsx]
+  - id: TIER-D2
+    tier: D2
+    name: D2 Deep
+    domains: [D1, D2, D3, D4, D5, D6, D7, D8, D9, D10]
+    top_findings: null
+    max_accounts: 3
+    duration_weeks: 4
+    exports: [suggestions_json, evidence_json, findings_csv, findings_xlsx, jira_csv, ado_csv, pr_pack, report_html, deck_pptx, savings_xlsx]
+  - id: TIER-D3
+    tier: D3
+    name: D3 Enterprise
+    domains: [D1, D2, D3, D4, D5, D6, D7, D8, D9, D10]
+    top_findings: null
+    max_accounts: null
+    duration_weeks: 6
+    exports: [suggestions_json, evidence_json, findings_csv, findings_xlsx, jira_csv, ado_csv, pr_pack, report_html, deck_pptx, savings_xlsx]

@@ -1,0 +1,55 @@
+name: generate_rbac_from_legacy_grants
+description: Map legacy grants to a Snowflake access-role / functional-role model (Section 14.2) with generated SQL; marks
+  each grant mapped or intentionally retired.
+permission: run
+entrypoint: altitude.skills.impl_security:generate_rbac_from_legacy_grants
+input_schema:
+  type: object
+  properties:
+    source_system_id:
+      type: string
+    grants:
+      type: array
+      minItems: 1
+      items:
+        type: object
+        required:
+        - grantee
+        - privilege
+        additionalProperties: false
+        properties:
+          grantee:
+            type: string
+          grantee_type:
+            enum:
+            - user
+            - role
+          privilege:
+            type: string
+          object:
+            type:
+            - string
+            - 'null'
+    database:
+      type: string
+      description: target database for names without a database part
+    database_map:
+      type: object
+      additionalProperties:
+        type: string
+    grantee_groups:
+      type: object
+      additionalProperties:
+        type: string
+      description: grantee -> job-function group
+    retire_grantees:
+      type: array
+      items:
+        type: string
+    retire_objects:
+      type: array
+      items:
+        type: string
+    persist:
+      type: boolean
+  additionalProperties: false

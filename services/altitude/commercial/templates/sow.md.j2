@@ -1,0 +1,25 @@
+# Statement of Work (draft) — {{ offer.name }}
+
+**Client:** {{ client }} · **Provider:** {{ '{{' }}COMPANY_NAME{{ '}}' }} · **Draft for review** — not an offer until signed.
+
+## Scope
+{{ offer.scope }}{% if tier %} — tier **{{ tier.tier }}** ({{ tier.weeks }} weeks{% if tier.accounts %}, up to {{ tier.accounts }} account(s){% endif %}{% if tier.domains %}, domains {{ tier.domains | join(", ") }}{% endif %}){% endif %}.
+{% for n in scope_notes %}
+- {{ n }}{% endfor %}
+
+## Approach
+- Metadata-only, least-privilege access ({{ '{{' }}PRODUCT_NAME{{ '}}' }} uses SNOWFLAKE database roles, never ACCOUNTADMIN); row data does not leave your account.
+- Every finding carries evidence IDs, a dollar or risk value with its method, confidence and a rollback.
+- All deliverables are generated from one sealed snapshot and can be reproduced.
+
+## Duration and fees
+- Duration: {{ offer.duration_weeks[0] }}–{{ offer.duration_weeks[1] }} weeks.
+- Fee: {% if fee %}${{ "{:,.0f}".format(fee) }} (fixed){% else %}${{ "{:,.0f}".format(fee_range[0]) }}–${{ "{:,.0f}".format(fee_range[1]) }} indicative range{% endif %}{% if offer.monthly_usd %}; subscription ${{ "{:,.0f}".format(offer.monthly_usd[0]) }}–${{ "{:,.0f}".format(offer.monthly_usd[1]) }}/month, flat by spend band — never a percentage of Snowflake spend{% endif %}.
+
+{% if guarantees %}## Outcome-backed commercials
+{% for g in guarantees %}- **{{ g.name }}** — {{ g.terms }}
+{% endfor %}{% endif %}
+{% if next_offer %}## Natural next step
+{{ next_offer.name }}: {{ next_offer.scope }}
+{% endif %}
+_Prepared with rubric `{{ rubric_version }}`. Indicative prices are hypotheses until calibrated._

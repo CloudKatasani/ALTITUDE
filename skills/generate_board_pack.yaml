@@ -1,0 +1,11 @@
+name: generate_board_pack
+description: Produce the board pack (PPTX, PDF and HTML dashboard) from one sealed snapshot; all share one numbers hash.
+permission: run
+entrypoint: altitude.skills.impl:generate_board_pack
+input_schema:
+  type: object
+  properties:
+    snapshot_id: {type: string}
+    tier: {enum: [D0, D1, D2, D3]}
+  required: [snapshot_id]
+  additionalProperties: false

@@ -1,0 +1,285 @@
+# D3 Reliability & Pipelines checks (Section 6.4).
+version: 1.0.0
+checks:
+  - id: DX-REL-01
+    title: Failing or retried tasks
+    description: Tasks failing above the rubric rate, with the downstream tasks they skip (blast radius).
+    domain: D3
+    waf_pillar: reliability
+    severity: high
+    confidence_class: high
+    detector:
+      requires: [TASKS, TASK_HISTORY]
+      inputs: []
+      cluster_by: pipeline
+      params:
+        max_failure_rate: {threshold_ref: rubric.diagnostics.checks.rel_01.max_failure_rate}
+        min_failures: {threshold_ref: rubric.diagnostics.checks.rel_01.min_failures}
+        max_recursion: {threshold_ref: rubric.diagnostics.window.max_recursion_depth}
+        auto_retry_attempts: {ref: rubric.diagnostics.checks.rel_01.auto_retry_attempts}
+        alert_schedule_minutes: {ref: rubric.diagnostics.alerts.schedule_minutes}
+      signals: |
+        WITH RECURSIVE edges AS (
+          SELECT trim(p.PRED) AS PARENT, t.FQ_NAME AS CHILD
+          FROM TASKS t, unnest(string_split(t.PREDECESSORS, ',')) AS p(PRED)
+          WHERE t.PREDECESSORS IS NOT NULL),
+        down AS (
+          SELECT PARENT AS ROOT, CHILD, 1 AS DEPTH FROM edges
+          UNION ALL
+          SELECT d.ROOT, e.CHILD, d.DEPTH + 1 FROM down d JOIN edges e ON e.PARENT = d.CHILD WHERE d.DEPTH < $max_recursion),
+        up AS (
+          SELECT CHILD AS TASK, PARENT AS ANCESTOR, 1 AS DEPTH FROM edges
+          UNION ALL
+          SELECT u.TASK, e.PARENT, u.DEPTH + 1 FROM up u JOIN edges e ON e.CHILD = u.ANCESTOR WHERE u.DEPTH < $max_recursion),
+        h AS (
+          SELECT FQ_NAME, count(*) AS RUNS,
+                 count(*) FILTER (WHERE STATE = 'FAILED') AS FAILURES,
+                 count(*) FILTER (WHERE ATTEMPT_NUMBER > 1) AS RETRIES,
+                 max(ERROR_MESSAGE) AS LAST_ERROR
+          FROM TASK_HISTORY GROUP BY FQ_NAME),
+        blast AS (
+          SELECT d.ROOT, string_agg(DISTINCT d.CHILD, ', ' ORDER BY d.CHILD) AS DOWNSTREAM_TASKS,
+                 count(DISTINCT d.CHILD) AS DOWNSTREAM_COUNT
+          FROM down d GROUP BY d.ROOT),
+        skipped AS (
+          SELECT d.ROOT, count(*) AS DOWNSTREAM_SKIPPED_RUNS
+          FROM down d JOIN TASK_HISTORY th ON th.FQ_NAME = d.CHILD AND th.STATE = 'SKIPPED' GROUP BY d.ROOT)
+        SELECT t.FQ_NAME AS OBJECT_NAME,
+               coalesce((SELECT max(u.ANCESTOR) FROM up u WHERE u.TASK = t.FQ_NAME
+                         AND u.DEPTH = (SELECT max(u2.DEPTH) FROM up u2 WHERE u2.TASK = t.FQ_NAME)), t.FQ_NAME) AS CLUSTER_KEY,
+               t.WAREHOUSE, t.TARGET_TABLE, t.PREDECESSORS,
+               coalesce(h.RUNS, 0) AS RUNS, coalesce(h.FAILURES, 0) AS FAILURES, coalesce(h.RETRIES, 0) AS RETRIES,
+               CASE WHEN coalesce(h.RUNS, 0) > 0 THEN h.FAILURES / h.RUNS ELSE 0 END AS FAILURE_RATE,
+               h.LAST_ERROR, b.DOWNSTREAM_TASKS, coalesce(b.DOWNSTREAM_COUNT, 0) AS DOWNSTREAM_COUNT,
+               coalesce(s.DOWNSTREAM_SKIPPED_RUNS, 0) AS DOWNSTREAM_SKIPPED_RUNS
+        FROM TASKS t
+        LEFT JOIN h ON h.FQ_NAME = t.FQ_NAME
+        LEFT JOIN blast b ON b.ROOT = t.FQ_NAME
+        LEFT JOIN skipped s ON s.ROOT = t.FQ_NAME
+      rule: FAILURE_RATE >= $max_failure_rate AND FAILURES >= $min_failures
+    evidence:
+      kind: TASK
+      fields: [RUNS, FAILURES, RETRIES, FAILURE_RATE, LAST_ERROR, DOWNSTREAM_TASKS, DOWNSTREAM_SKIPPED_RUNS]
+    value:
+      method: "incident cost: failures in the window, annualised, × incident hours × blended hourly rate; SLA risk = likelihood × impact"
+      p50: FAILURES * annualise * incident_hours * hourly_rate_usd
+      conservative: FAILURES * annualise * incident_hours * hourly_rate_usd * conservative_factor
+      factors:
+        incident_hours: rubric.diagnostics.checks.rel_01.incident_hours
+        hourly_rate_usd: rubric.diagnostics.checks.rel_01.hourly_rate_usd
+        conservative_factor: rubric.diagnostics.checks.rel_01.conservative_factor
+    risk:
+      likelihood_ref: rubric.diagnostics.risk_model.rel_01.likelihood
+      impact_ref: rubric.diagnostics.risk_model.rel_01.impact
+      method: "Recurring task failure skips downstream loads (likelihood × impact, 1–5 each)"
+    effort: {size: M}
+    title_template: "Fix failing task {{ rows[0].OBJECT_NAME }} and alert on failure"
+    rationale_template: >-
+      {% for r in rows %}{{ r.OBJECT_NAME }} failed {{ r.FAILURES }} of {{ r.RUNS }} runs ({{ pct(r.FAILURE_RATE) }}; rubric max {{ pct(params.max_failure_rate) }}),
+      last error "{{ r.LAST_ERROR }}"{% if r.DOWNSTREAM_TASKS %}; blast radius: {{ r.DOWNSTREAM_TASKS }} skipped {{ r.DOWNSTREAM_SKIPPED_RUNS }} times{% endif %}{{ '; ' if not loop.last }}{% endfor %}.
+    remediation:
+      type: sql
+      autonomy: L2
+      template: |
+        -- 1. Root cause: see the last error in the evidence; fix the source data contract.
+        -- 2. Retry transient failures automatically on the root task and alert on any failure.
+        {% for r in rows %}ALTER TASK {{ r.OBJECT_NAME }} SUSPEND;
+        ALTER TASK {{ r.OBJECT_NAME }} SET TASK_AUTO_RETRY_ATTEMPTS = {{ params.auto_retry_attempts }};
+        ALTER TASK {{ r.OBJECT_NAME }} RESUME;
+        CREATE OR REPLACE ALERT ALTITUDE_OPS.ALERTS.ALERT_TASK_FAILED_{{ r.OBJECT_NAME | replace('.', '_') }}
+          WAREHOUSE = {{ r.WAREHOUSE }} SCHEDULE = '{{ params.alert_schedule_minutes }} MINUTE'
+          IF (EXISTS (SELECT 1 FROM SNOWFLAKE.ACCOUNT_USAGE.TASK_HISTORY
+                      WHERE NAME = '{{ r.OBJECT_NAME.split('.')[-1] }}' AND STATE = 'FAILED'
+                        AND COMPLETED_TIME > DATEADD(minute, -{{ params.alert_schedule_minutes }}, CURRENT_TIMESTAMP())))
+          THEN CALL SYSTEM$SEND_EMAIL('ALTITUDE_OPS_EMAIL', 'platform-oncall@example.com', 'Task failed: {{ r.OBJECT_NAME }}', 'See TASK_HISTORY');
+        ALTER ALERT ALTITUDE_OPS.ALERTS.ALERT_TASK_FAILED_{{ r.OBJECT_NAME | replace('.', '_') }} RESUME;
+        {% endfor %}
+      rollback: |
+        {% for r in rows %}DROP ALERT IF EXISTS ALTITUDE_OPS.ALERTS.ALERT_TASK_FAILED_{{ r.OBJECT_NAME | replace('.', '_') }};
+        ALTER TASK {{ r.OBJECT_NAME }} SUSPEND;
+        ALTER TASK {{ r.OBJECT_NAME }} UNSET TASK_AUTO_RETRY_ATTEMPTS;
+        ALTER TASK {{ r.OBJECT_NAME }} RESUME;
+        {% endfor %}
+    kpis_to_watch: [KPI-REL-001, KPI-REL-002, KPI-REL-003]
+    last_verified: "2026-10-01"
+
+  - id: DX-REL-02
+    title: Freshness SLA misses on Tier-1 tables
+    description: Tier-1 tables whose loading task completes after the agreed freshness deadline (CLIENT_INPUTS.freshness_slas).
+    domain: D3
+    waf_pillar: reliability
+    severity: high
+    confidence_class: high
+    detector:
+      requires: [TASK_HISTORY, CLIENT_INPUTS, TAG_REFERENCES]
+      inputs: [freshness_slas, tier1_tables]
+      cluster_by: pipeline
+      params:
+        max_miss_rate: {threshold_ref: rubric.diagnostics.checks.rel_02.max_miss_rate}
+      signals: |
+        WITH sla AS (
+          SELECT unnest(from_json(VALUE, '[{"table":"VARCHAR","loaded_by":"VARCHAR","deadline_utc":"VARCHAR"}]'), recursive := true)
+          FROM CLIENT_INPUTS WHERE KEY = 'freshness_slas'),
+        days AS (
+          SELECT DISTINCT CAST(SCHEDULED_TIME AS DATE) AS D FROM TASK_HISTORY),
+        done AS (
+          SELECT FQ_NAME, CAST(COMPLETED_TIME AS DATE) AS D, min(COMPLETED_TIME) AS FIRST_SUCCESS
+          FROM TASK_HISTORY WHERE STATE = 'SUCCEEDED' GROUP BY FQ_NAME, CAST(COMPLETED_TIME AS DATE)),
+        daily AS (
+          SELECT sla."table" AS TABLE_NAME, sla.loaded_by AS LOADED_BY, sla.deadline_utc AS DEADLINE_UTC, days.D,
+                 CASE WHEN done.FIRST_SUCCESS IS NULL
+                        OR CAST(done.FIRST_SUCCESS AS TIME) > CAST(sla.deadline_utc AS TIME) THEN 1 ELSE 0 END AS MISSED,
+                 date_diff('minute', days.D + CAST(sla.deadline_utc AS TIME), done.FIRST_SUCCESS) AS LATE_MINUTES
+          FROM sla CROSS JOIN days
+          LEFT JOIN done ON done.FQ_NAME = sla.loaded_by AND done.D = days.D)
+        SELECT TABLE_NAME AS OBJECT_NAME, LOADED_BY AS CLUSTER_KEY, LOADED_BY, DEADLINE_UTC,
+               count(*) AS SLA_DAYS, sum(MISSED) AS MISSED_DAYS, sum(MISSED) / count(*) AS MISS_RATE,
+               coalesce(max(LATE_MINUTES) FILTER (WHERE MISSED = 1), 0) AS MAX_LATE_MINUTES,
+               CASE WHEN TABLE_NAME IN (SELECT FQ_NAME FROM _TIER1_TABLES) THEN 1 ELSE 0 END AS IS_TIER1
+        FROM daily GROUP BY TABLE_NAME, LOADED_BY, DEADLINE_UTC
+      rule: IS_TIER1 = 1 AND MISS_RATE >= $max_miss_rate
+    evidence:
+      kind: TBL
+      fields: [LOADED_BY, DEADLINE_UTC, SLA_DAYS, MISSED_DAYS, MISS_RATE, MAX_LATE_MINUTES]
+    value:
+      method: "SLA risk = likelihood × impact (rubric); missed days and maximum lateness reported as evidence"
+    risk:
+      likelihood_ref: rubric.diagnostics.risk_model.rel_02.likelihood
+      impact_ref: rubric.diagnostics.risk_model.rel_02.impact
+      method: "Tier-1 consumers act on stale data when the freshness SLA is missed (likelihood × impact, 1–5 each)"
+    effort: {size: M}
+    title_template: "Restore the freshness SLA on {{ rows[0].OBJECT_NAME }}"
+    rationale_template: >-
+      {{ rows[0].OBJECT_NAME }} (loaded by {{ rows[0].LOADED_BY }}) missed its {{ rows[0].DEADLINE_UTC }} UTC deadline on
+      {{ rows[0].MISSED_DAYS }} of {{ rows[0].SLA_DAYS }} days ({{ pct(rows[0].MISS_RATE) }}; rubric max {{ pct(params.max_miss_rate) }}), up to {{ rows[0].MAX_LATE_MINUTES }} minutes late.
+    remediation:
+      type: sql
+      autonomy: L2
+      template: |
+        -- Detect breaches immediately; then redesign scheduling/dependencies (move the chain earlier by at least
+        -- {{ rows[0].MAX_LATE_MINUTES }} minutes or split the long step) with the pipeline owner.
+        CREATE OR REPLACE ALERT ALTITUDE_OPS.ALERTS.ALERT_SLA_{{ rows[0].OBJECT_NAME | replace('.', '_') }}
+          WAREHOUSE = ALTITUDE_OPS_WH SCHEDULE = 'USING CRON 5 {{ rows[0].DEADLINE_UTC.split(':')[0] | int }} * * * UTC'
+          IF (NOT EXISTS (SELECT 1 FROM SNOWFLAKE.ACCOUNT_USAGE.TASK_HISTORY
+                          WHERE NAME = '{{ rows[0].LOADED_BY.split('.')[-1] }}' AND STATE = 'SUCCEEDED'
+                            AND COMPLETED_TIME >= CURRENT_DATE()))
+          THEN CALL SYSTEM$SEND_EMAIL('ALTITUDE_OPS_EMAIL', 'platform-oncall@example.com', 'Freshness SLA missed: {{ rows[0].OBJECT_NAME }}', 'Loader has not completed');
+        ALTER ALERT ALTITUDE_OPS.ALERTS.ALERT_SLA_{{ rows[0].OBJECT_NAME | replace('.', '_') }} RESUME;
+      rollback: |
+        DROP ALERT IF EXISTS ALTITUDE_OPS.ALERTS.ALERT_SLA_{{ rows[0].OBJECT_NAME | replace('.', '_') }};
+    kpis_to_watch: [KPI-REL-003, KPI-REL-001]
+    last_verified: "2026-10-01"
+
+  - id: DX-REL-03
+    title: Pipelines running under personal credentials
+    description: Recurring data-pipeline statements (INSERT/MERGE/COPY/CTAS) executed by human users instead of service identities.
+    domain: D3
+    waf_pillar: reliability
+    severity: high
+    confidence_class: medium
+    detector:
+      requires: [QUERY_HISTORY, USERS]
+      inputs: []
+      cluster_by: owner
+      params:
+        min_recurring_days: {threshold_ref: rubric.diagnostics.checks.rel_03.min_recurring_days}
+        pipeline_query_types: {value: [INSERT, MERGE, UPDATE, DELETE, COPY, CREATE_TABLE_AS_SELECT, INSERT_OVERWRITE]}
+      signals: |
+        SELECT q.USER_NAME AS OBJECT_NAME, q.USER_NAME AS CLUSTER_KEY,
+               coalesce(min(u.TYPE), 'PERSON') AS USER_TYPE,
+               count(*) AS EXECUTIONS,
+               count(DISTINCT CAST(q.START_TIME AS DATE)) AS RUN_DAYS,
+               string_agg(DISTINCT q.QUERY_PARAMETERIZED_HASH, ', ' ORDER BY q.QUERY_PARAMETERIZED_HASH) AS SIGNATURES,
+               string_agg(DISTINCT coalesce(q.QUERY_TAG, '(none)'), ', ' ORDER BY coalesce(q.QUERY_TAG, '(none)')) AS QUERY_TAGS,
+               string_agg(DISTINCT q.CLIENT_APPLICATION_ID, ', ' ORDER BY q.CLIENT_APPLICATION_ID) AS CLIENT_APPS,
+               min(q.ROLE_NAME) AS ROLE_NAME,
+               upper(regexp_replace(coalesce(min(q.QUERY_TAG), q.USER_NAME), '[^A-Za-z0-9]+', '_', 'g')) AS PIPELINE_ID
+        FROM QUERY_HISTORY q LEFT JOIN USERS u ON u.NAME = q.USER_NAME
+        WHERE list_contains($pipeline_query_types, q.QUERY_TYPE)
+        GROUP BY q.USER_NAME
+      rule: USER_TYPE = 'PERSON' AND RUN_DAYS >= $min_recurring_days
+    evidence:
+      kind: USR
+      fields: [USER_TYPE, EXECUTIONS, RUN_DAYS, SIGNATURES, QUERY_TAGS, CLIENT_APPS, ROLE_NAME]
+    value:
+      method: "key-person and security risk = likelihood × impact (rubric); recurring executions reported as evidence"
+    risk:
+      likelihood_ref: rubric.diagnostics.risk_model.rel_03.likelihood
+      impact_ref: rubric.diagnostics.risk_model.rel_03.impact
+      method: "Pipelines stop when the person leaves or rotates credentials (likelihood × impact, 1–5 each)"
+    effort: {size: S}
+    title_template: "Move {{ rows[0].OBJECT_NAME }}'s scheduled pipeline to a service identity"
+    rationale_template: >-
+      {{ rows[0].OBJECT_NAME }} ({{ rows[0].USER_TYPE }}) ran pipeline statements on {{ rows[0].RUN_DAYS }} days
+      (rubric min {{ params.min_recurring_days }}) via {{ rows[0].CLIENT_APPS }} with tags {{ rows[0].QUERY_TAGS }}.
+    remediation:
+      type: sql
+      autonomy: L2
+      template: |
+        -- Create a key-pair service identity for the pipeline, then repoint the scheduler connection to it.
+        CREATE USER IF NOT EXISTS SVC_{{ rows[0].PIPELINE_ID }} TYPE = SERVICE DEFAULT_ROLE = {{ rows[0].ROLE_NAME }}
+          RSA_PUBLIC_KEY = '<PUBLIC_KEY_FROM_SECRET_MANAGER>' COMMENT = 'Service identity for pipeline previously run by {{ rows[0].OBJECT_NAME }}';
+        GRANT ROLE {{ rows[0].ROLE_NAME }} TO USER SVC_{{ rows[0].PIPELINE_ID }};
+      rollback: |
+        REVOKE ROLE {{ rows[0].ROLE_NAME }} FROM USER SVC_{{ rows[0].PIPELINE_ID }};
+        DROP USER IF EXISTS SVC_{{ rows[0].PIPELINE_ID }};
+    kpis_to_watch: [KPI-REL-001, KPI-SEC-003]
+    last_verified: "2026-10-01"
+
+  - id: DX-REL-04
+    title: Tier-1 data without replication or failover
+    description: Databases whose RPO (CLIENT_INPUTS.rpo_hours) requires DR but which are in no replication/failover group, or replicate less often than the RPO.
+    domain: D3
+    waf_pillar: reliability
+    severity: critical
+    confidence_class: high
+    detector:
+      requires: [REPLICATION_GROUPS, CLIENT_INPUTS, ACCOUNT_INFO]
+      inputs: [rpo_hours]
+      cluster_by: object
+      params:
+        max_rpo_hours_requiring_dr: {threshold_ref: rubric.diagnostics.checks.rel_04.max_rpo_hours_requiring_dr}
+        schedule_share_of_rpo: {threshold_ref: rubric.diagnostics.checks.rel_04.schedule_share_of_rpo}
+      signals: |
+        WITH rpo AS (
+          SELECT k AS DATABASE_NAME, CAST(json_extract_string(VALUE, '$."' || k || '"') AS DOUBLE) AS RPO_HOURS
+          FROM CLIENT_INPUTS, unnest(json_keys(VALUE)) AS t(k) WHERE KEY = 'rpo_hours'),
+        rep AS (
+          SELECT trim(d.DB) AS DATABASE_NAME, g.NAME,
+                 CAST(regexp_extract(g.REPLICATION_SCHEDULE, '([0-9]+)\s*MINUTE', 1) AS DOUBLE) / $minutes_per_hour AS SCHEDULE_HOURS
+          FROM REPLICATION_GROUPS g, unnest(string_split(g.ALLOWED_DATABASES, ',')) AS d(DB))
+        SELECT rpo.DATABASE_NAME AS OBJECT_NAME, rpo.DATABASE_NAME AS CLUSTER_KEY, rpo.RPO_HOURS,
+               count(rep.NAME) AS REPLICATION_GROUPS, min(rep.SCHEDULE_HOURS) AS SCHEDULE_HOURS,
+               rpo.RPO_HOURS * $minutes_per_hour * $schedule_share_of_rpo AS TARGET_SCHEDULE_MINUTES,
+               (SELECT min(ORGANIZATION_NAME) FROM ACCOUNT_INFO) AS ORGANIZATION_NAME,
+               (SELECT min(ACCOUNT_NAME) FROM ACCOUNT_INFO) AS ACCOUNT_NAME
+        FROM rpo LEFT JOIN rep ON rep.DATABASE_NAME = rpo.DATABASE_NAME
+        GROUP BY rpo.DATABASE_NAME, rpo.RPO_HOURS
+      rule: RPO_HOURS <= $max_rpo_hours_requiring_dr AND (REPLICATION_GROUPS = 0 OR SCHEDULE_HOURS > RPO_HOURS)
+    evidence:
+      kind: DB
+      fields: [RPO_HOURS, REPLICATION_GROUPS, SCHEDULE_HOURS]
+    value:
+      method: "DR risk score = likelihood × impact (rubric); no $ value is claimed"
+    risk:
+      likelihood_ref: rubric.diagnostics.risk_model.rel_04.likelihood
+      impact_ref: rubric.diagnostics.risk_model.rel_04.impact
+      method: "A regional outage loses Tier-1 data beyond the agreed RPO (likelihood × impact, 1–5 each)"
+    effort: {size: L}
+    title_template: "Add a failover group for {{ rows[0].OBJECT_NAME }} (RPO {{ rows[0].RPO_HOURS | round(0) | int }}h)"
+    rationale_template: >-
+      {{ rows[0].OBJECT_NAME }} has an RPO of {{ rows[0].RPO_HOURS }}h but {{ 'no replication or failover group' if rows[0].REPLICATION_GROUPS == 0 else 'replicates every ' ~ rows[0].SCHEDULE_HOURS ~ 'h' }}.
+    remediation:
+      type: sql
+      autonomy: L1
+      template: |
+        -- DR design: confirm the secondary account and region with the platform owner; test failover twice a year.
+        CREATE FAILOVER GROUP IF NOT EXISTS FG_{{ rows[0].OBJECT_NAME }}
+          OBJECT_TYPES = DATABASES
+          ALLOWED_DATABASES = {{ rows[0].OBJECT_NAME }}
+          ALLOWED_ACCOUNTS = {{ rows[0].ORGANIZATION_NAME }}.{{ rows[0].ACCOUNT_NAME }}_DR
+          REPLICATION_SCHEDULE = '{{ rows[0].TARGET_SCHEDULE_MINUTES | round(0) | int }} MINUTE';
+      rollback: |
+        DROP FAILOVER GROUP IF EXISTS FG_{{ rows[0].OBJECT_NAME }};
+    kpis_to_watch: [KPI-REL-003, KPI-PHI-001]
+    last_verified: "2026-10-01"

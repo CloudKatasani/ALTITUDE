@@ -1,0 +1,209 @@
+dialect: teradata
+description: >
+  Golden tests for Teradata S1 issues. `fixture` is the synthetic extract as landed in Snowflake;
+  `source_emulation` reproduces the Teradata result in DuckDB; `naive` is a literal conversion
+  that must diverge; `fixed` applies the fix pattern and must reproduce `expected_rows`.
+test_cases:
+  - id: TC-TD-01-001
+    issue_id: TD-01
+    kind: golden
+    description: SET table silently drops re-delivered duplicate rows; naive Snowflake table keeps them
+    source_sql: |
+      CREATE SET TABLE sales.orders (
+        order_id    INTEGER NOT NULL,
+        customer_id INTEGER,
+        amount      DECIMAL(12,2)
+      ) PRIMARY INDEX (order_id);
+      INSERT INTO sales.orders SELECT order_id, customer_id, amount FROM stage.orders_batch;
+      SELECT COUNT(*), SUM(amount) FROM sales.orders;
+    fixture: |
+      CREATE TABLE orders_batch (order_id INTEGER, customer_id INTEGER, amount DECIMAL(12,2));
+      INSERT INTO orders_batch VALUES (1, 10, 100.00), (2, 11, 50.00), (2, 11, 50.00), (3, 12, 25.50), (3, 12, 25.50);
+    source_emulation: |
+      -- Teradata SET table: exact duplicate rows are discarded on INSERT ... SELECT
+      CREATE TABLE orders (order_id INTEGER, customer_id INTEGER, amount DECIMAL(12,2));
+      INSERT INTO orders SELECT DISTINCT order_id, customer_id, amount FROM orders_batch;
+      SELECT COUNT(*), SUM(amount) FROM orders;
+    naive:
+      snowflake: |
+        CREATE TABLE orders (order_id INTEGER NOT NULL, customer_id INTEGER, amount NUMBER(12, 2));
+        INSERT INTO orders SELECT order_id, customer_id, amount FROM orders_batch;
+        SELECT COUNT(*), SUM(amount) FROM orders;
+      expect: diverge
+    fixed:
+      snowflake: |
+        CREATE TABLE orders (order_id INTEGER NOT NULL, customer_id INTEGER, amount NUMBER(12, 2));
+        INSERT INTO orders
+        SELECT order_id, customer_id, amount FROM orders_batch
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY order_id, customer_id, amount ORDER BY order_id) = 1;
+        SELECT COUNT(*), SUM(amount) FROM orders;
+    fix_pattern: FX-TD-01-A
+    expected_rows: [[3, 175.5]]
+
+  - id: TC-TD-02-001
+    issue_id: TD-02
+    kind: golden
+    description: NOT CASESPECIFIC column filter matches all case variants in Teradata only
+    source_sql: |
+      CREATE MULTISET TABLE crm.customer (
+        customer_id INTEGER,
+        last_name   VARCHAR(50) NOT CASESPECIFIC
+      );
+      SELECT COUNT(*) FROM crm.customer WHERE last_name = 'SMITH';
+    fixture: |
+      CREATE TABLE customer (customer_id INTEGER, last_name VARCHAR);
+      INSERT INTO customer VALUES (1, 'Smith'), (2, 'SMITH'), (3, 'smith'), (4, 'Jones');
+    source_emulation: |
+      -- NOT CASESPECIFIC: comparison ignores case
+      SELECT COUNT(*) FROM customer WHERE lower(last_name) = lower('SMITH');
+    naive:
+      snowflake: SELECT COUNT(*) FROM customer WHERE last_name = 'SMITH';
+      expect: diverge
+    fixed:
+      snowflake: SELECT COUNT(*) FROM customer WHERE UPPER(last_name) = UPPER('SMITH');
+    fix_pattern: FX-TD-02-B
+    expected_rows: [[3]]
+
+  - id: TC-TD-03-001
+    issue_id: TD-03
+    kind: golden
+    description: CHAR(5) codes exported with pad characters no longer join to VARCHAR codes
+    source_sql: |
+      CREATE MULTISET TABLE ref.branch (branch_cd CHAR(5) NOT NULL, branch_name VARCHAR(40));
+      CREATE MULTISET TABLE fin.txn (txn_id INTEGER, branch_cd VARCHAR(5), amount DECIMAL(12,2));
+      SELECT b.branch_name, SUM(t.amount)
+      FROM fin.txn t JOIN ref.branch b ON t.branch_cd = b.branch_cd
+      GROUP BY b.branch_name ORDER BY 1;
+    fixture: |
+      CREATE TABLE branch (branch_cd VARCHAR, branch_name VARCHAR);
+      INSERT INTO branch VALUES ('AB   ', 'North'), ('CDE  ', 'South');
+      CREATE TABLE txn (txn_id INTEGER, branch_cd VARCHAR, amount DECIMAL(12,2));
+      INSERT INTO txn VALUES (1, 'AB', 10.00), (2, 'AB', 5.00), (3, 'CDE', 7.25);
+    source_emulation: |
+      -- Teradata compares CHAR values with pad semantics (trailing spaces ignored)
+      SELECT b.branch_name, SUM(t.amount) FROM txn t JOIN branch b ON rtrim(t.branch_cd) = rtrim(b.branch_cd)
+      GROUP BY b.branch_name ORDER BY 1;
+    naive:
+      snowflake: |
+        SELECT b.branch_name, SUM(t.amount) FROM txn t JOIN branch b ON t.branch_cd = b.branch_cd
+        GROUP BY b.branch_name ORDER BY 1;
+      expect: diverge
+    fixed:
+      snowflake: |
+        CREATE TABLE branch_clean AS SELECT CAST(RTRIM(branch_cd) AS VARCHAR(5)) AS branch_cd, branch_name FROM branch;
+        SELECT b.branch_name, SUM(t.amount) FROM txn t JOIN branch_clean b ON t.branch_cd = b.branch_cd
+        GROUP BY b.branch_name ORDER BY 1;
+    fix_pattern: FX-TD-03-A
+    expected_rows: [["North", 15], ["South", 7.25]]
+
+  - id: TC-TD-04-001
+    issue_id: TD-04
+    kind: golden
+    description: Teradata integer-encoded dates (CYYMMDD) cast to DATE; naive TO_DATE reads epoch seconds
+    source_sql: |
+      CREATE MULTISET TABLE fin.gl_posting (posting_id INTEGER, posting_dt INTEGER, amount DECIMAL(12,2));
+      SELECT posting_id, CAST(posting_dt AS DATE) AS posting_date FROM fin.gl_posting ORDER BY posting_id;
+    fixture: |
+      CREATE TABLE gl_posting (posting_id INTEGER, posting_dt INTEGER, amount DECIMAL(12,2));
+      INSERT INTO gl_posting VALUES (1, 1261014, 10.00), (2, 991231, 20.00);
+    source_emulation: |
+      -- Teradata internal date integer = (year - 1900) * 10000 + month * 100 + day
+      SELECT posting_id, make_date(1900 + posting_dt // 10000, (posting_dt // 100) % 100, posting_dt % 100)
+      FROM gl_posting ORDER BY posting_id;
+    naive:
+      snowflake: SELECT posting_id, TO_DATE(TO_VARCHAR(posting_dt)) AS posting_date FROM gl_posting ORDER BY posting_id;
+      duckdb: |
+        -- Snowflake TO_DATE on an integer string interprets it as seconds since the epoch
+        SELECT posting_id, CAST(to_timestamp(posting_dt) AS DATE) FROM gl_posting ORDER BY posting_id;
+      expect: diverge
+    fixed:
+      snowflake: |
+        SELECT posting_id,
+               DATE_FROM_PARTS(1900 + CAST(FLOOR(posting_dt / 10000) AS INTEGER),
+                               CAST(MOD(FLOOR(posting_dt / 100), 100) AS INTEGER),
+                               CAST(MOD(posting_dt, 100) AS INTEGER)) AS posting_date
+        FROM gl_posting ORDER BY posting_id;
+    fix_pattern: FX-TD-04-A
+    expected_rows: [[1, "2026-10-14"], [2, "1999-12-31"]]
+
+  - id: TC-TD-05-001
+    issue_id: TD-05
+    kind: golden
+    description: Integer division truncates in Teradata and returns a decimal in Snowflake
+    source_sql: |
+      CREATE MULTISET TABLE ops.shipments (shipment_id INTEGER, carton_count INTEGER);
+      SELECT SUM(carton_count) / COUNT(*) AS avg_cartons FROM ops.shipments;
+    fixture: |
+      CREATE TABLE shipments (shipment_id INTEGER, carton_count INTEGER);
+      INSERT INTO shipments VALUES (1, 3), (2, 2);
+    source_emulation: |
+      -- INTEGER / INTEGER yields a truncated INTEGER in Teradata
+      SELECT SUM(carton_count) // COUNT(*) FROM shipments;
+    naive:
+      snowflake: SELECT SUM(carton_count) / COUNT(*) AS avg_cartons FROM shipments;
+      expect: diverge
+    fixed:
+      snowflake: SELECT TRUNC(SUM(carton_count) / COUNT(*)) AS avg_cartons FROM shipments;
+    fix_pattern: FX-TD-05-A
+    expected_rows: [[2]]
+
+  - id: TC-TD-08-001
+    issue_id: TD-08
+    kind: golden
+    description: >
+      Teradata-style UPDATE ... FROM with two adjustments for one account. Expected rows are the reconciled
+      source baseline (each adjustment applied once); Snowflake applies only one arbitrary match.
+    source_sql: |
+      CREATE MULTISET TABLE fin.account (acct_id INTEGER, balance DECIMAL(12,2));
+      CREATE MULTISET TABLE fin.adjustment (acct_id INTEGER, amount DECIMAL(12,2));
+      UPDATE a FROM fin.account a, fin.adjustment j
+      SET balance = a.balance + j.amount
+      WHERE a.acct_id = j.acct_id;
+    fixture: |
+      CREATE TABLE account (acct_id INTEGER, balance DECIMAL(12,2));
+      INSERT INTO account VALUES (1, 100.00), (2, 200.00);
+      CREATE TABLE adjustment (acct_id INTEGER, amount DECIMAL(12,2));
+      INSERT INTO adjustment VALUES (1, 10.00), (1, 20.00), (2, 5.00);
+    source_emulation: |
+      -- reconciled baseline: every adjustment applied exactly once
+      SELECT a.acct_id, a.balance + coalesce(sum(j.amount), 0)
+      FROM account a LEFT JOIN adjustment j ON a.acct_id = j.acct_id
+      GROUP BY a.acct_id, a.balance ORDER BY a.acct_id;
+    naive:
+      snowflake: |
+        UPDATE account SET balance = account.balance + j.amount FROM adjustment j WHERE account.acct_id = j.acct_id;
+        SELECT acct_id, balance FROM account ORDER BY acct_id;
+      expect: diverge
+      note: Snowflake picks one matching source row (or errors with ERROR_ON_NONDETERMINISTIC_UPDATE); either result differs from the baseline.
+    fixed:
+      snowflake: |
+        UPDATE account SET balance = account.balance + j.amount
+        FROM (SELECT acct_id, SUM(amount) AS amount FROM adjustment GROUP BY acct_id) j
+        WHERE account.acct_id = j.acct_id;
+        SELECT acct_id, balance FROM account ORDER BY acct_id;
+    fix_pattern: FX-TD-08-A
+    expected_rows: [[1, 130], [2, 205]]
+
+  - id: TC-TD-11-001
+    issue_id: TD-11
+    kind: golden
+    description: Session time zone -04:00 assigns events to local business days; naive UTC cast shifts day boundaries
+    source_sql: |
+      CREATE MULTISET TABLE web.events (event_id INTEGER, event_ts TIMESTAMP(6) WITH TIME ZONE);
+      SET TIME ZONE INTERVAL -'04:00' HOUR TO MINUTE;
+      SELECT CAST(event_ts AS DATE) AS event_date, COUNT(*) FROM web.events GROUP BY 1 ORDER BY 1;
+    fixture: |
+      CREATE TABLE events (event_id INTEGER, event_ts TIMESTAMP);
+      INSERT INTO events VALUES (1, '2026-10-01 02:30:00'), (2, '2026-10-01 15:00:00'), (3, '2026-10-02 03:59:00');
+    source_emulation: |
+      -- extract holds UTC; the Teradata session evaluates CAST(... AS DATE) at UTC-04:00
+      SELECT CAST(event_ts - INTERVAL 4 HOUR AS DATE) AS d, COUNT(*) FROM events GROUP BY 1 ORDER BY 1;
+    naive:
+      snowflake: SELECT CAST(event_ts AS DATE) AS event_date, COUNT(*) FROM events GROUP BY 1 ORDER BY 1;
+      expect: diverge
+    fixed:
+      snowflake: |
+        SELECT CAST(CONVERT_TIMEZONE('UTC', 'America/New_York', event_ts) AS DATE) AS event_date, COUNT(*)
+        FROM events GROUP BY 1 ORDER BY 1;
+    fix_pattern: FX-TD-11-A
+    expected_rows: [["2026-09-30", 1], ["2026-10-01", 2]]

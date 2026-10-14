@@ -1,0 +1,5 @@
+.LOGON tdprod/legacy_user,0ldPassw0rd;
+.EXPORT REPORT FILE = /data/out/old_sales.txt
+SELECT * FROM EDW.OLD_SALES_2016 o CROSS JOIN EDW.CAL_DATE d;
+.EXPORT RESET
+.QUIT 0

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Human review queue</h1>
+<p class="muted">AI output below the confidence floor has no effect until a named reviewer decides.</p>
+<table>
+<thead><tr><th>Item</th><th>Subject</th><th>Reason</th><th>Confidence</th><th>Decision</th></tr></thead>
+<tbody>
+{% for i in items %}
+<tr><td>{{ i.item_id }}</td><td>{{ i.subject_type }} · <code>{{ i.subject_id }}</code></td><td>{{ i.reason }}</td>
+<td>{{ "%.2f"|format(i.confidence or 0) }}</td>
+<td>{% if principal.can("review") %}
+<form method="post" action="/review/{{ i.item_id }}" class="inline">
+<button name="decision" value="approved">Approve</button><button name="decision" value="rejected" class="secondary">Reject</button>
+</form>{% else %}<span class="muted">read only</span>{% endif %}</td></tr>
+{% else %}<tr><td colspan="5" class="muted">Queue is empty.</td></tr>{% endfor %}
+</tbody></table>
+{% endblock %}

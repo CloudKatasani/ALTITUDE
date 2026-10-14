@@ -1,0 +1,82 @@
+# Package D diagnostic domains (Section 6.3) and the Snowflake Well-Architected Framework mapping (Section 14).
+# Scoring weights are rubric references; the scorecard rolls checks up to domains (1-5), to the
+# Platform Health Index (0-100) and to the five WAF pillars.
+version: 1.0.0
+last_verified: "2026-10-01"
+waf_pillars:
+  - pillar: security_governance
+    name: Security & Governance
+    baseline_sections: ["14.1", "14.2", "14.3"]
+  - pillar: operational_excellence
+    name: Operational Excellence
+    baseline_sections: ["14.6", "14.7"]
+  - pillar: reliability
+    name: Reliability
+    baseline_sections: ["14.1", "14.6", "14.7"]
+  - pillar: performance_efficiency
+    name: Performance Efficiency
+    baseline_sections: ["14.4"]
+  - pillar: cost_optimization
+    name: Cost Optimization
+    baseline_sections: ["14.5"]
+domains:
+  - id: D1
+    name: Cost & FinOps
+    waf_pillar: cost_optimization
+    weight_ref: rubric.diagnostics.scorecard.domain_weights.d1
+    key_question: Where does spend go, what is waste, and is the capacity commitment right-sized?
+    primary_evidence: [METERING_DAILY_HISTORY, WAREHOUSE_METERING_HISTORY, QUERY_ATTRIBUTION_HISTORY, AUTOMATIC_CLUSTERING_HISTORY, STORAGE_USAGE, TABLE_STORAGE_METRICS, CLIENT_INPUTS]
+  - id: D2
+    name: Performance & Workload
+    waf_pillar: performance_efficiency
+    weight_ref: rubric.diagnostics.scorecard.domain_weights.d2
+    key_question: Are warehouses matched to workloads, and which query signatures dominate?
+    primary_evidence: [QUERY_HISTORY, WAREHOUSE_LOAD_HISTORY, AUTOMATIC_CLUSTERING_HISTORY]
+  - id: D3
+    name: Reliability & Pipelines
+    waf_pillar: reliability
+    weight_ref: rubric.diagnostics.scorecard.domain_weights.d3
+    key_question: What fails, how often, and what does it break downstream?
+    primary_evidence: [TASK_HISTORY, TASKS, COPY_HISTORY, PIPE_USAGE_HISTORY, REPLICATION_GROUPS]
+  - id: D4
+    name: Security & Access
+    waf_pillar: security_governance
+    weight_ref: rubric.diagnostics.scorecard.domain_weights.d4
+    key_question: Who can do what, and where are the exposures?
+    primary_evidence: [LOGIN_HISTORY, USERS, ROLES, GRANTS_TO_ROLES, GRANTS_TO_USERS, NETWORK_POLICIES]
+  - id: D5
+    name: Governance & Data Quality
+    waf_pillar: security_governance
+    weight_ref: rubric.diagnostics.scorecard.domain_weights.d5
+    key_question: Is sensitive data protected and owned, and is quality measured?
+    primary_evidence: [TAG_REFERENCES, POLICY_REFERENCES, ACCESS_HISTORY, DATA_METRIC_FUNCTION_REFERENCES, COLUMNS]
+  - id: D6
+    name: Operational Excellence & DataOps
+    waf_pillar: operational_excellence
+    weight_ref: rubric.diagnostics.scorecard.domain_weights.d6
+    key_question: Is change controlled, and is the platform monitored?
+    primary_evidence: [QUERY_HISTORY, ALERTS, RESOURCE_MONITORS]
+  - id: D7
+    name: Data Architecture & Modelling
+    waf_pillar: extension
+    weight_ref: rubric.diagnostics.scorecard.domain_weights.d7
+    key_question: Is the estate layered and lean, or sprawling?
+    primary_evidence: [TABLES, VIEWS, OBJECT_DEPENDENCIES, TABLE_STORAGE_METRICS]
+  - id: D8
+    name: Consumption & BI Layer
+    waf_pillar: extension
+    weight_ref: rubric.diagnostics.scorecard.domain_weights.d8
+    key_question: Which reports and KPIs matter, which are duplicates, and what do they cost?
+    primary_evidence: [BI_REPORTS, BI_MEASURES, QUERY_HISTORY, QUERY_ATTRIBUTION_HISTORY]
+  - id: D9
+    name: AI Readiness
+    waf_pillar: extension
+    weight_ref: rubric.diagnostics.scorecard.domain_weights.d9
+    key_question: Can Cortex and agents run here safely and usefully?
+    primary_evidence: [SEMANTIC_VIEWS, CORTEX_SEARCH_SERVICES, CORTEX_USAGE_HISTORY, COLUMNS, BUDGETS]
+  - id: D10
+    name: Operating Model & Commercials
+    waf_pillar: operational_excellence
+    weight_ref: rubric.diagnostics.scorecard.domain_weights.d10
+    key_question: Who owns the platform, is there a FinOps cadence, and is the contract right-sized?
+    primary_evidence: [CLIENT_INPUTS, METERING_DAILY_HISTORY, TAG_REFERENCES]

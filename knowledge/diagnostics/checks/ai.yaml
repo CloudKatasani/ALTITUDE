@@ -1,0 +1,164 @@
+# D9 AI Readiness checks (Section 6.4 / 19.1).
+version: 1.0.0
+checks:
+  - id: DX-AI-01
+    title: No semantic views for top KPI domains
+    description: Top KPI domains from the engagement intake have no semantic view, so Cortex Analyst / agents have no governed vocabulary.
+    domain: D9
+    waf_pillar: operational_excellence
+    severity: medium
+    confidence_class: high
+    detector:
+      requires: [SEMANTIC_VIEWS, CLIENT_INPUTS, TABLES, TAG_REFERENCES]
+      inputs: [top_kpi_domains]
+      cluster_by: theme
+      params:
+        semantic_schema: {value: EDW.SEMANTIC}
+      signals: |
+        WITH d AS (SELECT unnest(from_json(VALUE, '["VARCHAR"]')) AS KPI_DOMAIN FROM CLIENT_INPUTS WHERE KEY = 'top_kpi_domains')
+        SELECT d.KPI_DOMAIN AS OBJECT_NAME, 'semantic_layer' AS CLUSTER_KEY,
+               (SELECT count(*) FROM SEMANTIC_VIEWS s WHERE lower(s.KPI_DOMAIN) = lower(d.KPI_DOMAIN)) AS SEMANTIC_VIEWS,
+               (SELECT string_agg(t.FQ_NAME, ',' ORDER BY t.FQ_NAME) FROM TABLES t JOIN _TIER1_TABLES tt ON tt.FQ_NAME = t.FQ_NAME
+                WHERE upper(t.TABLE_SCHEMA) = upper(d.KPI_DOMAIN)) AS CANDIDATE_TABLES
+        FROM d
+      rule: SEMANTIC_VIEWS = 0
+    evidence:
+      kind: AI
+      fields: [SEMANTIC_VIEWS, CANDIDATE_TABLES]
+    value:
+      method: "AI-readiness risk = likelihood × impact (rubric): agents answer from raw tables without certified definitions"
+    risk:
+      likelihood_ref: rubric.diagnostics.risk_model.ai_01.likelihood
+      impact_ref: rubric.diagnostics.risk_model.ai_01.impact
+      method: "Ungoverned natural-language answers diverge from certified KPIs (likelihood × impact, 1–5 each)"
+    effort: {size: M}
+    title_template: "Build semantic views for {{ n }} top KPI domain{{ 's' if n != 1 else '' }}"
+    rationale_template: >-
+      Top KPI domains without a semantic view: {{ objects | join(', ') }}.
+    remediation:
+      type: sql
+      autonomy: L2
+      template: |
+        -- Semantic view skeletons over Tier-1 tables; metrics are added from the certified KPI catalogue.
+        CREATE SCHEMA IF NOT EXISTS {{ params.semantic_schema }};
+        {% for r in rows %}{% set tabs = (r.CANDIDATE_TABLES or '').split(',') | select | list %}CREATE OR REPLACE SEMANTIC VIEW {{ params.semantic_schema }}.SV_{{ r.OBJECT_NAME | upper }}
+          TABLES ( {% for t in tabs %}t{{ loop.index }} AS {{ t }}{{ ', ' if not loop.last }}{% endfor %}{% if not tabs %}src AS <SOURCE_TABLE>{% endif %} )
+          COMMENT = 'Semantic layer for the {{ r.OBJECT_NAME }} KPI domain (draft)';
+        {% endfor %}
+      rollback: |
+        {% for r in rows %}DROP SEMANTIC VIEW IF EXISTS {{ params.semantic_schema }}.SV_{{ r.OBJECT_NAME | upper }};
+        {% endfor %}
+    kpis_to_watch: [KPI-AI-001, KPI-PHI-001]
+    last_verified: "2026-10-01"
+
+  - id: DX-AI-02
+    title: Cortex usage without budgets or dedicated roles
+    description: Cortex / agent credits consumed with no Cortex budget, or largely by human users under general-purpose roles.
+    domain: D9
+    waf_pillar: cost_optimization
+    severity: medium
+    confidence_class: medium
+    detector:
+      requires: [CORTEX_USAGE_HISTORY, BUDGETS, USERS]
+      inputs: [contract_price_per_credit]
+      cluster_by: object
+      params:
+        max_personal_usage_share: {threshold_ref: rubric.diagnostics.checks.ai_02.max_personal_usage_share}
+        budget_headroom: {threshold_ref: rubric.diagnostics.checks.ai_02.budget_headroom}
+      signals: |
+        WITH u AS (
+          SELECT c.*, coalesce(us.TYPE, 'PERSON') AS USER_TYPE
+          FROM CORTEX_USAGE_HISTORY c LEFT JOIN USERS us ON us.NAME = c.USER_NAME)
+        SELECT 'CORTEX' AS OBJECT_NAME, 'ai_governance' AS CLUSTER_KEY,
+               coalesce(sum(TOKEN_CREDITS), 0) AS CREDITS,
+               count(*) AS CALLS,
+               coalesce(avg(CASE WHEN USER_TYPE = 'PERSON' THEN 1 ELSE 0 END), 0) AS PERSONAL_USAGE_SHARE,
+               coalesce(avg(CASE WHEN AGENT_NAME IS NULL THEN 1 ELSE 0 END), 0) AS NON_AGENT_SHARE,
+               string_agg(DISTINCT ROLE_NAME, ', ' ORDER BY ROLE_NAME) AS ROLES,
+               (SELECT count(*) FROM BUDGETS b WHERE upper(b.SCOPE) LIKE '%CORTEX%' OR upper(b.SCOPE) LIKE '%AI%') AS CORTEX_BUDGETS,
+               coalesce(sum(TOKEN_CREDITS), 0) / $window_days * $days_per_month * (1 + $budget_headroom) AS SUGGESTED_MONTHLY_LIMIT
+        FROM u
+      rule: CREDITS > 0 AND (CORTEX_BUDGETS = 0 OR PERSONAL_USAGE_SHARE > $max_personal_usage_share)
+    evidence:
+      kind: AI
+      fields: [CREDITS, CALLS, PERSONAL_USAGE_SHARE, NON_AGENT_SHARE, ROLES, CORTEX_BUDGETS]
+    value:
+      method: "uncontrolled Cortex spend: credits (window) × uncontrolled share × contract price, annualised; plus identity risk = likelihood × impact"
+      p50: CREDITS * uncontrolled_spend_share * price_per_credit * annualise
+      conservative: CREDITS * uncontrolled_spend_share * conservative_factor * price_per_credit * annualise
+      factors:
+        uncontrolled_spend_share: rubric.diagnostics.checks.ai_02.uncontrolled_spend_share
+        conservative_factor: rubric.diagnostics.checks.ai_02.conservative_factor
+    risk:
+      likelihood_ref: rubric.diagnostics.risk_model.ai_02.likelihood
+      impact_ref: rubric.diagnostics.risk_model.ai_02.impact
+      method: "AI usage without budgets or machine identities cannot be capped or attributed (likelihood × impact, 1–5 each)"
+    effort: {size: S}
+    title_template: "Put Cortex usage behind a budget and a dedicated agent role"
+    rationale_template: >-
+      {{ num(rows[0].CREDITS) }} Cortex credits over {{ num(rows[0].CALLS) }} calls; {{ pct(rows[0].PERSONAL_USAGE_SHARE) }} by human users
+      (rubric max {{ pct(params.max_personal_usage_share) }}) under roles {{ rows[0].ROLES }}; Cortex budgets: {{ rows[0].CORTEX_BUDGETS }}.
+    remediation:
+      type: sql
+      autonomy: L2
+      template: |
+        CREATE ROLE IF NOT EXISTS CORTEX_AGENT_ROLE COMMENT = 'Dedicated machine identity role for Cortex and agents';
+        GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE CORTEX_AGENT_ROLE;
+        CREATE SCHEMA IF NOT EXISTS ALTITUDE_OPS.BUDGETS;
+        CREATE SNOWFLAKE.CORE.BUDGET ALTITUDE_OPS.BUDGETS.BUDGET_CORTEX();
+        CALL ALTITUDE_OPS.BUDGETS.BUDGET_CORTEX!SET_SPENDING_LIMIT({{ rows[0].SUGGESTED_MONTHLY_LIMIT | round(0, 'ceil') | int }});
+      rollback: |
+        DROP SNOWFLAKE.CORE.BUDGET IF EXISTS ALTITUDE_OPS.BUDGETS.BUDGET_CORTEX;
+        REVOKE DATABASE ROLE SNOWFLAKE.CORTEX_USER FROM ROLE CORTEX_AGENT_ROLE;
+        DROP ROLE IF EXISTS CORTEX_AGENT_ROLE;
+    kpis_to_watch: [KPI-AI-001, KPI-COST-008]
+    last_verified: "2026-10-01"
+
+  - id: DX-AI-03
+    title: Low Tier-1 column comment coverage
+    description: Tier-1 tables whose column comment coverage is below the rubric threshold.
+    domain: D9
+    waf_pillar: security_governance
+    severity: low
+    confidence_class: high
+    detector:
+      requires: [COLUMNS, CLIENT_INPUTS, TAG_REFERENCES]
+      inputs: [tier1_tables]
+      cluster_by: object
+      params:
+        min_comment_coverage: {threshold_ref: rubric.diagnostics.checks.ai_03.min_comment_coverage}
+      signals: |
+        SELECT c.FQ_NAME AS OBJECT_NAME, c.FQ_NAME AS CLUSTER_KEY,
+               count(*) AS COLUMNS_TOTAL,
+               count(*) FILTER (WHERE c.COMMENT IS NOT NULL AND trim(c.COMMENT) <> '') AS COLUMNS_COMMENTED,
+               count(*) FILTER (WHERE c.COMMENT IS NOT NULL AND trim(c.COMMENT) <> '') / count(*) AS COMMENT_COVERAGE,
+               string_agg(c.COLUMN_NAME, ',' ORDER BY c.ORDINAL_POSITION) FILTER (WHERE c.COMMENT IS NULL OR trim(c.COMMENT) = '') AS UNCOMMENTED_COLUMNS
+        FROM COLUMNS c JOIN _TIER1_TABLES tt ON tt.FQ_NAME = c.FQ_NAME
+        GROUP BY c.FQ_NAME
+      rule: COMMENT_COVERAGE < $min_comment_coverage
+    evidence:
+      kind: TBL
+      fields: [COLUMNS_TOTAL, COLUMNS_COMMENTED, COMMENT_COVERAGE, UNCOMMENTED_COLUMNS]
+    value:
+      method: "AI-readiness risk = likelihood × impact (rubric): undocumented columns degrade Cortex Analyst accuracy"
+    risk:
+      likelihood_ref: rubric.diagnostics.risk_model.ai_03.likelihood
+      impact_ref: rubric.diagnostics.risk_model.ai_03.impact
+      method: "Agents misinterpret undocumented Tier-1 columns (likelihood × impact, 1–5 each)"
+    effort: {size: S}
+    title_template: "Document {{ rows[0].COLUMNS_TOTAL - rows[0].COLUMNS_COMMENTED }} columns of {{ rows[0].OBJECT_NAME }}"
+    rationale_template: >-
+      {{ rows[0].OBJECT_NAME }}: {{ rows[0].COLUMNS_COMMENTED }} of {{ rows[0].COLUMNS_TOTAL }} columns commented
+      ({{ pct(rows[0].COMMENT_COVERAGE) }}; rubric min {{ pct(params.min_comment_coverage) }}).
+    remediation:
+      type: sql
+      autonomy: L2
+      template: |
+        -- Draft descriptions generated from column names; the data steward edits and approves before execution.
+        {% for c in (rows[0].UNCOMMENTED_COLUMNS or '').split(',') if c %}ALTER TABLE {{ rows[0].OBJECT_NAME }} ALTER COLUMN {{ c }} COMMENT '{{ c | lower | replace('_', ' ') }} (draft — steward review)';
+        {% endfor %}
+      rollback: |
+        {% for c in (rows[0].UNCOMMENTED_COLUMNS or '').split(',') if c %}ALTER TABLE {{ rows[0].OBJECT_NAME }} ALTER COLUMN {{ c }} UNSET COMMENT;
+        {% endfor %}
+    kpis_to_watch: [KPI-GOV-001, KPI-AI-001]
+    last_verified: "2026-10-01"

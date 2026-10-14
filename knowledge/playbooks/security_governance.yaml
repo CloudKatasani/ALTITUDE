@@ -1,0 +1,145 @@
+# Remediation playbooks referenced by Well-Architected checks (Section 14.9 `remediation.playbook`).
+# `remediation_sql` / `rollback_sql` are templates rendered per affected object ({object}); `agent` names the fleet
+# agent and action type that can draft the change (autonomy enforced by the action gateway).
+version: 1.0.0
+playbooks:
+  - id: PB-ORG-FAILOVER
+    title: Add Tier-1 databases to a failover group and rehearse failover
+    summary: Replicate production databases to a secondary account/region sized to the RPO; test failover twice a year.
+    steps:
+      - Confirm RPO/RTO per database with the data owner (client inputs rpo_hours).
+      - Create or extend a failover group in the primary account with a replication schedule below the RPO.
+      - Create the secondary failover group in the DR account and run the first refresh.
+      - Rehearse failover in a maintenance window and record the measured RTO.
+    remediation_sql: "ALTER FAILOVER GROUP FG_PRIMARY ADD {object} TO ALLOWED_DATABASES"
+    rollback_sql: "ALTER FAILOVER GROUP FG_PRIMARY REMOVE {object} FROM ALLOWED_DATABASES"
+    verification: WA-ORG-001 passes; replication lag below RPO in REPLICATION_GROUP_REFRESH_HISTORY.
+    risk: medium
+    effort_hours: 16
+
+  - id: PB-ORG-NAMING
+    title: Adopt <ENV>_<DOMAIN>_<LAYER> database naming
+    summary: Map existing databases to the convention; create new ones by convention via the landing-zone Terraform.
+    steps:
+      - Inventory databases and assign environment, domain and layer.
+      - Create convention-named databases through IaC; migrate objects (zero-copy clone or swap) per domain.
+      - Keep compatibility views for one release; then retire old names.
+    verification: WA-ORG-002 passes for new and migrated databases.
+    risk: medium
+    effort_hours: 24
+
+  - id: PB-IAM-MFA
+    title: Enforce MFA for human users
+    summary: Attach an authentication policy that requires MFA (or SSO) to every human user.
+    steps:
+      - Create AUTHENTICATION POLICY GOVERNANCE.POLICIES.AP_REQUIRE_MFA with MFA_ENROLLMENT = REQUIRED.
+      - Notify affected users and give an enrolment window.
+      - Attach the policy per user (or at account level once enrolment completes).
+    remediation_sql: "ALTER USER {object} SET AUTHENTICATION POLICY GOVERNANCE.POLICIES.AP_REQUIRE_MFA"
+    rollback_sql: "ALTER USER {object} UNSET AUTHENTICATION POLICY"
+    verification: WA-IAM-001 passes; LOGIN_HISTORY shows a second factor for password logins.
+    agent: {agent_id: AG-ACCESS-HYGIENE, action_type: user.set_authentication_policy}
+    risk: low
+    effort_hours: 4
+
+  - id: PB-IAM-SERVICE-KEYPAIR
+    title: Move service users to key-pair or OAuth
+    summary: Rotate each password-based service user to key-pair (or workload identity), then remove the password.
+    steps:
+      - Generate a key pair in the client's secret manager; register the public key on the user.
+      - Switch the integration's connection to key-pair authentication and verify a full run.
+      - Set TYPE = SERVICE and UNSET PASSWORD (not reversible — confirm the integration first).
+    remediation_sql: "ALTER USER {object} SET TYPE = SERVICE"
+    verification: WA-IAM-002 passes.
+    risk: medium
+    effort_hours: 3
+
+  - id: PB-IAM-BREAK-GLASS
+    title: Reduce ACCOUNTADMIN to break-glass users with alerting
+    summary: Keep two named break-glass holders; move day-to-day administration to SYSADMIN/SECURITYADMIN.
+    steps:
+      - Agree the break-glass holders and their MFA/hardware-key requirements.
+      - Grant the needed SYSADMIN/SECURITYADMIN-derived functional roles to current holders.
+      - Revoke ACCOUNTADMIN from everyone else (owner-approved L2 drafts).
+      - Enable the privileged-use alert (PB-OPS-ALERT-PACK).
+    remediation_sql: "REVOKE ROLE ACCOUNTADMIN FROM USER {object}"
+    rollback_sql: "GRANT ROLE ACCOUNTADMIN TO USER {object}"
+    verification: WA-IAM-003 passes; no ACCOUNTADMIN queries by non-break-glass users.
+    agent: {agent_id: AG-ACCESS-HYGIENE, action_type: grant.revoke_role_from_user}
+    risk: medium
+    effort_hours: 4
+
+  - id: PB-IAM-ACCESS-REVIEW
+    title: Access review — dormant users and orphan roles
+    summary: Disable dormant users, revoke their grants and retire orphan roles after owner confirmation.
+    steps:
+      - Run the Access Hygiene agent; review its L2 drafts with each owner.
+      - Approve or reject each draft; approved drafts execute with audit.
+      - Drop orphan roles through IaC after their privileges are revoked.
+    remediation_sql: "ALTER USER {object} SET DISABLED = TRUE"
+    rollback_sql: "ALTER USER {object} SET DISABLED = FALSE"
+    verification: WA-IAM-004 and WA-IAM-005 pass.
+    agent: {agent_id: AG-ACCESS-HYGIENE, action_type: user.disable}
+    risk: low
+    effort_hours: 4
+
+  - id: PB-NET-POLICY
+    title: Network rules and policies for the account and service users
+    summary: Restrict authentication to corporate and service networks with network rules.
+    steps:
+      - Create network rules for corporate egress ranges and each service's ranges.
+      - Create NP_ACCOUNT (corporate) and NP_SERVICES (service ranges) policies.
+      - Attach NP_SERVICES to service users first, then set NP_ACCOUNT at account level.
+    remediation_sql: "ALTER USER {object} SET NETWORK_POLICY = NP_SERVICES"
+    rollback_sql: "ALTER USER {object} UNSET NETWORK_POLICY"
+    verification: WA-NET-001 and WA-NET-002 pass; no blocked legitimate logins in LOGIN_HISTORY.
+    risk: high
+    effort_hours: 8
+
+  - id: PB-NET-TAG-MASKING
+    title: Tag-based masking for classified columns
+    summary: Bind masking policies to the PII tag so every tagged column is masked mechanically.
+    steps:
+      - Create MP_PII_STRING (and type variants) in GOVERNANCE.POLICIES.
+      - ALTER TAG GOVERNANCE.TAGS.PII SET MASKING POLICY MP_PII_STRING.
+      - Verify masking for non-privileged roles; exempt only FR_PRIVACY_OFFICER.
+    remediation_sql: "ALTER TAG GOVERNANCE.TAGS.PII SET MASKING POLICY GOVERNANCE.POLICIES.MP_PII_STRING"
+    rollback_sql: "ALTER TAG GOVERNANCE.TAGS.PII UNSET MASKING POLICY GOVERNANCE.POLICIES.MP_PII_STRING"
+    verification: WA-NET-003 passes; SELECT as FR_ANALYST returns masked values.
+    risk: medium
+    effort_hours: 6
+
+  - id: PB-ENG-OWNERSHIP
+    title: Ownership and descriptions for Tier-1 objects
+    summary: Bootstrap owners from usage and draft descriptions for steward approval.
+    steps:
+      - Propose owners from top writers/readers in ACCESS_HISTORY; confirm with the domain lead.
+      - Set DATA_OWNER tags and table comments through IaC or the Documentation & Catalog agent (L2).
+    remediation_sql: "ALTER TABLE {object} SET TAG GOVERNANCE.TAGS.DATA_OWNER = '<owner>'"
+    rollback_sql: "ALTER TABLE {object} UNSET TAG GOVERNANCE.TAGS.DATA_OWNER"
+    verification: WA-ENG-004 passes.
+    risk: low
+    effort_hours: 2
+
+  - id: PB-AI-DOCUMENTATION
+    title: Document Tier-1 columns
+    summary: Draft column comments from lineage and usage; stewards approve before they are applied.
+    steps:
+      - Generate draft comments (Documentation & Catalog agent, L2) for undocumented Tier-1 columns.
+      - Steward review in the review queue; apply approved comments via IaC.
+    remediation_sql: "COMMENT ON COLUMN {object}.<column> IS '<approved description>'"
+    verification: WA-AI-001 passes (coverage at or above rubric.foundation.tier1_column_comment_coverage_min).
+    risk: low
+    effort_hours: 6
+
+  - id: PB-AI-AGENT-CONTROLS
+    title: Agent identities and Cortex budget
+    summary: Run AI workloads under dedicated agent roles and bound Cortex spend with a budget.
+    steps:
+      - Create a service user and role per agent (generated/agents/sql/service_identities.sql).
+      - Move Cortex/agent workloads off human and functional roles.
+      - Create BUDGET_CORTEX and attach WH_AGENTS and the agent roles.
+    remediation_sql: "CREATE SNOWFLAKE.CORE.BUDGET IF NOT EXISTS GOVERNANCE.POLICIES.BUDGET_CORTEX()"
+    verification: WA-AI-003 and WA-AI-004 pass.
+    risk: low
+    effort_hours: 6

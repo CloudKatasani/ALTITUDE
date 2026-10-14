@@ -1,0 +1,14 @@
+name: draft_sow
+description: Draft a statement of work for an offer and tier from the service catalogue, with guarantees and next step.
+permission: run
+entrypoint: altitude.skills.impl:draft_sow
+input_schema:
+  type: object
+  properties:
+    offer_id: {type: string, pattern: "^OFF-"}
+    client: {type: string}
+    tier_id: {type: string}
+    scope_notes: {type: array, items: {type: string}}
+    fee_usd: {type: number, minimum: 0}
+  required: [offer_id, client]
+  additionalProperties: false

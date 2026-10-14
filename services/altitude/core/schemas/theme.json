@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "White-label theme tokens",
+  "x-altitude-globs": ["theme/*.yaml"],
+  "type": "object",
+  "required": ["theme", "tokens"],
+  "properties": {
+    "theme": {"type": "string"},
+    "tokens": {
+      "type": "object",
+      "required": ["PRODUCT_NAME", "COMPANY_NAME", "COPILOT_NAME", "COLOR_PRIMARY", "COLOR_ACCENT"],
+      "additionalProperties": {"type": "string"}
+    }
+  }
+}

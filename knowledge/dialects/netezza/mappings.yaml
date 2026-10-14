@@ -1,0 +1,7 @@
+dialect: netezza
+version: 1.0.0
+description: Netezza to Snowflake conversion map (Section 10.4).
+mappings:
+  - {id: MAP-NZ-001, category: ddl, source_construct: "DISTRIBUTE ON / ORGANIZE ON", target_construct: "Remove; clustering key only if justified", note: "", related_issues: [NZ-01], last_verified: "2026-10-01", verified_by: practice-lead-netezza}
+  - {id: MAP-NZ-002, category: procedural, source_construct: "NZPLSQL procedures", target_construct: "Snowflake Scripting", note: "", related_issues: [NZ-02], last_verified: "2026-10-01", verified_by: practice-lead-netezza}
+  - {id: MAP-NZ-003, category: loading, source_construct: "nzload", target_construct: "COPY INTO from staged files", note: "", related_issues: [NZ-03], last_verified: "2026-10-01", verified_by: practice-lead-netezza}

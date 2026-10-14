@@ -1,0 +1,131 @@
+dialect: oracle
+description: Detector and profile tests for the Oracle register.
+test_cases:
+  - id: TC-OR-01-101
+    issue_id: OR-01
+    kind: profile
+    description: Snowflake null count lower than source after load (empty strings landed as '')
+    source_sql: ""
+    profile:
+      columns:
+        - table: crm.customer
+          column: middle_name
+          source_type: VARCHAR2(40)
+          target_type: VARCHAR(40)
+          source_stats: {null_count: 120}
+          target_stats: {null_count: 80, empty_string_count: 40}
+        - table: crm.customer
+          column: first_name
+          source_type: VARCHAR2(40)
+          target_type: VARCHAR(40)
+          source_stats: {null_count: 0}
+          target_stats: {null_count: 0, empty_string_count: 0}
+    expect_issues: [OR-01]
+
+  - id: TC-OR-02-101
+    issue_id: OR-02
+    kind: profile
+    description: Profiled max scale exceeds the target scale
+    source_sql: ""
+    profile:
+      columns:
+        - {table: fin.invoice_line, column: unit_price, source_type: NUMBER, target_type: "NUMBER(38,0)", source_stats: {max_scale: 4}}
+        - {table: fin.invoice_line, column: qty, source_type: "NUMBER(5)", target_type: "NUMBER(5,0)", source_stats: {max_scale: 0}}
+    expect_issues: [OR-02]
+
+  - id: TC-OR-03-101
+    issue_id: OR-03
+    kind: profile
+    description: DATE column with time-of-day values mapped to DATE
+    source_sql: ""
+    profile:
+      columns:
+        - {table: sales.orders, column: order_dt, source_type: DATE, target_type: DATE, source_stats: {has_time_component: true}}
+    expect_issues: [OR-03]
+
+  - id: TC-OR-04-101
+    issue_id: OR-04
+    kind: detector
+    description: Package with state and an autonomous logging procedure
+    source_sql: |
+      CREATE OR REPLACE PACKAGE BODY etl_pkg AS
+        g_batch_id NUMBER(10);
+        PROCEDURE log_msg(p_msg VARCHAR2) IS
+          PRAGMA AUTONOMOUS_TRANSACTION;
+        BEGIN
+          INSERT INTO etl_log VALUES (g_batch_id, p_msg);
+          COMMIT;
+        END;
+      END etl_pkg;
+    expect_issues: [OR-04, XD-12]
+
+  - id: TC-OR-05-101
+    issue_id: OR-05
+    kind: detector
+    description: BULK COLLECT and FORALL loops
+    source_sql: |
+      DECLARE
+        TYPE t_ids IS TABLE OF NUMBER(10);
+        l_ids t_ids;
+      BEGIN
+        SELECT order_id BULK COLLECT INTO l_ids FROM sales.orders;
+        FORALL i IN 1 .. l_ids.COUNT
+          UPDATE sales.orders SET status = 'X' WHERE order_id = l_ids(i);
+      END;
+    expect_issues: [OR-05]
+
+  - id: TC-OR-06-101
+    issue_id: OR-06
+    kind: detector
+    description: Legacy (+) outer join
+    source_sql: |
+      SELECT o.order_id, c.name FROM sales.orders o, crm.customer c
+      WHERE o.customer_id = c.customer_id (+);
+    expect_issues: [OR-06]
+
+  - id: TC-OR-07-101
+    issue_id: OR-07
+    kind: detector
+    description: Audit trigger
+    source_sql: |
+      CREATE OR REPLACE TRIGGER trg_orders_audit
+      BEFORE UPDATE ON sales.orders FOR EACH ROW
+      BEGIN
+        :NEW.updated_at := SYSDATE;
+      END;
+    expect_issues: [OR-07]
+
+  - id: TC-OR-08-101
+    issue_id: OR-08
+    kind: detector
+    description: TO_CHAR with an explicit format model is not NLS-dependent
+    source_sql: |
+      SELECT TO_CHAR(order_dt, 'YYYY-MM-DD') FROM sales.orders;
+    expect_issues: []
+    expect_absent: [OR-08]
+
+  - id: TC-OR-09-101
+    issue_id: OR-09
+    kind: detector
+    description: LOB, LONG and XMLTYPE columns
+    source_sql: |
+      CREATE TABLE doc.store (doc_id NUMBER(10), body CLOB, legacy_notes LONG, meta XMLTYPE);
+    expect_issues: [OR-09]
+
+  - id: TC-OR-10-101
+    issue_id: OR-10
+    kind: profile
+    description: Exadata smart scan and HCC in use
+    source_sql: ""
+    profile:
+      platform: {features: [smart_scan, hcc]}
+    expect_issues: [OR-10]
+
+  - id: TC-OR-11-101
+    issue_id: OR-11
+    kind: profile
+    description: Diagnostics Pack used without a licence
+    source_sql: ""
+    profile:
+      platform: {diagnostics_pack_used: true, licensed_options: []}
+    expect_issues: [OR-11]

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="snapshot-id" content="{{SNAPSHOT_ID}}">
+<meta name="rubric-version" content="{{RUBRIC_VERSION}}">
+<title>{{PACKAGE_D_NAME}} — {{ACCOUNT_NAME}} — {{PRODUCT_NAME}}</title>
+<style>
+  :root { --primary: {{COLOR_PRIMARY}}; --accent: {{COLOR_ACCENT}}; --warn: {{COLOR_WARN}}; --danger: {{COLOR_DANGER}};
+          --surface: {{COLOR_SURFACE}}; --text: {{COLOR_TEXT}}; }
+  body { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: var(--text); background: var(--surface);
+         margin: 0; line-height: 1.45; }
+  header { background: var(--primary); color: var(--surface); padding: 24px 40px; }
+  header h1 { margin: 0 0 4px 0; font-size: 26px; }
+  header .meta { font-size: 13px; opacity: .85; }
+  main { padding: 24px 40px 60px 40px; max-width: 1200px; }
+  h2 { color: var(--primary); border-bottom: 2px solid var(--accent); padding-bottom: 4px; margin-top: 36px; }
+  h3 { color: var(--primary); margin-bottom: 4px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 8px 0 16px 0; }
+  th { background: var(--primary); color: var(--surface); text-align: left; padding: 6px 8px; }
+  td { border-bottom: 1px solid var(--primary); padding: 6px 8px; vertical-align: top; opacity: .95; }
+  .kpis { display: flex; gap: 16px; flex-wrap: wrap; }
+  .kpi { border-left: 6px solid var(--accent); background: var(--surface); padding: 10px 16px; min-width: 180px;
+         box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .kpi .v { font-size: 26px; font-weight: 700; color: var(--primary); }
+  .kpi .l { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .score-1, .score-2 { color: var(--danger); font-weight: 700; }
+  .score-3 { color: var(--warn); font-weight: 700; }
+  .score-4, .score-5 { color: var(--accent); font-weight: 700; }
+  .finding { border: 1px solid var(--primary); border-left: 6px solid var(--accent); padding: 10px 14px; margin: 12px 0; }
+  .finding.review { border-left-color: var(--warn); }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 6px; margin-right: 4px; border: 1px solid var(--primary); }
+  code, pre { font-family: Menlo, Consolas, monospace; font-size: 12px; }
+  pre { background: var(--surface); border: 1px solid var(--primary); padding: 8px; overflow-x: auto; }
+  footer { font-size: 12px; padding: 16px 40px; border-top: 1px solid var(--primary); }
+</style>
+</head>
+<body>
+<header>
+  <h1>{{PACKAGE_D_NAME}} — {{ACCOUNT_NAME}}</h1>
+  <div class="meta">{{COMPANY_NAME}} · Snapshot {{SNAPSHOT_ID}} · Rubric {{RUBRIC_VERSION}} · Catalogue {{CATALOGUE_HASH}} ·
+    Tier {{TIER}} · Window {{WINDOW}}</div>
+</header>
+<main>
+  <h2>Executive summary</h2>
+  {{SUMMARY}}
+
+  <h2>{{HEALTH_INDEX_NAME}} and scorecard</h2>
+  {{SCORECARD}}
+
+  <h2>Recommended next steps</h2>
+  {{RECOMMENDATIONS}}
+
+  <h2>Findings by domain</h2>
+  {{FINDINGS}}
+
+  <h2>Method</h2>
+  {{METHOD}}
+
+  <h2>Assumptions</h2>
+  {{ASSUMPTIONS}}
+
+  <h2>Evidence appendix</h2>
+  {{EVIDENCE}}
+</main>
+<footer>{{PRODUCT_NAME}} · {{PACKAGE_D_NAME}} · generated from sealed snapshot {{SNAPSHOT_ID}} with rubric {{RUBRIC_VERSION}} ·
+  questions: {{SUPPORT_EMAIL}}</footer>
+</body>
+</html>

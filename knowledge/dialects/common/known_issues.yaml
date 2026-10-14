@@ -1,0 +1,98 @@
+dialect: common
+version: 1.0.0
+description: >
+  Cross-source semantic-drift issues (Section 10.13 checklist items not owned by a single
+  dialect register). Each entry lists the source dialects it applies to.
+known_issues:
+  - id: XD-07
+    source_dialect: common
+    applies_to: [teradata, sqlserver]
+    title: String sort order and MIN/MAX follow a case-insensitive collation in the source
+    severity: S1
+    checklist_items: [7]
+    symptoms:
+      - "ORDER BY returns 'Banana' before 'apple'; MIN/MAX on strings return different values"
+    detection:
+      type: static
+      static_rule: "ORDER BY, MIN(), MAX() over character columns in sources whose default collation is case-insensitive"
+      detector: static.string_collation_order
+    fix_patterns:
+      - id: FX-XD-07-A
+        description: "Order and aggregate on a case-folded key: ORDER BY UPPER(col), col; MIN_BY(col, UPPER(col)) / MAX_BY(col, UPPER(col)); or COLLATE 'en-ci'"
+        applies_when: "Source collation is case-insensitive"
+    tests: [TC-XD-07-001]
+    validation_normalisation: "L4 result diffs compare ordered results; case-only diffs cluster to the collation issue"
+    mismatch_signatures: [case_only]
+    decision_required: true
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-migration
+
+  - id: XD-08
+    source_dialect: common
+    applies_to: [oracle, sqlserver, netezza, redshift]
+    title: Nondeterministic UPDATE ... FROM / MERGE with multi-match sources
+    severity: S1
+    checklist_items: [8]
+    symptoms:
+      - "Updated values differ between runs; MERGE fails with duplicate-row errors"
+    detection:
+      type: static
+      static_rule: "UPDATE ... FROM joins and MERGE statements whose source may be non-unique on the join key"
+      detector: static.update_from_join
+      extra_detectors: [profile.update_source_uniqueness]
+    fix_patterns:
+      - id: FX-XD-08-A
+        description: "Pre-aggregate or dedupe the source to one row per target key before UPDATE/MERGE"
+        applies_when: "Always for multi-match sources"
+    tests: [TC-XD-08-001]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-migration
+
+  - id: XD-10
+    source_dialect: common
+    applies_to: [teradata, oracle, sqlserver, netezza, redshift]
+    title: Floating-point aggregation order makes exact reconciliation fail
+    severity: S2
+    checklist_items: [10]
+    symptoms:
+      - "SUM/AVG over FLOAT columns differ in the last digits between engines and between runs"
+    detection:
+      type: static
+      static_rule: "FLOAT/REAL/DOUBLE/BINARY_DOUBLE columns or casts that feed SUM/AVG"
+      detector: static.float_aggregation
+    fix_patterns:
+      - id: FX-XD-10-A
+        description: "Use NUMBER(p,s) for monetary/exact measures; reconcile FLOAT aggregates with rubric.validation.thresholds.*.l2_float_rel_tolerance"
+        applies_when: "Always"
+    tests: [TC-XD-10-101]
+    validation_normalisation: "Relative tolerance for FLOAT aggregates in L2 (rubric)"
+    mismatch_signatures: [float_precision]
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-migration
+
+  - id: XD-12
+    source_dialect: common
+    applies_to: [teradata, oracle, sqlserver, netezza, redshift]
+    title: Transaction and commit semantics in procedures (autocommit, DDL implicit commits)
+    severity: S2
+    checklist_items: [12]
+    symptoms:
+      - "Partial results persist after failures; DDL inside a transaction commits earlier work"
+    detection:
+      type: static
+      static_rule: "BEGIN TRAN/BT, COMMIT/ET, ROLLBACK, SET IMPLICIT_TRANSACTIONS, DDL inside procedure bodies"
+      detector: static.transaction_semantics
+    fix_patterns:
+      - id: FX-XD-12-A
+        description: "Explicit BEGIN/COMMIT in Snowflake Scripting; move DDL out of transactional units (DDL commits implicitly)"
+        applies_when: "Always"
+    tests: [TC-XD-12-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-migration

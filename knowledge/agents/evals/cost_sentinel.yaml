@@ -1,0 +1,58 @@
+# Golden incidents for the Cost Sentinel. Run on every prompt/model/code change; regression blocks promotion.
+agent_id: AG-COST-SENTINEL
+version: 1.0.0
+cases:
+  - id: EVAL-COST-001
+    description: A 3x compute spike on the data-science warehouse is flagged and explained by its query signature.
+    telemetry:
+      synthetic:
+        profile: seeded
+        anomalies:
+          - {date: "2026-09-28", warehouse: WH_DS, factor: 3.0}
+          - {date: "2026-09-24", warehouse: WH_AGENTS, factor: 4.0}
+    expect:
+      findings:
+        - kind: anomaly
+          subject: WH_DS
+          detail: {day: "2026-09-28", top_contributors: [{signature: qh_ds_features}]}
+        - kind: anomaly
+          subject: WH_AGENTS
+          detail: {day: "2026-09-24"}
+      absent_findings:
+        - {kind: anomaly, subject: WH_ELT_PROD}
+        - {kind: anomaly, subject: WH_BI_PROD}
+        - {kind: anomaly, subject: WH_BI_ADHOC}
+
+  - id: EVAL-COST-002
+    description: A normal month raises no anomalies (false-positive control) and still forecasts month-end.
+    telemetry:
+      synthetic: {profile: seeded}
+    expect:
+      findings:
+        - {kind: forecast, subject: "2026-10"}
+      absent_findings:
+        - {kind: anomaly}
+
+  - id: EVAL-COST-003
+    description: Mid-month forecast lands within 3% of the actual month (6,674 credits billed in 2026-09).
+    telemetry:
+      synthetic: {profile: seeded}
+      as_of: "2026-09-15T23:59:59"
+    expect:
+      findings:
+        - kind: forecast
+          subject: "2026-09"
+          detail: {forecast: {between: [6474, 6874]}, low: {between: [0, 6674]}, high: {between: [6674, 100000]}}
+
+  - id: EVAL-COST-004
+    description: Recommendations stay at L1 — the sentinel drafts no changes.
+    telemetry:
+      synthetic:
+        profile: seeded
+        anomalies:
+          - {date: "2026-09-28", warehouse: WH_DS, factor: 3.0}
+          - {date: "2026-09-24", warehouse: WH_AGENTS, factor: 4.0}
+    expect:
+      findings:
+        - {kind: anomaly, subject: WH_DS, recommendation: {contains: qh_ds_features}}
+      max_actions: 0

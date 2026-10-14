@@ -1,0 +1,19 @@
+namespace: patterns
+version: 1.0.0
+description: >
+  Pattern Library and semantic-drift checker policy. Detector strengths are mapped to
+  confidence values here so detectors never carry numeric confidences in code.
+calibration:
+  - date: "2026-10-01"
+    note: Initial values from practice-lead review of the Section 10 known-issue register.
+values:
+  detector_confidence:
+    strong: 0.92        # unambiguous construct (e.g. CREATE SET TABLE, (+) join, NOT CASESPECIFIC)
+    medium: 0.78        # reliable indicator, but the effect depends on data or session settings
+    weak: 0.55          # heuristic; operand types or settings cannot be known from code alone
+  scan:
+    snippet_max_chars: 160
+    min_confidence_default: 0.0
+  profile:
+    view_depth_max: 5                 # TD-07: deeper view stacks are flagged
+    end_of_support_horizon_days: 730  # NZ-06: end of support inside this window raises deadline risk

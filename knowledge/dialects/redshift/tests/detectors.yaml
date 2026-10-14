@@ -1,0 +1,46 @@
+dialect: redshift
+description: Detector and profile tests for the Redshift register.
+test_cases:
+  - id: TC-RS-01-101
+    issue_id: RS-01
+    kind: detector
+    description: Quoted mixed-case identifiers
+    source_sql: |
+      CREATE TABLE "Sales"."OrderLines" ("lineId" INTEGER, amount DECIMAL(12,2));
+      SELECT amount FROM sales.orders;
+    expect_issues: [RS-01]
+    expect_lines: {RS-01: [1]}
+
+  - id: TC-RS-02-101
+    issue_id: RS-02
+    kind: profile
+    description: Multibyte data where byte length differs from character length
+    source_sql: ""
+    profile:
+      columns:
+        - {table: crm.customer, column: name, source_type: VARCHAR(30), target_type: VARCHAR(30), source_stats: {max_byte_length: 30, max_char_length: 18}}
+    expect_issues: [RS-02]
+
+  - id: TC-RS-03-101
+    issue_id: RS-03
+    kind: detector
+    description: Late-binding view
+    source_sql: |
+      CREATE VIEW rpt.v_orders AS SELECT * FROM spectrum.orders WITH NO SCHEMA BINDING;
+    expect_issues: [RS-03]
+
+  - id: TC-RS-04-101
+    issue_id: RS-04
+    kind: detector
+    description: UNLOAD to S3
+    source_sql: |
+      UNLOAD ('SELECT * FROM sales.orders') TO 's3://bucket/orders_' IAM_ROLE 'arn:aws:iam::123:role/x' PARQUET;
+    expect_issues: [RS-04]
+
+  - id: TC-RS-05-101
+    issue_id: RS-05
+    kind: detector
+    description: DISTKEY/SORTKEY clauses
+    source_sql: |
+      CREATE TABLE sales.fact (id INTEGER ENCODE az64, d DATE) DISTSTYLE KEY DISTKEY (id) SORTKEY (d);
+    expect_issues: [RS-05]

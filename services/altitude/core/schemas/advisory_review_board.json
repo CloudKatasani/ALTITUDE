@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Architecture Review Board lenses",
+  "x-altitude-globs": ["advisory/review_board.yaml"],
+  "type": "object",
+  "required": ["lenses"],
+  "properties": {
+    "lenses": {"type": "array", "minItems": 7, "items": {
+      "type": "object", "required": ["id", "name", "weight", "key_question", "concerns"], "additionalProperties": false,
+      "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "weight": {"type": "number", "minimum": 0},
+        "key_question": {"type": "string"},
+        "concerns": {"type": "array", "items": {"type": "object", "required": ["when", "concern", "blocking"],
+          "additionalProperties": false,
+          "properties": {"when": {"type": "string"}, "concern": {"type": "string"}, "blocking": {"type": "boolean"}}}}}}}
+  }
+}

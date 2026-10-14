@@ -1,0 +1,41 @@
+name: run_diagnostic
+description: 'Run the Package D diagnostic engine on a sealed Snowflake snapshot: Platform Health Index, prioritised suggestions
+  with value, persisted lifecycle and the tier''s exports.'
+permission: run
+entrypoint: altitude.skills.impl_diagnostics:run_diagnostic
+input_schema:
+  type: object
+  properties:
+    snapshot_id:
+      type: string
+      minLength: 3
+      description: snapshot id registered in the store, or a sealed .duckdb path
+    tier:
+      enum:
+      - D0
+      - D1
+      - D2
+      - D3
+    formats:
+      type: array
+      items:
+        enum:
+        - suggestions_json
+        - evidence_json
+        - findings_csv
+        - findings_xlsx
+        - jira_csv
+        - ado_csv
+        - pr_pack
+        - report_html
+        - deck_pptx
+        - savings_xlsx
+    tenant_id:
+      type: string
+    engagement_id:
+      type: string
+    theme:
+      type: string
+  required:
+  - snapshot_id
+  additionalProperties: false

@@ -1,0 +1,89 @@
+namespace: obs
+version: 1.0.0
+description: >
+  Package O (Platform Observability) thresholds: harvest freshness SLAs, billing reconciliation
+  tolerance, anomaly forecast band, alert thresholds, ask-the-platform grounding and the
+  suggestion-to-value measurement windows. Application code reads these by reference only.
+values:
+  freshness:                       # hours since last successful harvest / KPI refresh (Section 7.8)
+    cost: 6
+    performance: 6
+    reliability: 2
+    security: 24
+    governance: 24
+    usage: 24
+    ai: 24
+    reference: 168                 # slowly-changing reference data (client inputs, BI metadata)
+  harvest:
+    success_target: 0.99           # >= 99% of scheduled runs per month succeed
+    incremental_overlap_hours: 48  # re-read this much behind the watermark (late-arriving ACCOUNT_USAGE rows)
+  reconciliation:
+    credits_tolerance_pct: 0.5     # cost KPIs vs METERING_DAILY_HISTORY credits billed (percent, per account-month)
+    daily_tolerance_pct: 1.0       # per account-day tolerance
+  anomaly:                         # forecast band = baseline mean +/- max(k * stdev, min_band_pct * mean)
+    lookback_days: 28
+    min_history_points: 3
+    band_stdevs: 3.0
+    min_band_pct: 0.25
+    min_abs_credits: 5.0           # ignore spikes smaller than this (credits/day) on tiny warehouses
+    min_abs_cortex_credits: 0.5
+    min_abs_regression_ms: 5000    # signature regressions smaller than this (ms) are noise
+  alerts:
+    budget_breach_ratio: 1.0       # forecast month total / monthly budget
+    budget_warn_ratio: 0.9
+    accountadmin_daily_max: 1      # ACCOUNTADMIN sessions per day above which the break-glass alert fires
+    new_user_window_days: 7
+    task_failure_lookback_hours: 24
+    failed_logins_daily_max: 5
+  idle_share_alert: 0.35           # referenced by KPI-COST-007 (Section 7.4 example)
+  security:
+    dormant_user_days: 90          # no successful login for this long = dormant (KPI-SEC-004)
+  usage:
+    unused_object_days: 90         # no recorded access for this long = unused (KPI-USE-003)
+  performance:
+    long_query_seconds: 600        # KPI-PERF-011
+  kpi_targets:                     # RAG targets used by dashboards and the observed health index
+    mfa_coverage_min: 1.0
+    accountadmin_max: 3
+    network_policy_coverage_min: 1.0
+    task_success_min: 0.98
+    freshness_attainment_min: 0.95
+    tag_coverage_min: 0.9
+    owner_coverage_min: 1.0
+    masking_coverage_min: 1.0
+    dmf_coverage_min: 1.0
+    idle_share_max: 0.2              # well-run estates keep idle compute under ~20%
+    cache_hit_min: 0.2
+    pruning_efficiency_min: 0.8
+    spill_gb_daily_max: 50
+    queued_seconds_daily_max: 60
+    dormant_users_max: 0
+    unused_objects_max: 0
+    amber_band: 0.1                # within 10% of the target counts as amber
+  health_index:                    # observed Platform Health Index (KPI-PHI-001) — weights by WAF pillar
+    pillar_weights:
+      cost_optimization: 0.25
+      performance_efficiency: 0.2
+      reliability: 0.2
+      security_governance: 0.25
+      operational_excellence: 0.1
+    scale: 100
+  agent:
+    min_match_score: 0.34          # below this the agent refuses (ungrounded)
+    default_window_days: 7
+    max_citation_rows: 25
+    confidence_floor: 0.5
+  value:                           # suggestion-to-value loop (Section 7.12)
+    before_days: 14
+    settle_days: 1
+    after_days: 14
+    min_improvement_pct: 5.0       # relative improvement on a watched KPI that counts as realised
+    min_coverage: 0.7              # share of window days with KPI data required to measure
+    annualisation_days: 365
+  dashboard:
+    pillar_red_below: 50           # Health Index pillar bands on dashboard 2 (0-100 scale)
+    pillar_amber_below: 75
+  routing:
+    test_interval_days: 31         # routing is tested monthly
+  chargeback:
+    unallocated_label_max_share: 0.05   # Section 7.11: >= 95% of spend attributed to a cost centre

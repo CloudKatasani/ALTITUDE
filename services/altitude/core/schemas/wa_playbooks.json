@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Remediation playbooks",
+  "x-altitude-globs": ["playbooks/*.yaml"],
+  "type": "object",
+  "required": ["version", "playbooks"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "playbooks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "summary", "steps", "verification", "risk", "effort_hours"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^PB-[A-Z0-9-]+$"},
+          "title": {"type": "string"},
+          "summary": {"type": "string"},
+          "steps": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "remediation_sql": {"type": "string"},
+          "rollback_sql": {"type": "string"},
+          "verification": {"type": "string"},
+          "agent": {
+            "type": "object", "required": ["agent_id", "action_type"], "additionalProperties": false,
+            "properties": {"agent_id": {"type": "string", "pattern": "^AG-[A-Z0-9-]+$"},
+                           "action_type": {"type": "string"}}
+          },
+          "risk": {"enum": ["low", "medium", "high"]},
+          "effort_hours": {"type": "number", "minimum": 0}
+        }
+      }
+    }
+  }
+}

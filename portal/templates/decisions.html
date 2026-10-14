@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ theme.REVIEW_BOARD_NAME }} decisions</h1>
+{% for d in decisions %}
+<section class="card">
+  <h2>{{ d.title }} <small class="muted">{{ d.decision_id }} · {{ d.status }}</small></h2>
+  <p><b>Recommendation:</b> {{ d.recommendation }} {% if d.evidence_refs %}· evidence {{ d.evidence_refs|join(", ") }}{% endif %}</p>
+  <table><thead><tr><th>Lens</th><th>Vote</th><th>Concerns</th></tr></thead><tbody>
+  {% for l in d.perspectives.lenses %}<tr><td>{{ l.name }}</td><td class="vote {{ l.vote }}">{{ l.vote }}</td>
+  <td>{% for c in l.concerns %}{{ c.concern }}{% if c.blocking %} (blocking){% endif %}<br>{% endfor %}</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+{% else %}<p class="muted">No decisions recorded yet.</p>{% endfor %}
+{% endblock %}

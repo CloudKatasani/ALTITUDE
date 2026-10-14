@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts" DTS:ObjectName="LoadStaging" DTS:ExecutableType="Microsoft.Package">
+  <DTS:Executables>
+    <DTS:Executable DTS:refId="Package\Truncate staging" DTS:ObjectName="Truncate staging" DTS:ExecutableType="Microsoft.ExecuteSQLTask">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask" SQLTask:Connection="SalesDW" SQLTask:SqlStatementSource="TRUNCATE TABLE stg.Customer_Load; TRUNCATE TABLE stg.Sales_Load" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\Load customers" DTS:ObjectName="Load customers" DTS:ExecutableType="Microsoft.Pipeline">
+      <DTS:ObjectData>
+        <pipeline version="1">
+          <components>
+            <component refId="OLTP Customers" componentClassID="Microsoft.OLEDBSource" name="OLTP Customers">
+              <properties>
+                <property dataType="System.String" name="SqlCommand">SELECT CustomerCode, CustomerName, Segment, Email, Phone, PostalCode, Country FROM CRM.dbo.Customers WHERE ModifiedDate &gt;= DATEADD(day, -1, GETDATE())</property>
+              </properties>
+            </component>
+            <component refId="Staging Customers" componentClassID="Microsoft.OLEDBDestination" name="Staging Customers">
+              <properties>
+                <property dataType="System.String" name="OpenRowset">[stg].[Customer_Load]</property>
+              </properties>
+            </component>
+          </components>
+        </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\Load sales" DTS:ObjectName="Load sales" DTS:ExecutableType="Microsoft.Pipeline">
+      <DTS:ObjectData>
+        <pipeline version="1">
+          <components>
+            <component refId="POS Sales" componentClassID="Microsoft.OLEDBSource" name="POS Sales">
+              <properties>
+                <property dataType="System.String" name="SqlCommand">SELECT * FROM POS.dbo.SalesTransactions</property>
+              </properties>
+            </component>
+            <component refId="Staging Sales" componentClassID="Microsoft.OLEDBDestination" name="Staging Sales">
+              <properties>
+                <property dataType="System.String" name="OpenRowset">[stg].[Sales_Load]</property>
+              </properties>
+            </component>
+          </components>
+        </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+</DTS:Executable>

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Package D tiers (scope as data)",
+  "x-altitude-globs": ["diagnostics/tiers.yaml"],
+  "type": "object",
+  "required": ["version", "tiers"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "tiers": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "tier", "name", "domains", "top_findings", "exports"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^TIER-D[0-9]$"},
+          "tier": {"type": "string", "pattern": "^D[0-9]$"},
+          "name": {"type": "string"},
+          "domains": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^D([1-9]|10)$"}},
+          "top_findings": {"type": ["integer", "null"], "minimum": 1},
+          "max_accounts": {"type": ["integer", "null"], "minimum": 1},
+          "duration_weeks": {"type": "integer", "minimum": 1},
+          "exports": {
+            "type": "array",
+            "items": {"enum": ["suggestions_json", "evidence_json", "findings_csv", "findings_xlsx", "jira_csv", "ado_csv",
+                               "pr_pack", "report_html", "deck_pptx", "savings_xlsx"]}
+          }
+        }
+      }
+    }
+  }
+}

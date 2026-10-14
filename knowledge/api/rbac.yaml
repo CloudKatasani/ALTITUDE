@@ -1,0 +1,20 @@
+# Portal/API roles (Section 29) and the permissions each holds. Checked on every request.
+roles:
+  exec:
+    description: Client executive — reads outcomes, decides gates and board recommendations
+    permissions: [read, decide:gate, decide:board]
+  delivery_lead:
+    description: Delivery lead — runs engagements, reviews AI output, approves changes
+    permissions: [read, run, review, approve, decide:board, decide:gate, admin:engagement]
+  engineer:
+    description: Engineer — runs diagnostics/conversions and drafts changes
+    permissions: [read, run, review]
+  steward:
+    description: Data steward — approves classifications, KPI definitions and deviations
+    permissions: [read, review, approve:data]
+  client_viewer:
+    description: Read-only client stakeholder
+    permissions: [read]
+  partner_admin:
+    description: Partner edition administrator (white-label, tenants)
+    permissions: [read, run, review, approve, admin:engagement, admin:tenant, admin:theme]

@@ -1,0 +1,22 @@
+# Go/no-go evidence pack (Section 13.2): sections and the cutover_go gate criteria (Appendix C).
+# Criteria use the Appendix C shape: {metric, op, ref | value}.
+criteria:
+  - {metric: tier1_l3_mismatches_unaccepted, op: "==", value: 0}
+  - {metric: consecutive_clean_parallel_cycles, op: ">=", ref: rubric.cutover.parallel_cycles_min}
+  - {metric: rollback_rehearsed, op: "==", value: true}
+  - {metric: grants_mapped_pct, op: "==", value: 100}
+  - {metric: open_s1_defects, op: "==", value: 0}
+  - {metric: uat_signoffs_missing, op: "==", value: 0}
+  - {metric: performance_sla_breaches, op: "==", value: 0}
+sections:
+  - {id: reconciliation, title: "Reconciliation status per table tier"}
+  - {id: performance, title: "Performance results vs SLA"}
+  - {id: security, title: "Security parity (legacy grants mapped or retired)"}
+  - {id: operations, title: "Runbook, on-call and agent fleet readiness"}
+  - {id: rollback, title: "Rollback plan and rehearsal"}
+  - {id: business, title: "UAT sign-offs and open defects"}
+strategies:
+  big_bang: "Full dress rehearsal x2, rollback window, freeze"
+  phased: "Domain-level go/no-go, reverse feeds for unmigrated consumers"
+  parallel_run: "Daily automated L4 parity; exit = N consecutive clean cycles incl. one month-end"
+  consumer_by_consumer: "Connection registry; virtualisation layer during transition"

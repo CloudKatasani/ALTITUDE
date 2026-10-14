@@ -1,0 +1,21 @@
+# Package O runbook (Section 7.6) — referenced by knowledge/observability/alerts.yaml
+id: RB-PERF-REGRESSION
+title: Query-signature performance regression
+alert_classes:
+- signature_regression
+owner_role: PLATFORM_OWNER
+autonomy: L1
+linked_kpis:
+- KPI-PERF-007
+- KPI-PERF-001
+- KPI-PERF-003
+linked_checks:
+- DX-PERF-04
+- DX-PERF-02
+steps:
+- action: Compare the signature's execution time, bytes scanned, spill and pruning before and on the regression
+    day.
+- action: Check data volume growth, plan changes, warehouse size or behaviour-change bundle enablement.
+- action: Fix with a rewrite, clustering or sizing change plus the before/after test pack.
+escalation: Owning engineering team when the signature feeds a Tier-1 dashboard.
+verification: Signature execution time back within the forecast band for three days.

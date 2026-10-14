@@ -1,0 +1,255 @@
+namespace: diagnostics
+version: 1.0.0
+description: >
+  Package D (Platform Deep Diagnostics): every threshold, factor, weight and band used by the
+  check catalogue (knowledge/diagnostics/checks/*.yaml), the suggestion engine, the scorecard and
+  the access bootstrap. Detectors bind these by reference (threshold_ref) — never as literals.
+calibration:
+  - date: "2026-10-01"
+    sample_size: 0
+    note: "Initial values from Section 6/14 guidance; recalibrate after the first 10 engagements."
+values:
+  units:
+    days_per_year: 365
+    days_per_month: 30
+    months_per_year: 12
+    minutes_per_hour: 60
+    ms_per_second: 1000
+    ms_per_hour: 3600000
+    bytes_per_gb: 1073741824
+    bytes_per_tb: 1099511627776
+
+  window:
+    target_days: 90                 # evidence window regarded as complete for confidence
+    max_recursion_depth: 64         # guard for recursive dependency walks
+
+  pricing:
+    default_price_per_credit: 3.0   # used only when the contract price is missing (confidence is penalised)
+    default_storage_price_per_tb_month: 23.0
+
+  warehouse_size_credits:           # credits per hour per cluster (Snowflake standard warehouses)
+    XSMALL: 1
+    SMALL: 2
+    MEDIUM: 4
+    LARGE: 8
+    XLARGE: 16
+    XXLARGE: 32
+    XXXLARGE: 64
+    X4LARGE: 128
+
+  access:
+    credit_budget: 50               # credit cap for the diagnostics warehouse resource monitor
+    statement_timeout_seconds: 3600
+    auto_suspend_seconds: 60
+    notify_at_percent: 75
+    suspend_at_percent: 100
+
+  confidence:
+    base:
+      high: 0.92
+      medium: 0.86
+      low: 0.74
+    completeness_floor: 0.6         # multiplier applied when no supporting evidence is present
+    missing_input_penalty: 1.0      # weight of a missing client input relative to a missing table
+
+  severity_weight:
+    critical: 4
+    high: 3
+    medium: 2
+    low: 1
+
+  effort:
+    hours_p50:
+      XS: 2
+      S: 6
+      M: 16
+      L: 40
+      XL: 80
+    per_extra_object_hours: 1
+
+  priority:
+    high_value_usd: 20000
+    high_risk_score: 12
+    low_effort_hours_max: 16
+    usd_per_risk_point: 2000        # converts a risk-reduction point into a comparable value for ranking
+
+  alerts:
+    schedule_minutes: 60            # evaluation interval for drafted Snowflake alerts
+
+  risk:
+    residual_likelihood: 1          # likelihood once the remediation is in place
+
+  scorecard:
+    failing_check_credit_max: 0.5   # a failing check never contributes more than this share of its weight
+    bands:                          # raw (0..1) -> maturity 1..5 (Initial..Optimised); first match wins
+      - {min: 0.9, score: 5, label: Optimised}
+      - {min: 0.75, score: 4, label: Managed}
+      - {min: 0.55, score: 3, label: Defined}
+      - {min: 0.35, score: 2, label: Developing}
+      - {min: 0.0, score: 1, label: Initial}
+    domain_weights:
+      d1: 0.16
+      d2: 0.12
+      d3: 0.12
+      d4: 0.14
+      d5: 0.10
+      d6: 0.08
+      d7: 0.07
+      d8: 0.07
+      d9: 0.08
+      d10: 0.06
+
+  recommender:
+    finops_min_checks: 2
+    security_min_critical: 1
+    bi_min_checks: 2
+    ai_domain_score_max: 2
+    reliability_min_checks: 2
+    legacy_min_sources: 1
+
+  # ------------------------------------------------------------------ per-check thresholds & factors
+  checks:
+    cost_01:
+      idle_share_min: 0.6
+      auto_suspend_max_seconds: 60
+      recoverable_idle_share: 0.7
+      conservative_factor: 0.6
+    cost_02:
+      min_size_credits: 4
+      exec_quantile: 0.95
+      max_p95_exec_ms: 10000
+      max_avg_queued_load: 0.05
+      downsize_realisation: 0.8
+      conservative_factor: 0.5
+    cost_03:
+      min_repeat_executions: 500
+      max_result_reuse_share: 0.2
+      achievable_reuse_share: 0.8
+      dynamic_table_target_lag: "1 hour"
+      conservative_factor: 0.5
+    cost_04:
+      min_reload_day_share: 0.5
+      min_bytes_rewritten: 107374182400   # 100 GB per reload
+      incremental_saving_share: 0.85
+      conservative_factor: 0.5
+    cost_05:
+      min_monthly_credits: 100
+      max_reads_per_credit: 1
+      removal_share: 0.9
+      conservative_factor: 0.6
+    cost_06:
+      staging_max_retention_days: 1
+      stale_clone_days: 180
+      min_wasted_bytes: 10737418240       # 10 GB
+      realisation: 1.0
+      conservative_factor: 0.7
+    cost_07: {}
+    cost_08:
+      max_commit_variance: 0.15
+      recoverable_over_commit_share: 0.5
+      overage_premium_share: 0.2
+      capacity_notify_percents: [50, 75, 90]
+      conservative_factor: 0.5
+    perf_01:
+      queued_load_min: 0.5
+      min_queued_hours: 10
+      target_max_cluster_count: 3
+    perf_02:
+      min_avg_remote_spill_bytes: 1073741824      # 1 GB per execution
+      min_avg_local_spill_bytes: 53687091200      # 50 GB per execution
+      spill_runtime_reduction: 0.4
+      conservative_factor: 0.5
+    perf_03:
+      min_partitions_total: 10000
+      poor_pruning_ratio: 0.8
+      min_table_bytes: 1099511627776              # 1 TB
+      min_poor_pruning_scans: 100
+      scan_reduction_share: 0.7
+      clustering_credits_per_tb_month: 2
+      conservative_factor: 0.5
+    perf_04:
+      top_n_signatures: 10
+      exploding_rows_min: 100000000
+      min_anti_patterns: 2
+      expected_reduction: 0.5
+      conservative_factor: 0.4
+    rel_01:
+      max_failure_rate: 0.05
+      min_failures: 3
+      incident_hours: 2
+      hourly_rate_usd: 150
+      conservative_factor: 0.5
+      auto_retry_attempts: 2
+    rel_02:
+      max_miss_rate: 0.05
+    rel_03:
+      min_recurring_days: 20
+    rel_04:
+      max_rpo_hours_requiring_dr: 24
+      schedule_share_of_rpo: 0.5
+    sec_01: {}
+    sec_02:
+      max_accountadmin_grantees: 2
+      max_accountadmin_usage_day_share: 0.1
+    sec_03:
+      dormant_days: 90
+    sec_04: {}
+    sec_05: {}
+    gov_01: {}
+    gov_02: {}
+    gov_03:
+      unused_days: 180
+      realisation: 1.0
+      conservative_factor: 0.7
+    ops_01:
+      min_iac_share: 0.8
+      min_ddl_statements: 3
+    ops_02:
+      credit_spike_factor: 1.5
+      baseline_days: 28
+    arch_01:
+      max_view_depth: 5
+      min_size_similarity: 0.95
+      materialisation_saving: 0.3
+      conservative_factor: 0.5
+    bi_01:
+      retire_view_share_max: 0.1
+      support_cost_per_report_usd: 1200
+      conservative_factor: 0.5
+    bi_02: {}
+    bi_03:
+      max_cost_per_view_usd: 5
+      refresh_reduction_share: 0.9
+      conservative_factor: 0.6
+    ai_01: {}
+    ai_02:
+      max_personal_usage_share: 0.2
+      uncontrolled_spend_share: 0.3
+      budget_headroom: 0.25
+      conservative_factor: 0.5
+    ai_03:
+      min_comment_coverage: 0.8
+
+  # ------------------------------------------------------------------ risk model (likelihood x impact, 1..5 each)
+  risk_model:
+    cost_07: {likelihood: 4, impact: 2}
+    perf_01: {likelihood: 4, impact: 3}
+    rel_01: {likelihood: 4, impact: 4}
+    rel_02: {likelihood: 4, impact: 4}
+    rel_03: {likelihood: 3, impact: 4}
+    rel_04: {likelihood: 2, impact: 5}
+    sec_01: {likelihood: 4, impact: 5}
+    sec_02: {likelihood: 3, impact: 5}
+    sec_03: {likelihood: 3, impact: 3}
+    sec_04: {likelihood: 3, impact: 4}
+    sec_05: {likelihood: 3, impact: 5}
+    gov_01: {likelihood: 3, impact: 3}
+    gov_02: {likelihood: 3, impact: 4}
+    gov_03: {likelihood: 2, impact: 2}
+    ops_01: {likelihood: 3, impact: 4}
+    ops_02: {likelihood: 4, impact: 3}
+    arch_01: {likelihood: 2, impact: 3}
+    bi_02: {likelihood: 4, impact: 4}
+    ai_01: {likelihood: 3, impact: 3}
+    ai_02: {likelihood: 3, impact: 3}
+    ai_03: {likelihood: 3, impact: 3}

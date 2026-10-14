@@ -1,0 +1,12 @@
+namespace: movement
+version: 1.0.0
+description: Historical load and CDC planning parameters (Section 12).
+values:
+  volume_bands_tb:            # upper bounds (TB) for each band; above the last -> offline transfer
+    small: 10
+    medium: 500
+  file_size_mb:               # target compressed file size for staged loads
+    min: 100
+    max: 250
+  load_throughput_tb_per_hour_per_xl: 1.0   # seed value; calibrate per engagement
+  warehouse_for_band: {small: LARGE, medium: XLARGE, large: XXLARGE}

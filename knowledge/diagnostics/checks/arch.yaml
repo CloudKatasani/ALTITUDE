@@ -1,0 +1,96 @@
+# D7 Data Architecture & Modelling checks (Section 6.4).
+version: 1.0.0
+checks:
+  - id: DX-ARCH-01
+    title: Deep view stacks and duplicate tables
+    description: Consumer-facing views stacked deeper than the rubric allows, and tables duplicating another table's column signature and size.
+    domain: D7
+    waf_pillar: cost_optimization
+    severity: medium
+    confidence_class: low
+    detector:
+      requires: [VIEWS, OBJECT_DEPENDENCIES, TABLES, TABLE_STORAGE_METRICS, ACCESS_HISTORY, QUERY_ATTRIBUTION_HISTORY, CLIENT_INPUTS, TAG_REFERENCES]
+      inputs: [storage_price_per_tb_month, tier1_tables]
+      cluster_by: theme
+      params:
+        max_view_depth: {threshold_ref: rubric.diagnostics.checks.arch_01.max_view_depth}
+        min_size_similarity: {threshold_ref: rubric.diagnostics.checks.arch_01.min_size_similarity}
+        max_recursion: {threshold_ref: rubric.diagnostics.window.max_recursion_depth}
+        dynamic_table_target_lag: {ref: rubric.diagnostics.checks.cost_03.dynamic_table_target_lag}
+      signals: |
+        WITH RECURSIVE vdep AS (
+          SELECT REFERENCING_OBJECT_NAME AS V, REFERENCED_OBJECT_NAME AS R, 1 AS DEPTH
+          FROM OBJECT_DEPENDENCIES WHERE upper(REFERENCING_OBJECT_DOMAIN) = 'VIEW'
+          UNION ALL
+          SELECT d.V, o.REFERENCED_OBJECT_NAME, d.DEPTH + 1
+          FROM vdep d JOIN OBJECT_DEPENDENCIES o
+            ON o.REFERENCING_OBJECT_NAME = d.R AND upper(o.REFERENCING_OBJECT_DOMAIN) = 'VIEW'
+          WHERE d.DEPTH < $max_recursion),
+        depth AS (SELECT V, max(DEPTH) AS VIEW_DEPTH FROM vdep GROUP BY V),
+        reads AS (
+          SELECT ah.OBJECT_NAME, coalesce(sum(a.CREDITS_ATTRIBUTED_COMPUTE), 0) AS READ_CREDITS
+          FROM ACCESS_HISTORY ah LEFT JOIN QUERY_ATTRIBUTION_HISTORY a ON a.QUERY_ID = ah.QUERY_ID
+          WHERE ah.ACCESS_TYPE = 'READ' GROUP BY ah.OBJECT_NAME),
+        t AS (
+          SELECT tb.FQ_NAME, tb.TABLE_ID, tb.CREATED, tb.BYTES, tb.ROW_COUNT, tb.COLUMN_SIGNATURE,
+                 CASE WHEN tb.FQ_NAME IN (SELECT FQ_NAME FROM _TIER1_TABLES) THEN 1 ELSE 0 END AS IS_TIER1,
+                 coalesce(s.ACTIVE_BYTES, 0) + coalesce(s.TIME_TRAVEL_BYTES, 0) + coalesce(s.FAILSAFE_BYTES, 0) AS STORAGE_BYTES
+          FROM TABLES tb LEFT JOIN TABLE_STORAGE_METRICS s ON s.FQ_NAME = tb.FQ_NAME),
+        dup AS (
+          SELECT b.FQ_NAME, min(a.FQ_NAME) AS DUPLICATE_OF
+          FROM t a JOIN t b
+            ON a.COLUMN_SIGNATURE = b.COLUMN_SIGNATURE AND a.FQ_NAME <> b.FQ_NAME
+           AND least(a.BYTES, b.BYTES) >= $min_size_similarity * greatest(a.BYTES, b.BYTES)
+           AND least(a.ROW_COUNT, b.ROW_COUNT) >= $min_size_similarity * greatest(a.ROW_COUNT, b.ROW_COUNT)
+          WHERE a.IS_TIER1 > b.IS_TIER1
+             OR (a.IS_TIER1 = b.IS_TIER1 AND (a.CREATED < b.CREATED OR (a.CREATED = b.CREATED AND a.TABLE_ID < b.TABLE_ID)))
+          GROUP BY b.FQ_NAME)
+        SELECT v.FQ_NAME AS OBJECT_NAME, 'view_depth' AS CLUSTER_KEY,
+               coalesce(depth.VIEW_DEPTH, 0) AS VIEW_DEPTH,
+               CASE WHEN NOT EXISTS (SELECT 1 FROM OBJECT_DEPENDENCIES o WHERE o.REFERENCED_OBJECT_NAME = v.FQ_NAME) THEN 1 ELSE 0 END AS IS_LEAF,
+               NULL::VARCHAR AS DUPLICATE_OF, 0::DOUBLE AS DUPLICATE_TB,
+               coalesce(reads.READ_CREDITS, 0) AS READ_CREDITS
+        FROM VIEWS v LEFT JOIN depth ON depth.V = v.FQ_NAME LEFT JOIN reads ON reads.OBJECT_NAME = v.FQ_NAME
+        UNION ALL
+        SELECT t.FQ_NAME, 'duplicate_table', NULL, NULL, dup.DUPLICATE_OF,
+               CASE WHEN dup.DUPLICATE_OF IS NULL THEN 0 ELSE t.STORAGE_BYTES / $bytes_per_tb END, 0
+        FROM t LEFT JOIN dup ON dup.FQ_NAME = t.FQ_NAME
+      rule: >-
+        (CLUSTER_KEY = 'view_depth' AND IS_LEAF = 1 AND VIEW_DEPTH > $max_view_depth)
+        OR (CLUSTER_KEY = 'duplicate_table' AND DUPLICATE_OF IS NOT NULL)
+    evidence:
+      kind: OBJ
+      fields: [VIEW_DEPTH, IS_LEAF, DUPLICATE_OF, DUPLICATE_TB, READ_CREDITS]
+    value:
+      method: "compute and storage $: duplicate TB × storage price × 12, plus credits of queries over deep views × materialisation saving × contract price, annualised"
+      p50: DUPLICATE_TB * storage_price_per_tb_month * months_per_year + READ_CREDITS * materialisation_saving * price_per_credit * annualise
+      conservative: (DUPLICATE_TB * storage_price_per_tb_month * months_per_year + READ_CREDITS * materialisation_saving * price_per_credit * annualise) * conservative_factor
+      factors:
+        materialisation_saving: rubric.diagnostics.checks.arch_01.materialisation_saving
+        conservative_factor: rubric.diagnostics.checks.arch_01.conservative_factor
+    risk:
+      likelihood_ref: rubric.diagnostics.risk_model.arch_01.likelihood
+      impact_ref: rubric.diagnostics.risk_model.arch_01.impact
+      method: "Sprawl makes lineage opaque and changes risky (likelihood × impact, 1–5 each)"
+    effort: {size: M}
+    title_template: "{{ 'Materialise ' ~ n ~ ' deep view stack' ~ ('s' if n != 1 else '') if cluster_key == 'view_depth' else 'Consolidate ' ~ n ~ ' duplicate table' ~ ('s' if n != 1 else '') }}"
+    rationale_template: >-
+      {% for r in rows %}{% if cluster_key == 'view_depth' %}{{ r.OBJECT_NAME }} sits on {{ r.VIEW_DEPTH }} stacked views (rubric max {{ params.max_view_depth }}){% else %}{{ r.OBJECT_NAME }} duplicates {{ r.DUPLICATE_OF }} (same column signature, size within {{ pct(1 - params.min_size_similarity) }}; {{ r.DUPLICATE_TB | round(2) }} TB){% endif %}{{ '; ' if not loop.last }}{% endfor %}.
+    remediation:
+      type: sql
+      autonomy: L2
+      template: |
+        {% if cluster_key == 'view_depth' %}-- Materialise the consumer-facing view so readers stop expanding the full stack on every query.
+        {% for r in rows %}CREATE OR REPLACE DYNAMIC TABLE {{ r.OBJECT_NAME }}_DT TARGET_LAG = '{{ params.dynamic_table_target_lag }}' WAREHOUSE = ALTITUDE_OPS_WH
+          AS SELECT * FROM {{ r.OBJECT_NAME }};
+        {% endfor %}{% else %}-- Retire the duplicate behind a compatibility view over the canonical table.
+        {% for r in rows %}ALTER TABLE {{ r.OBJECT_NAME }} RENAME TO {{ r.OBJECT_NAME }}__ALTITUDE_RETIRED;
+        CREATE VIEW {{ r.OBJECT_NAME }} AS SELECT * FROM {{ r.DUPLICATE_OF }};
+        {% endfor %}{% endif %}
+      rollback: |
+        {% if cluster_key == 'view_depth' %}{% for r in rows %}DROP DYNAMIC TABLE IF EXISTS {{ r.OBJECT_NAME }}_DT;
+        {% endfor %}{% else %}{% for r in rows %}DROP VIEW IF EXISTS {{ r.OBJECT_NAME }};
+        ALTER TABLE {{ r.OBJECT_NAME }}__ALTITUDE_RETIRED RENAME TO {{ r.OBJECT_NAME }};
+        {% endfor %}{% endif %}
+    kpis_to_watch: [KPI-COST-009, KPI-USE-003, KPI-PERF-001]
+    last_verified: "2026-10-01"

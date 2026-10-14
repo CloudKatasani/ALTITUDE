@@ -1,0 +1,34 @@
+name: classify_objects
+description: Classify legacy objects (keep, retire, rewrite...) with confidence, rule and rationale; filter by name pattern,
+  type, disposition or review state.
+permission: run
+entrypoint: altitude.skills.impl_assessment:classify_objects
+input_schema:
+  type: object
+  properties:
+    harvest_snapshot_id:
+      type: string
+      minLength: 3
+      description: snapshot id registered in the store, or a sealed .duckdb path
+    names:
+      type: array
+      items:
+        type: string
+      description: fnmatch patterns on fq_name
+    object_types:
+      type: array
+      items:
+        type: string
+    dispositions:
+      type: array
+      items:
+        type: string
+    needs_review_only:
+      type: boolean
+    top:
+      type: integer
+      minimum: 1
+      maximum: 1000
+  required:
+  - harvest_snapshot_id
+  additionalProperties: false

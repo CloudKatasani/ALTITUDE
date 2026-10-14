@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Go-to-market plays",
+  "x-altitude-globs": ["gtm/*.yaml"],
+  "type": "object",
+  "required": ["plays"],
+  "properties": {"plays": {"type": "array", "items": {"type": "object", "required": ["id", "when", "offer", "pitch"],
+    "additionalProperties": false, "properties": {"id": {"type": "string", "pattern": "^PLAY-"}, "when": {"type": "string"},
+    "offer": {"type": "string", "pattern": "^OFF-"}, "pitch": {"type": "string"}}}}}
+}

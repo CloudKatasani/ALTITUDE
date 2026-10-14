@@ -1,0 +1,42 @@
+# Orchestration & scheduler known issues (Section 11.2).
+known_issues:
+  - id: SCH-01
+    title: Calendar-based logic (business days, fiscal calendars)
+    severity: S2
+    detector: "Control-M DAYSCAL/WEEKSCAL/CONFCAL, SQL Agent relative monthly schedules"
+    fix: "Cron approximates the window; gate the root task on a calendar table (WHEN / first step) and test against the calendar."
+  - id: SCH-02
+    title: Cross-system dependencies (file arrivals, upstream jobs outside the export)
+    severity: S2
+    detector: "IN conditions with no producer in the export; file watchers; sp_start_job of unknown jobs"
+    fix: "Model as an explicit sensor (directory table stream / external event table) feeding the root task."
+  - id: SCH-03
+    title: Restart and rerun semantics
+    severity: S3
+    detector: "MAXRERUN / retry_attempts / cyclic jobs"
+    fix: "Snowflake retries apply to the whole task graph (TASK_AUTO_RETRY_ATTEMPTS on the root); per-step retries live in Airflow."
+  - id: SCH-04
+    title: SLA alerting
+    severity: S3
+    detector: "SHOUT WHEN=LATETIME/EXECTIME, notify on failure"
+    fix: "Snowflake alerts on TASK_HISTORY for deadlines; Airflow sla / execution_timeout per task."
+  - id: SCH-05
+    title: Job both scheduled and triggered by another job
+    severity: S3
+    detector: "Job with its own schedule that is also a successor"
+    fix: "A task graph child cannot have a schedule; the schedule is dropped and the dependency kept - confirm intent."
+  - id: SCH-06
+    title: Failure-path steps
+    severity: S3
+    detector: "SQL Agent on_fail_action goto step"
+    fix: "Becomes the graph finalizer task (Snowflake FINALIZE) and a one_failed trigger rule in Airflow."
+  - id: SCH-07
+    title: Command without a mapping
+    severity: S2
+    detector: "No command mapping rule matched"
+    fix: "Placeholder task keeps the graph intact; convert the command and add a mapping rule."
+  - id: SCH-08
+    title: Roots with different schedules merged into one graph
+    severity: S3
+    detector: "Connected component whose root jobs carry different schedules"
+    fix: "A synthetic root runs on the earliest schedule; confirm or split the graph."

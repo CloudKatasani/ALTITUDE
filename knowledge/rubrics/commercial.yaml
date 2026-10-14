@@ -1,0 +1,12 @@
+namespace: commercial
+version: 1.0.0
+description: Commercial guardrails (Sections 5.4, 6.8) — hypotheses to validate on the first 10 deals.
+values:
+  value_floor_multiple: 3.0
+  fee_credit_window_days: 60
+  qualification_min_annual_spend_usd: 250000
+  target_gross_margin: 0.45
+  package_o_target_gross_margin: 0.60
+  business_case:
+    discount_rate: 0.08
+    horizon_years: 3

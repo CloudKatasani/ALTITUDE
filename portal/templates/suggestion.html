@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+{% set s = d.suggestion %}
+<h1>{{ s.title }}</h1>
+<p class="muted"><code>{{ s.id }}</code> · {{ s.check_id }} · {{ s.domain }} / {{ s.waf_pillar }} · snapshot <code>{{ s.snapshot_id }}</code> · status {{ s.status }}{% if s.reviewer %} (reviewer {{ s.reviewer }}){% endif %}</p>
+<div class="grid">
+<section class="card"><h2>Value</h2>
+{% if s.value.annualised_usd %}<p><b>{{ s.value.annualised_usd.p50|usd }}</b> p50 · {{ s.value.annualised_usd.conservative|usd }} conservative (annualised)</p>{% endif %}
+<p class="muted">Method: {{ s.value.method }}</p>
+<p>Effort {{ s.effort.size }} (~{{ s.effort.hours_p50 }}h) · confidence {{ "%.2f"|format(s.confidence) }}</p>
+<p>{{ s.rationale }}</p></section>
+<section class="card"><h2>Remediation</h2>
+<p>{{ s.remediation.type }} · autonomy {{ s.remediation.autonomy }}</p>
+<p><code>{{ s.remediation.artifact_ref }}</code><br>rollback <code>{{ s.remediation.rollback_ref }}</code></p>
+<p>KPIs to watch: {{ s.kpis_to_watch|join(", ") }}</p></section>
+</div>
+{% if d.narrative %}<section class="card"><h2>Narrative</h2><pre>{{ d.narrative }}</pre></section>{% endif %}
+<section class="card"><h2>Evidence</h2>
+<table><thead><tr><th>ID</th><th>Object</th><th>Kind</th><th>Metrics</th></tr></thead><tbody>
+{% for e in d.evidence %}<tr><td><code>{{ e.evidence_id }}</code></td><td>{{ e.object_name }}</td><td>{{ e.kind }}</td><td><code>{{ e.metrics|tojson }}</code></td></tr>{% endfor %}
+</tbody></table></section>
+<section class="card"><h2>History</h2>
+<ul>{% for h in d.history %}<li>{{ h.occurred_at }} · {{ h.from_status or "—" }} → {{ h.to_status }} by {{ h.actor }}{% if h.comment %} — {{ h.comment }}{% endif %}</li>{% endfor %}</ul></section>
+{% endblock %}

@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AI pack: Cortex Search / Cortex Agent templates and the golden-question evaluation harness",
+  "x-altitude-globs": ["airready/cortex_templates.yaml", "airready/golden_questions.yaml"],
+  "type": "object",
+  "required": ["version"],
+  "additionalProperties": false,
+  "$defs": {
+    "ident": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"},
+    "fq": {"type": "string", "pattern": "^[A-Z_][A-Z0-9_$]*\\.[A-Z_][A-Z0-9_$]*\\.[A-Z_][A-Z0-9_$]*$"}
+  },
+  "properties": {
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "search_services": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "database", "schema", "source_table", "search_column", "attributes", "acl_attribute",
+                     "warehouse", "target_lag", "embedding_model", "description"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^CSS-[A-Z0-9-]+$"},
+          "name": {"$ref": "#/$defs/ident"}, "database": {"$ref": "#/$defs/ident"}, "schema": {"$ref": "#/$defs/ident"},
+          "source_table": {"$ref": "#/$defs/fq"}, "search_column": {"$ref": "#/$defs/ident"},
+          "attributes": {"type": "array", "items": {"$ref": "#/$defs/ident"}},
+          "acl_attribute": {"$ref": "#/$defs/ident"},
+          "warehouse": {"$ref": "#/$defs/ident"},
+          "target_lag": {"type": "string", "pattern": "^\\d+ (minute|minutes|hour|hours|day|days)$"},
+          "embedding_model": {"type": "string"},
+          "description": {"type": "string"}
+        }
+      }
+    },
+    "agents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "database", "schema", "role", "warehouse", "semantic_domains", "search_services",
+                     "instructions", "sample_questions"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^CAG-[A-Z0-9-]+$"},
+          "name": {"$ref": "#/$defs/ident"}, "database": {"$ref": "#/$defs/ident"}, "schema": {"$ref": "#/$defs/ident"},
+          "role": {"$ref": "#/$defs/ident"}, "warehouse": {"$ref": "#/$defs/ident"},
+          "semantic_domains": {"type": "array", "items": {"type": "string"}},
+          "search_services": {"type": "array", "items": {"type": "string", "pattern": "^CSS-[A-Z0-9-]+$"}},
+          "instructions": {"type": "string"},
+          "sample_questions": {"type": "array", "items": {"type": "string", "pattern": "^GQ-\\d{3}$"}}
+        }
+      }
+    },
+    "fixtures": {
+      "type": "array",
+      "items": {
+        "type": "object", "required": ["table", "columns", "rows"], "additionalProperties": false,
+        "properties": {"table": {"$ref": "#/$defs/fq"},
+                       "columns": {"type": "object", "additionalProperties": {"enum": ["VARCHAR", "INTEGER", "DOUBLE", "DATE", "BOOLEAN", "TIMESTAMP"]}},
+                       "rows": {"type": "array", "items": {"type": "array"}}}
+      }
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object", "required": ["id", "question", "expected"], "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^GQ-\\d{3}$"},
+          "question": {"type": "string"},
+          "expected": {
+            "type": "object", "additionalProperties": false,
+            "properties": {"kpi": {"type": "string", "pattern": "^KPI-[A-Z0-9-]+$"},
+                           "dimensions": {"type": "array", "items": {"type": "string"}},
+                           "sql": {"type": "string"}, "answer": {"type": "array", "items": {"type": "array"}},
+                           "refuse": {"type": "boolean"}},
+            "oneOf": [{"required": ["kpi", "dimensions", "sql", "answer"]}, {"required": ["refuse"]}]
+          }
+        }
+      }
+    }
+  }
+}

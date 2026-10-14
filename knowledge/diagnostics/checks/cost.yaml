@@ -1,0 +1,516 @@
+# D1 Cost & FinOps checks (Section 6.4). Detectors are DuckDB SQL over sealed snapshot tables
+# (harvest contract: altitude.synthetic.schema.HARVEST_SCHEMA). Every detector returns one row per
+# candidate object with OBJECT_NAME, CLUSTER_KEY and numeric signals; `rule` is evaluated over those
+# signals with thresholds bound as $parameters from rubric references.
+version: 1.0.0
+checks:
+  - id: DX-COST-01
+    title: Idle-heavy warehouses
+    description: Credits billed while no queries run (billed compute minus query-attributed compute), on warehouses whose auto-suspend exceeds policy.
+    domain: D1
+    waf_pillar: cost_optimization
+    severity: high
+    confidence_class: high
+    detector:
+      requires: [WAREHOUSES, WAREHOUSE_METERING_HISTORY, QUERY_ATTRIBUTION_HISTORY]
+      inputs: [contract_price_per_credit]
+      cluster_by: theme
+      params:
+        idle_share_min: {threshold_ref: rubric.diagnostics.checks.cost_01.idle_share_min}
+        auto_suspend_max_seconds: {threshold_ref: rubric.diagnostics.checks.cost_01.auto_suspend_max_seconds}
+      signals: |
+        SELECT w.WAREHOUSE_NAME AS OBJECT_NAME,
+               'auto_suspend' AS CLUSTER_KEY,
+               w.WAREHOUSE_SIZE, w.WORKLOAD_CLASS, w.AUTO_SUSPEND,
+               c.BILLED_CREDITS, c.ATTRIBUTED_CREDITS,
+               greatest(c.BILLED_CREDITS - c.ATTRIBUTED_CREDITS, 0) AS IDLE_CREDITS,
+               CASE WHEN c.BILLED_CREDITS > 0
+                    THEN greatest(c.BILLED_CREDITS - c.ATTRIBUTED_CREDITS, 0) / c.BILLED_CREDITS ELSE 0 END AS IDLE_SHARE
+        FROM WAREHOUSES w JOIN _WAREHOUSE_CREDITS c ON c.WAREHOUSE_NAME = w.WAREHOUSE_NAME
+      rule: IDLE_SHARE >= $idle_share_min AND AUTO_SUSPEND > $auto_suspend_max_seconds AND BILLED_CREDITS > 0
+    evidence:
+      kind: WH
+      fields: [WAREHOUSE_SIZE, WORKLOAD_CLASS, AUTO_SUSPEND, BILLED_CREDITS, ATTRIBUTED_CREDITS, IDLE_CREDITS, IDLE_SHARE]
+    value:
+      method: "idle credits (billed compute − query-attributed compute, snapshot window) × recoverable idle share × contract price, annualised; conservative applies the rubric haircut"
+      p50: IDLE_CREDITS * recoverable_idle_share * price_per_credit * annualise
+      conservative: IDLE_CREDITS * recoverable_idle_share * conservative_factor * price_per_credit * annualise
+      factors:
+        recoverable_idle_share: rubric.diagnostics.checks.cost_01.recoverable_idle_share
+        conservative_factor: rubric.diagnostics.checks.cost_01.conservative_factor
+    effort: {size: S}
+    title_template: "Shorten auto-suspend on {{ n }} idle-heavy warehouse{{ 's' if n != 1 else '' }}"
+    rationale_template: >-
+      Idle share at or above the rubric threshold ({{ pct(params.idle_share_min) }}) on {{ n }} of {{ candidates }} warehouses
+      ({% for r in rows %}{{ r.OBJECT_NAME }} {{ pct(r.IDLE_SHARE) }} idle, auto-suspend {{ r.AUTO_SUSPEND }}s{{ '; ' if not loop.last }}{% endfor %});
+      policy maximum is {{ params.auto_suspend_max_seconds }}s.
+    remediation:
+      type: sql
+      autonomy: L2
+      template: |
+        -- Shorten auto-suspend to the policy value; AUTO_RESUME stays on so users see no change in access.
+        {% for r in rows %}ALTER WAREHOUSE {{ r.OBJECT_NAME }} SET AUTO_SUSPEND = {{ params.auto_suspend_max_seconds }};
+        {% endfor %}
+      rollback: |
+        {% for r in rows %}ALTER WAREHOUSE {{ r.OBJECT_NAME }} SET AUTO_SUSPEND = {{ r.AUTO_SUSPEND }};
+        {% endfor %}
+    kpis_to_watch: [KPI-COST-007, KPI-COST-002, KPI-PERF-002]
+    last_verified: "2026-10-01"
+
+  - id: DX-COST-02
+    title: Oversized warehouses
+    description: Large single-cluster warehouses with low queueing and short runtimes — the workload fits a smaller size (multi-cluster warehouses absorb concurrency by scaling out and are sized per query, so they are excluded).
+    domain: D1
+    waf_pillar: cost_optimization
+    severity: medium
+    confidence_class: medium
+    detector:
+      requires: [WAREHOUSES, WAREHOUSE_METERING_HISTORY, WAREHOUSE_LOAD_HISTORY, QUERY_HISTORY, QUERY_ATTRIBUTION_HISTORY]
+      inputs: [contract_price_per_credit]
+      cluster_by: warehouse
+      params:
+        min_size_credits: {threshold_ref: rubric.diagnostics.checks.cost_02.min_size_credits}
+        exec_quantile: {threshold_ref: rubric.diagnostics.checks.cost_02.exec_quantile}
+        max_p95_exec_ms: {threshold_ref: rubric.diagnostics.checks.cost_02.max_p95_exec_ms}
+        max_avg_queued_load: {threshold_ref: rubric.diagnostics.checks.cost_02.max_avg_queued_load}
+      signals: |
+        WITH q AS (
+          SELECT WAREHOUSE_NAME, count(*) AS QUERIES,
+                 quantile_cont(EXECUTION_TIME, $exec_quantile) AS EXEC_P95_MS
+          FROM QUERY_HISTORY WHERE WAREHOUSE_NAME IS NOT NULL GROUP BY WAREHOUSE_NAME),
+        l AS (
+          SELECT WAREHOUSE_NAME, avg(AVG_QUEUED_LOAD) AS AVG_QUEUED_LOAD
+          FROM WAREHOUSE_LOAD_HISTORY GROUP BY WAREHOUSE_NAME)
+        SELECT w.WAREHOUSE_NAME AS OBJECT_NAME, w.WAREHOUSE_NAME AS CLUSTER_KEY,
+               w.WAREHOUSE_SIZE, w.WORKLOAD_CLASS, s.CREDITS_PER_HOUR,
+               (SELECT t.WAREHOUSE_SIZE FROM _SIZE_CREDITS t WHERE t.CREDITS_PER_HOUR < s.CREDITS_PER_HOUR
+                ORDER BY t.CREDITS_PER_HOUR DESC LIMIT 1) AS TARGET_SIZE,
+               (SELECT max(t.CREDITS_PER_HOUR) FROM _SIZE_CREDITS t WHERE t.CREDITS_PER_HOUR < s.CREDITS_PER_HOUR) AS TARGET_CREDITS_PER_HOUR,
+               coalesce(q.QUERIES, 0) AS QUERIES, coalesce(q.EXEC_P95_MS, 0) AS EXEC_P95_MS,
+               coalesce(l.AVG_QUEUED_LOAD, 0) AS AVG_QUEUED_LOAD, c.BILLED_CREDITS,
+               w.MAX_CLUSTER_COUNT,
+               c.BILLED_CREDITS * (1 - coalesce((SELECT max(t.CREDITS_PER_HOUR) FROM _SIZE_CREDITS t
+                    WHERE t.CREDITS_PER_HOUR < s.CREDITS_PER_HOUR), s.CREDITS_PER_HOUR) / s.CREDITS_PER_HOUR) AS DOWNSIZE_CREDITS
+        FROM WAREHOUSES w
+        JOIN _SIZE_CREDITS s ON s.WAREHOUSE_SIZE = w.WAREHOUSE_SIZE
+        JOIN _WAREHOUSE_CREDITS c ON c.WAREHOUSE_NAME = w.WAREHOUSE_NAME
+        LEFT JOIN q ON q.WAREHOUSE_NAME = w.WAREHOUSE_NAME
+        LEFT JOIN l ON l.WAREHOUSE_NAME = w.WAREHOUSE_NAME
+      rule: >-
+        CREDITS_PER_HOUR >= $min_size_credits AND QUERIES > 0 AND EXEC_P95_MS <= $max_p95_exec_ms
+        AND AVG_QUEUED_LOAD <= $max_avg_queued_load AND MAX_CLUSTER_COUNT <= 1 AND TARGET_SIZE IS NOT NULL
+    evidence:
+      kind: WH
+      fields: [WAREHOUSE_SIZE, WORKLOAD_CLASS, TARGET_SIZE, QUERIES, EXEC_P95_MS, AVG_QUEUED_LOAD, MAX_CLUSTER_COUNT, BILLED_CREDITS, DOWNSIZE_CREDITS]
+    value:
+      method: "credit delta at the next size down (billed credits × (1 − target/current credits per hour)) × realisation × contract price, annualised"
+      p50: DOWNSIZE_CREDITS * downsize_realisation * price_per_credit * annualise
+      conservative: DOWNSIZE_CREDITS * downsize_realisation * conservative_factor * price_per_credit * annualise
+      factors:
+        downsize_realisation: rubric.diagnostics.checks.cost_02.downsize_realisation
+        conservative_factor: rubric.diagnostics.checks.cost_02.conservative_factor
+    effort: {size: S}
+    title_template: "Downsize {{ rows[0].OBJECT_NAME }} from {{ rows[0].WAREHOUSE_SIZE }} to {{ rows[0].TARGET_SIZE }}"
+    rationale_template: >-
+      {{ rows[0].OBJECT_NAME }} runs {{ num(rows[0].QUERIES) }} queries with p95 execution {{ num(rows[0].EXEC_P95_MS) }} ms
+      (rubric max {{ num(params.max_p95_exec_ms) }} ms) and average queued load {{ rows[0].AVG_QUEUED_LOAD | round(3) }};
+      a {{ rows[0].TARGET_SIZE }} warehouse is sufficient. Guardrail: watch p95 and queued time after the change.
+    remediation:
+      type: sql
+      autonomy: L2
+      template: |
+        -- Downsize one step; performance guardrail: revert if p95 query time or queued time regresses (KPI-PERF-001/002).
+        {% for r in rows %}ALTER WAREHOUSE {{ r.OBJECT_NAME }} SET WAREHOUSE_SIZE = '{{ r.TARGET_SIZE }}';
+        {% endfor %}
+      rollback: |
+        {% for r in rows %}ALTER WAREHOUSE {{ r.OBJECT_NAME }} SET WAREHOUSE_SIZE = '{{ r.WAREHOUSE_SIZE }}';
+        {% endfor %}
+    kpis_to_watch: [KPI-COST-002, KPI-PERF-001, KPI-PERF-002]
+    last_verified: "2026-10-01"
+
+  - id: DX-COST-03
+    title: Repeated identical queries bypass the result cache
+    description: The same query text runs repeatedly but cannot reuse results because it contains a non-reusable construct (e.g. a day-granularity window anchored on CURRENT_TIMESTAMP, RANDOM, UUID_STRING).
+    domain: D1
+    waf_pillar: cost_optimization
+    severity: medium
+    confidence_class: medium
+    detector:
+      requires: [QUERY_HISTORY, QUERY_ATTRIBUTION_HISTORY]
+      inputs: [contract_price_per_credit]
+      cluster_by: query_signature
+      params:
+        min_repeat_executions: {threshold_ref: rubric.diagnostics.checks.cost_03.min_repeat_executions}
+        max_result_reuse_share: {threshold_ref: rubric.diagnostics.checks.cost_03.max_result_reuse_share}
+        dynamic_table_target_lag: {ref: rubric.diagnostics.checks.cost_03.dynamic_table_target_lag}
+        cache_defeating_pattern:
+          value: "(?i)(DATEADD\\(\\s*'?(day|week|month|quarter|year)'?\\s*,[^;]*CURRENT_TIMESTAMP|RANDOM\\(|UUID_STRING\\(|RANDSTR\\()"
+      signals: |
+        SELECT q.QUERY_PARAMETERIZED_HASH AS OBJECT_NAME, q.QUERY_PARAMETERIZED_HASH AS CLUSTER_KEY,
+               min(q.WAREHOUSE_NAME) AS WAREHOUSE_NAME,
+               count(*) AS EXECUTIONS,
+               count(DISTINCT q.QUERY_TEXT) AS DISTINCT_TEXTS,
+               avg(CASE WHEN q.BYTES_SCANNED = 0 THEN 1 ELSE 0 END) AS RESULT_REUSE_SHARE,
+               max(CASE WHEN regexp_matches(q.QUERY_TEXT, $cache_defeating_pattern) THEN 1 ELSE 0 END) AS CACHE_DEFEATING,
+               coalesce(sum(a.CREDITS_ATTRIBUTED_COMPUTE), 0) AS CREDITS,
+               min(q.QUERY_TEXT) AS SAMPLE_TEXT
+        FROM QUERY_HISTORY q
+        LEFT JOIN QUERY_ATTRIBUTION_HISTORY a ON a.QUERY_ID = q.QUERY_ID
+        WHERE q.QUERY_TYPE = 'SELECT' AND q.EXECUTION_STATUS = 'SUCCESS'
+        GROUP BY q.QUERY_PARAMETERIZED_HASH
+      rule: >-
+        DISTINCT_TEXTS = 1 AND EXECUTIONS >= $min_repeat_executions
+        AND RESULT_REUSE_SHARE <= $max_result_reuse_share AND CACHE_DEFEATING = 1
+    evidence:
+      kind: QRY
+      fields: [WAREHOUSE_NAME, EXECUTIONS, DISTINCT_TEXTS, RESULT_REUSE_SHARE, CREDITS]
+    value:
+      method: "repeat executions × average cost (attributed credits of the signature) × share reusable from the result cache × contract price, annualised"
+      p50: CREDITS * achievable_reuse_share * price_per_credit * annualise
+      conservative: CREDITS * achievable_reuse_share * conservative_factor * price_per_credit * annualise
+      factors:
+        achievable_reuse_share: rubric.diagnostics.checks.cost_03.achievable_reuse_share
+        conservative_factor: rubric.diagnostics.checks.cost_03.conservative_factor
+    effort: {size: S}
+    title_template: "Make signature {{ cluster_key }} result-cache friendly"
+    rationale_template: >-
+      {{ num(rows[0].EXECUTIONS) }} identical executions of {{ cluster_key }} on {{ rows[0].WAREHOUSE_NAME }} reused the result
+      cache {{ pct(rows[0].RESULT_REUSE_SHARE) }} of the time (rubric max {{ pct(params.max_result_reuse_share) }}): the text
+      anchors a day-granularity window on CURRENT_TIMESTAMP, which is non-reusable.
+    remediation:
+      type: sql
+      autonomy: L2
+      template: |
+        -- Root cause: a non-reusable function makes every execution recompute.
+        -- Fix A (preferred, in the BI model): anchor day-granularity windows on CURRENT_DATE() so results are reusable.
+        -- Fix B (this draft): serve the dashboard from a dynamic table refreshed on a lag.
+        CREATE SCHEMA IF NOT EXISTS ALTITUDE_REMEDIATION.CACHE;
+        CREATE OR REPLACE DYNAMIC TABLE ALTITUDE_REMEDIATION.CACHE.DT_{{ cluster_key | upper }}
+          TARGET_LAG = '{{ params.dynamic_table_target_lag }}'
+          WAREHOUSE = {{ rows[0].WAREHOUSE_NAME }}
+          AS {{ rows[0].SAMPLE_TEXT | replace('CURRENT_TIMESTAMP()', 'CURRENT_DATE()') }};
+      rollback: |
+        DROP DYNAMIC TABLE IF EXISTS ALTITUDE_REMEDIATION.CACHE.DT_{{ cluster_key | upper }};
+    kpis_to_watch: [KPI-COST-006, KPI-PERF-005, KPI-COST-002]
+    last_verified: "2026-10-01"
+
+  - id: DX-COST-04
+    title: Daily full reloads of large tables
+    description: Large tables rewritten in full (CREATE TABLE AS SELECT / INSERT OVERWRITE) on most days instead of incremental processing.
+    domain: D1
+    waf_pillar: cost_optimization
+    severity: high
+    confidence_class: medium
+    detector:
+      requires: [QUERY_HISTORY, ACCESS_HISTORY, QUERY_ATTRIBUTION_HISTORY, TABLES, COLUMNS]
+      inputs: [contract_price_per_credit]
+      cluster_by: pipeline
+      params:
+        min_reload_day_share: {threshold_ref: rubric.diagnostics.checks.cost_04.min_reload_day_share}
+        min_bytes_rewritten: {threshold_ref: rubric.diagnostics.checks.cost_04.min_bytes_rewritten}
+        full_reload_query_types:
+          value: [CREATE_TABLE_AS_SELECT, INSERT_OVERWRITE, TRUNCATE_TABLE]
+      signals: |
+        WITH w AS (
+          SELECT ah.OBJECT_NAME, q.QUERY_ID, q.QUERY_PARAMETERIZED_HASH, q.START_TIME, q.BYTES_WRITTEN,
+                 coalesce(a.CREDITS_ATTRIBUTED_COMPUTE, 0) AS CREDITS
+          FROM QUERY_HISTORY q
+          JOIN ACCESS_HISTORY ah ON ah.QUERY_ID = q.QUERY_ID AND ah.ACCESS_TYPE = 'WRITE'
+          LEFT JOIN QUERY_ATTRIBUTION_HISTORY a ON a.QUERY_ID = q.QUERY_ID
+          WHERE list_contains($full_reload_query_types, q.QUERY_TYPE)),
+        src AS (
+          SELECT w.OBJECT_NAME, min(r.OBJECT_NAME) AS SOURCE_OBJECT
+          FROM w JOIN ACCESS_HISTORY r ON r.QUERY_ID = w.QUERY_ID AND r.ACCESS_TYPE = 'READ'
+          GROUP BY w.OBJECT_NAME)
+        SELECT w.OBJECT_NAME, min(w.QUERY_PARAMETERIZED_HASH) AS CLUSTER_KEY,
+               count(*) AS RELOADS,
+               count(DISTINCT CAST(w.START_TIME AS DATE)) AS RELOAD_DAYS,
+               count(DISTINCT CAST(w.START_TIME AS DATE)) / $window_days AS RELOAD_DAY_SHARE,
+               avg(w.BYTES_WRITTEN) AS AVG_BYTES_WRITTEN,
+               sum(w.BYTES_WRITTEN) AS BYTES_REWRITTEN,
+               sum(w.CREDITS) AS CREDITS,
+               min(t.BYTES) AS TABLE_BYTES,
+               min(src.SOURCE_OBJECT) AS SOURCE_OBJECT,
+               (SELECT c.COLUMN_NAME FROM COLUMNS c WHERE c.FQ_NAME = w.OBJECT_NAME AND c.COLUMN_NAME LIKE '%\_ID' ESCAPE '\'
+                ORDER BY c.ORDINAL_POSITION LIMIT 1) AS KEY_COLUMN
+        FROM w
+        LEFT JOIN TABLES t ON t.FQ_NAME = w.OBJECT_NAME
+        LEFT JOIN src ON src.OBJECT_NAME = w.OBJECT_NAME
+        GROUP BY w.OBJECT_NAME
+      rule: RELOAD_DAY_SHARE >= $min_reload_day_share AND AVG_BYTES_WRITTEN >= $min_bytes_rewritten
+    evidence:
+      kind: TBL
+      fields: [RELOADS, RELOAD_DAYS, AVG_BYTES_WRITTEN, BYTES_REWRITTEN, CREDITS, TABLE_BYTES, SOURCE_OBJECT]
+    value:
+      method: "bytes rewritten priced at their measured cost (attributed credits of the reload statements) × incremental saving share × contract price, annualised"
+      p50: CREDITS * incremental_saving_share * price_per_credit * annualise
+      conservative: CREDITS * incremental_saving_share * conservative_factor * price_per_credit * annualise
+      factors:
+        incremental_saving_share: rubric.diagnostics.checks.cost_04.incremental_saving_share
+        conservative_factor: rubric.diagnostics.checks.cost_04.conservative_factor
+    effort: {size: M}
+    title_template: "Make the {{ rows[0].OBJECT_NAME }} load incremental"
+    rationale_template: >-
+      {{ rows[0].OBJECT_NAME }} is fully rewritten on {{ rows[0].RELOAD_DAYS }} of {{ window_days }} days
+      ({{ gb(rows[0].AVG_BYTES_WRITTEN) }} per reload, rubric min {{ gb(params.min_bytes_rewritten) }}) by signature {{ cluster_key }}.
+    remediation:
+      type: dbt
+      autonomy: L2
+      template: |
+        -- dbt model draft for {{ rows[0].OBJECT_NAME }}: incremental MERGE on {{ rows[0].KEY_COLUMN or 'the business key' }}.
+        {% raw %}{{ config(materialized='incremental', incremental_strategy='merge', unique_key={% endraw %}'{{ rows[0].KEY_COLUMN or 'ID' }}'{% raw %}) }}{% endraw %}
+        select *
+        from {{ rows[0].SOURCE_OBJECT or rows[0].OBJECT_NAME }}
+        {% raw %}{% if is_incremental() %}{% endraw %}
+        where LOAD_TS > (select coalesce(max(LOAD_TS), '1900-01-01'::timestamp) from {% raw %}{{ this }}{% endraw %})
+        {% raw %}{% endif %}{% endraw %}
+      rollback: |
+        -- Restore the previous full-refresh behaviour for {{ rows[0].OBJECT_NAME }}.
+        {% raw %}{{ config(materialized='table') }}{% endraw %}
+        select * from {{ rows[0].SOURCE_OBJECT or rows[0].OBJECT_NAME }}
+    kpis_to_watch: [KPI-COST-006, KPI-COST-001, KPI-REL-003]
+    last_verified: "2026-10-01"
+
+  - id: DX-COST-05
+    title: Serverless creep without benefit
+    description: Automatic clustering, search optimisation or materialised-view refresh credits on objects that are rarely or never read.
+    domain: D1
+    waf_pillar: cost_optimization
+    severity: high
+    confidence_class: medium
+    detector:
+      requires: [AUTOMATIC_CLUSTERING_HISTORY, SEARCH_OPTIMIZATION_HISTORY, MATERIALIZED_VIEW_REFRESH_HISTORY, ACCESS_HISTORY]
+      inputs: [contract_price_per_credit]
+      cluster_by: object
+      params:
+        min_monthly_credits: {threshold_ref: rubric.diagnostics.checks.cost_05.min_monthly_credits}
+        max_reads_per_credit: {threshold_ref: rubric.diagnostics.checks.cost_05.max_reads_per_credit}
+      signals: |
+        WITH s AS (
+          SELECT TABLE_NAME, 'AUTOMATIC_CLUSTERING' AS FEATURE, CREDITS_USED FROM AUTOMATIC_CLUSTERING_HISTORY
+          UNION ALL SELECT TABLE_NAME, 'SEARCH_OPTIMIZATION', CREDITS_USED FROM SEARCH_OPTIMIZATION_HISTORY
+          UNION ALL SELECT TABLE_NAME, 'MATERIALIZED_VIEW', CREDITS_USED FROM MATERIALIZED_VIEW_REFRESH_HISTORY),
+        agg AS (SELECT TABLE_NAME, FEATURE, sum(CREDITS_USED) AS CREDITS FROM s GROUP BY TABLE_NAME, FEATURE),
+        r AS (SELECT OBJECT_NAME, count(*) AS READS FROM ACCESS_HISTORY WHERE ACCESS_TYPE = 'READ' GROUP BY OBJECT_NAME)
+        SELECT agg.TABLE_NAME AS OBJECT_NAME, agg.TABLE_NAME || ':' || agg.FEATURE AS CLUSTER_KEY, agg.FEATURE,
+               agg.CREDITS, agg.CREDITS / $window_days * $days_per_month AS CREDITS_PER_MONTH,
+               coalesce(r.READS, 0) AS READS,
+               CASE WHEN agg.CREDITS > 0 THEN coalesce(r.READS, 0) / agg.CREDITS ELSE 0 END AS READS_PER_CREDIT
+        FROM agg LEFT JOIN r ON r.OBJECT_NAME = agg.TABLE_NAME
+      rule: CREDITS_PER_MONTH >= $min_monthly_credits AND READS_PER_CREDIT <= $max_reads_per_credit
+    evidence:
+      kind: TBL
+      fields: [FEATURE, CREDITS, CREDITS_PER_MONTH, READS, READS_PER_CREDIT]
+    value:
+      method: "serverless credits (snapshot window) − measured benefit (reads served) × removable share × contract price, annualised"
+      p50: CREDITS * removal_share * price_per_credit * annualise
+      conservative: CREDITS * removal_share * conservative_factor * price_per_credit * annualise
+      factors:
+        removal_share: rubric.diagnostics.checks.cost_05.removal_share
+        conservative_factor: rubric.diagnostics.checks.cost_05.conservative_factor
+    effort: {size: S}
+    title_template: "Suspend {{ rows[0].FEATURE | lower | replace('_', ' ') }} on {{ rows[0].OBJECT_NAME }}"
+    rationale_template: >-
+      {{ rows[0].OBJECT_NAME }} consumed {{ num(rows[0].CREDITS_PER_MONTH) }} {{ rows[0].FEATURE | lower | replace('_', ' ') }} credits per month
+      (rubric min {{ num(params.min_monthly_credits) }}) while serving {{ num(rows[0].READS) }} reads in the window — no pruning or latency benefit to pay for.
+    remediation:
+      type: sql
+      autonomy: L2
+      template: |
+        {% for r in rows %}{% if r.FEATURE == 'AUTOMATIC_CLUSTERING' %}ALTER TABLE {{ r.OBJECT_NAME }} SUSPEND RECLUSTER;
+        {% elif r.FEATURE == 'SEARCH_OPTIMIZATION' %}ALTER TABLE {{ r.OBJECT_NAME }} DROP SEARCH OPTIMIZATION;
+        {% else %}ALTER MATERIALIZED VIEW {{ r.OBJECT_NAME }} SUSPEND;
+        {% endif %}{% endfor %}
+      rollback: |
+        {% for r in rows %}{% if r.FEATURE == 'AUTOMATIC_CLUSTERING' %}ALTER TABLE {{ r.OBJECT_NAME }} RESUME RECLUSTER;
+        {% elif r.FEATURE == 'SEARCH_OPTIMIZATION' %}ALTER TABLE {{ r.OBJECT_NAME }} ADD SEARCH OPTIMIZATION;
+        {% else %}ALTER MATERIALIZED VIEW {{ r.OBJECT_NAME }} RESUME;
+        {% endif %}{% endfor %}
+    kpis_to_watch: [KPI-COST-008, KPI-PERF-004]
+    last_verified: "2026-10-01"
+
+  - id: DX-COST-06
+    title: Storage waste
+    description: Long Time Travel / Fail-safe on re-creatable staging tables and stale clones that pin retained bytes.
+    domain: D1
+    waf_pillar: cost_optimization
+    severity: medium
+    confidence_class: high
+    detector:
+      requires: [TABLES, TABLE_STORAGE_METRICS, ACCESS_HISTORY]
+      inputs: [storage_price_per_tb_month]
+      cluster_by: theme
+      params:
+        staging_max_retention_days: {threshold_ref: rubric.diagnostics.checks.cost_06.staging_max_retention_days}
+        stale_clone_days: {threshold_ref: rubric.diagnostics.checks.cost_06.stale_clone_days}
+        min_wasted_bytes: {threshold_ref: rubric.diagnostics.checks.cost_06.min_wasted_bytes}
+        staging_schema_pattern: {value: "(?i)^(STAGING|STG|STAGE|LANDING|TMP|TEMP|WORK)$"}
+      signals: |
+        WITH m AS (
+          SELECT t.FQ_NAME, t.TABLE_SCHEMA, t.IS_TRANSIENT, t.RETENTION_TIME, t.CLONE_GROUP_ID, t.CREATED, t.TABLE_ID,
+                 date_diff('day', t.LAST_ALTERED, $as_of) AS DAYS_SINCE_ALTERED,
+                 coalesce(s.ACTIVE_BYTES, 0) AS ACTIVE_BYTES, coalesce(s.TIME_TRAVEL_BYTES, 0) AS TIME_TRAVEL_BYTES,
+                 coalesce(s.FAILSAFE_BYTES, 0) AS FAILSAFE_BYTES, coalesce(s.RETAINED_FOR_CLONE_BYTES, 0) AS RETAINED_FOR_CLONE_BYTES
+          FROM TABLES t LEFT JOIN TABLE_STORAGE_METRICS s ON s.FQ_NAME = t.FQ_NAME),
+        grp AS (SELECT CLONE_GROUP_ID, count(*) AS MEMBERS, min(CREATED) AS FIRST_CREATED FROM TABLES GROUP BY CLONE_GROUP_ID),
+        r AS (SELECT OBJECT_NAME, count(*) AS READS FROM ACCESS_HISTORY WHERE ACCESS_TYPE = 'READ' GROUP BY OBJECT_NAME)
+        SELECT m.FQ_NAME AS OBJECT_NAME, 'staging_retention' AS CLUSTER_KEY, m.IS_TRANSIENT, m.RETENTION_TIME,
+               m.DAYS_SINCE_ALTERED, coalesce(r.READS, 0) AS READS,
+               m.TIME_TRAVEL_BYTES + m.FAILSAFE_BYTES AS WASTED_BYTES,
+               (m.TIME_TRAVEL_BYTES + m.FAILSAFE_BYTES) / $bytes_per_tb AS WASTED_TB
+        FROM m LEFT JOIN r ON r.OBJECT_NAME = m.FQ_NAME
+        WHERE regexp_matches(m.TABLE_SCHEMA, $staging_schema_pattern)
+        UNION ALL
+        SELECT m.FQ_NAME, 'stale_clone', m.IS_TRANSIENT, m.RETENTION_TIME, m.DAYS_SINCE_ALTERED, coalesce(r.READS, 0),
+               m.ACTIVE_BYTES + m.TIME_TRAVEL_BYTES + m.FAILSAFE_BYTES + m.RETAINED_FOR_CLONE_BYTES,
+               (m.ACTIVE_BYTES + m.TIME_TRAVEL_BYTES + m.FAILSAFE_BYTES + m.RETAINED_FOR_CLONE_BYTES) / $bytes_per_tb
+        FROM m JOIN grp g ON g.CLONE_GROUP_ID = m.CLONE_GROUP_ID AND g.MEMBERS > 1 AND m.CREATED > g.FIRST_CREATED
+        LEFT JOIN r ON r.OBJECT_NAME = m.FQ_NAME
+      rule: >-
+        WASTED_BYTES >= $min_wasted_bytes AND (
+          (CLUSTER_KEY = 'staging_retention' AND (NOT IS_TRANSIENT OR RETENTION_TIME > $staging_max_retention_days))
+          OR (CLUSTER_KEY = 'stale_clone' AND DAYS_SINCE_ALTERED >= $stale_clone_days AND READS = 0))
+    evidence:
+      kind: TBL
+      fields: [IS_TRANSIENT, RETENTION_TIME, DAYS_SINCE_ALTERED, READS, WASTED_BYTES, WASTED_TB]
+    value:
+      method: "wasted TB (Time Travel + Fail-safe on staging; all bytes pinned by stale clones) × storage price per TB-month × 12"
+      p50: WASTED_TB * realisation * storage_price_per_tb_month * months_per_year
+      conservative: WASTED_TB * realisation * conservative_factor * storage_price_per_tb_month * months_per_year
+      factors:
+        realisation: rubric.diagnostics.checks.cost_06.realisation
+        conservative_factor: rubric.diagnostics.checks.cost_06.conservative_factor
+    effort: {size: S}
+    title_template: "{{ 'Make staging tables transient with minimal Time Travel' if cluster_key == 'staging_retention' else 'Drop stale clones pinning retained storage' }} ({{ n }} table{{ 's' if n != 1 else '' }})"
+    rationale_template: >-
+      {% for r in rows %}{{ r.OBJECT_NAME }}: {{ tb(r.WASTED_BYTES) }} wasted
+      ({% if cluster_key == 'staging_retention' %}{{ 'transient' if r.IS_TRANSIENT else 'permanent' }}, retention {{ r.RETENTION_TIME }}d vs rubric {{ params.staging_max_retention_days }}d{% else %}unaltered {{ r.DAYS_SINCE_ALTERED }}d, {{ r.READS }} reads{% endif %}){{ '; ' if not loop.last }}{% endfor %}.
+    remediation:
+      type: sql
+      autonomy: L2
+      template: |
+        {% if cluster_key == 'staging_retention' %}-- Staging is re-creatable: cut Time Travel now; re-create as TRANSIENT in the pipeline DDL to drop Fail-safe.
+        {% for r in rows %}ALTER TABLE {{ r.OBJECT_NAME }} SET DATA_RETENTION_TIME_IN_DAYS = {{ params.staging_max_retention_days }};
+        {% endfor %}{% else %}-- Stale clones: drop (recoverable with UNDROP within the retention period).
+        {% for r in rows %}DROP TABLE {{ r.OBJECT_NAME }};
+        {% endfor %}{% endif %}
+      rollback: |
+        {% if cluster_key == 'staging_retention' %}{% for r in rows %}ALTER TABLE {{ r.OBJECT_NAME }} SET DATA_RETENTION_TIME_IN_DAYS = {{ r.RETENTION_TIME }};
+        {% endfor %}{% else %}{% for r in rows %}UNDROP TABLE {{ r.OBJECT_NAME }};
+        {% endfor %}{% endif %}
+    kpis_to_watch: [KPI-COST-009, KPI-USE-003]
+    last_verified: "2026-10-01"
+
+  - id: DX-COST-07
+    title: Untagged spend
+    description: Warehouses consuming credits without a cost-centre tag, so spend cannot be charged back.
+    domain: D1
+    also_scores: [D10]
+    waf_pillar: cost_optimization
+    severity: medium
+    confidence_class: high
+    detector:
+      requires: [WAREHOUSES, WAREHOUSE_METERING_HISTORY, QUERY_ATTRIBUTION_HISTORY, TAG_REFERENCES]
+      inputs: [cost_center_tag, contract_price_per_credit]
+      cluster_by: theme
+      params:
+        default_cost_center_tag: {value: COST_CENTER}
+      signals: |
+        WITH tagname AS (
+          SELECT upper(coalesce((SELECT VALUE ->> '$' FROM CLIENT_INPUTS WHERE KEY = 'cost_center_tag'), $default_cost_center_tag)) AS TAG),
+        tagged AS (
+          SELECT DISTINCT OBJECT_NAME, TAG_DATABASE || '.' || TAG_SCHEMA || '.' || TAG_NAME AS TAG_FQ
+          FROM TAG_REFERENCES, tagname WHERE DOMAIN = 'WAREHOUSE' AND upper(TAG_NAME) = tagname.TAG),
+        tot AS (SELECT sum(TOTAL_CREDITS) AS ALL_CREDITS FROM _WAREHOUSE_CREDITS)
+        SELECT w.WAREHOUSE_NAME AS OBJECT_NAME, 'cost_center' AS CLUSTER_KEY,
+               c.TOTAL_CREDITS AS CREDITS,
+               CASE WHEN tot.ALL_CREDITS > 0 THEN c.TOTAL_CREDITS / tot.ALL_CREDITS ELSE 0 END AS SPEND_SHARE,
+               CASE WHEN t.OBJECT_NAME IS NULL THEN 0 ELSE 1 END AS HAS_COST_CENTER,
+               coalesce((SELECT min(TAG_FQ) FROM tagged), 'GOVERNANCE.TAGS.' || (SELECT TAG FROM tagname)) AS TAG_FQ
+        FROM WAREHOUSES w
+        JOIN _WAREHOUSE_CREDITS c ON c.WAREHOUSE_NAME = w.WAREHOUSE_NAME
+        CROSS JOIN tot
+        LEFT JOIN tagged t ON t.OBJECT_NAME = w.WAREHOUSE_NAME
+      rule: HAS_COST_CENTER = 0 AND CREDITS > 0
+    evidence:
+      kind: WH
+      fields: [CREDITS, SPEND_SHARE, HAS_COST_CENTER]
+    value:
+      method: "governance value (enables chargeback); risk = likelihood × impact from the rubric risk model; untagged spend is reported for context, not counted as savings"
+    risk:
+      likelihood_ref: rubric.diagnostics.risk_model.cost_07.likelihood
+      impact_ref: rubric.diagnostics.risk_model.cost_07.impact
+      method: "Unattributed spend cannot be charged back or budgeted (likelihood × impact, 1–5 each)"
+    effort: {size: S}
+    title_template: "Tag {{ n }} warehouse{{ 's' if n != 1 else '' }} with a cost centre"
+    rationale_template: >-
+      {{ n }} of {{ candidates }} warehouses carry no {{ rows[0].TAG_FQ }} tag; together they account for
+      {{ pct(rows | sum(attribute='SPEND_SHARE')) }} of warehouse spend ({{ usd((rows | sum(attribute='CREDITS')) * price_per_credit * annualise) }} per year unattributed).
+    remediation:
+      type: sql
+      autonomy: L2
+      template: |
+        -- Cost-centre values are confirmed with the FinOps owner before execution (placeholder: UNASSIGNED).
+        CREATE TAG IF NOT EXISTS {{ rows[0].TAG_FQ }};
+        {% for r in rows %}ALTER WAREHOUSE {{ r.OBJECT_NAME }} SET TAG {{ r.TAG_FQ }} = 'UNASSIGNED';
+        {% endfor %}
+      rollback: |
+        {% for r in rows %}ALTER WAREHOUSE {{ r.OBJECT_NAME }} UNSET TAG {{ r.TAG_FQ }};
+        {% endfor %}
+    kpis_to_watch: [KPI-COST-003, KPI-GOV-001]
+    last_verified: "2026-10-01"
+
+  - id: DX-COST-08
+    title: Capacity commitment mis-sized
+    description: Forecast annual consumption (run-rate) deviates from the capacity commitment beyond the rubric tolerance — over-commitment or overage exposure.
+    domain: D1
+    also_scores: [D10]
+    waf_pillar: cost_optimization
+    severity: high
+    confidence_class: high
+    detector:
+      requires: [METERING_DAILY_HISTORY, CLIENT_INPUTS]
+      inputs: [capacity_commitment, contract_price_per_credit]
+      cluster_by: theme
+      params:
+        max_commit_variance: {threshold_ref: rubric.diagnostics.checks.cost_08.max_commit_variance}
+        capacity_notify_percents: {ref: rubric.diagnostics.checks.cost_08.capacity_notify_percents}
+      signals: |
+        WITH m AS (SELECT sum(CREDITS_BILLED) AS WINDOW_CREDITS FROM METERING_DAILY_HISTORY),
+        c AS (SELECT CAST(VALUE ->> 'annual_credits' AS DOUBLE) AS COMMIT_CREDITS FROM CLIENT_INPUTS WHERE KEY = 'capacity_commitment')
+        SELECT 'ACCOUNT' AS OBJECT_NAME, 'capacity' AS CLUSTER_KEY, m.WINDOW_CREDITS,
+               m.WINDOW_CREDITS / $window_days * $days_per_year AS FORECAST_ANNUAL_CREDITS,
+               c.COMMIT_CREDITS,
+               (c.COMMIT_CREDITS - m.WINDOW_CREDITS / $window_days * $days_per_year) / c.COMMIT_CREDITS AS COMMIT_VARIANCE,
+               greatest(c.COMMIT_CREDITS - m.WINDOW_CREDITS / $window_days * $days_per_year, 0) AS OVER_COMMIT_CREDITS,
+               greatest(m.WINDOW_CREDITS / $window_days * $days_per_year - c.COMMIT_CREDITS, 0) AS OVERAGE_CREDITS
+        FROM m CROSS JOIN c WHERE c.COMMIT_CREDITS > 0
+      rule: abs(COMMIT_VARIANCE) >= $max_commit_variance
+    evidence:
+      kind: ACCT
+      fields: [WINDOW_CREDITS, FORECAST_ANNUAL_CREDITS, COMMIT_CREDITS, COMMIT_VARIANCE, OVER_COMMIT_CREDITS, OVERAGE_CREDITS]
+    value:
+      method: "over-commit credits × recoverable share × contract price, plus overage credits × overage premium × contract price (forecast = window run-rate annualised)"
+      p50: (OVER_COMMIT_CREDITS * recoverable_over_commit_share + OVERAGE_CREDITS * overage_premium_share) * price_per_credit
+      conservative: (OVER_COMMIT_CREDITS * recoverable_over_commit_share + OVERAGE_CREDITS * overage_premium_share) * conservative_factor * price_per_credit
+      factors:
+        recoverable_over_commit_share: rubric.diagnostics.checks.cost_08.recoverable_over_commit_share
+        overage_premium_share: rubric.diagnostics.checks.cost_08.overage_premium_share
+        conservative_factor: rubric.diagnostics.checks.cost_08.conservative_factor
+    effort: {size: M}
+    title_template: "{{ 'Right-size the capacity commitment before renewal' if rows[0].OVER_COMMIT_CREDITS > 0 else 'Plan for capacity overage before renewal' }}"
+    rationale_template: >-
+      Forecast {{ num(rows[0].FORECAST_ANNUAL_CREDITS) }} credits/year vs commitment {{ num(rows[0].COMMIT_CREDITS) }}
+      ({{ pct(rows[0].COMMIT_VARIANCE) }} variance; rubric tolerance {{ pct(params.max_commit_variance) }}).
+    remediation:
+      type: sql
+      autonomy: L1
+      template: |
+        -- Contract strategy is a commercial decision; this guard makes burn-down against the commitment visible.
+        CREATE RESOURCE MONITOR IF NOT EXISTS ALTITUDE_CAPACITY_GUARD
+          WITH CREDIT_QUOTA = {{ rows[0].COMMIT_CREDITS | round(0) | int }} FREQUENCY = YEARLY START_TIMESTAMP = IMMEDIATELY
+          TRIGGERS{% for pct_ in params.capacity_notify_percents %} ON {{ pct_ }} PERCENT DO NOTIFY{% endfor %};
+      rollback: |
+        DROP RESOURCE MONITOR IF EXISTS ALTITUDE_CAPACITY_GUARD;
+    kpis_to_watch: [KPI-COST-005, KPI-COST-004]
+    last_verified: "2026-10-01"

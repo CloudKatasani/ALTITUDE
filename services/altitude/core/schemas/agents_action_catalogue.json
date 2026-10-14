@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Agent action types and per-tenant pre-approved action catalogue (Section 18.1)",
+  "x-altitude-globs": ["agents/action_catalogue.yaml"],
+  "type": "object",
+  "required": ["version", "action_types", "pre_approved"],
+  "additionalProperties": false,
+  "$defs": {
+    "ref": {"type": "string", "pattern": "^rubric\\.[a-z0-9_.]+$"}
+  },
+  "properties": {
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "action_types": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "action_type", "object_type", "params", "capture", "reversible", "executable"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^AT-[A-Z0-9-]+$"},
+          "action_type": {"type": "string", "pattern": "^[a-z_]+\\.[a-z_]+$"},
+          "object_type": {"enum": ["warehouse", "task", "user", "role", "table"]},
+          "params": {
+            "type": "object",
+            "additionalProperties": {"enum": ["integer", "warehouse_size", "identifier", "privilege", "object_kind", "text"]}
+          },
+          "description": {"type": "string"},
+          "sql_template": {"type": "string"},
+          "rollback_template": {"type": "string"},
+          "capture": {"type": "array", "items": {"type": "string"}},
+          "reversible": {"type": "boolean"},
+          "idempotent_required": {"type": "boolean"},
+          "executable": {"type": "boolean"}
+        },
+        "if": {"properties": {"executable": {"const": true}}},
+        "then": {"required": ["sql_template"]}
+      }
+    },
+    "pre_approved": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "tenants", "action_type", "agents", "max_autonomy", "scope", "blast_radius", "change_window", "rollback"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^PA-[A-Z0-9-]+$"},
+          "tenants": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "action_type": {"type": "string"},
+          "agents": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^AG-[A-Z0-9-]+$"}},
+          "max_autonomy": {"enum": ["L2", "L3"]},
+          "scope": {
+            "type": "object",
+            "required": ["include", "exclude"],
+            "additionalProperties": false,
+            "properties": {
+              "include": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+              "exclude": {"type": "array", "items": {"type": "string"}}
+            }
+          },
+          "requires_idempotent_flag": {"type": "boolean"},
+          "blast_radius": {
+            "type": "object",
+            "required": ["max_targets_per_run_threshold_ref", "max_executions_per_day_threshold_ref", "param_bounds"],
+            "additionalProperties": false,
+            "properties": {
+              "max_targets_per_run_threshold_ref": {"$ref": "#/$defs/ref"},
+              "max_executions_per_day_threshold_ref": {"$ref": "#/$defs/ref"},
+              "param_bounds": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "min_threshold_ref": {"$ref": "#/$defs/ref"},
+                    "max_threshold_ref": {"$ref": "#/$defs/ref"}
+                  }
+                }
+              }
+            }
+          },
+          "change_window": {
+            "type": "object",
+            "required": ["days", "start_hour_utc", "end_hour_utc"],
+            "additionalProperties": false,
+            "properties": {
+              "days": {"type": "array", "items": {"enum": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]}},
+              "start_hour_utc": {"type": "integer", "minimum": 0, "maximum": 24},
+              "end_hour_utc": {"type": "integer", "minimum": 0, "maximum": 24}
+            }
+          },
+          "guard": {
+            "type": "object",
+            "required": ["metric", "regression_threshold_ref", "observation_hours_threshold_ref"],
+            "additionalProperties": false,
+            "properties": {
+              "metric": {"type": "string"},
+              "regression_threshold_ref": {"$ref": "#/$defs/ref"},
+              "observation_hours_threshold_ref": {"$ref": "#/$defs/ref"}
+            }
+          },
+          "rollback": {"enum": ["automatic", "none_idempotent"]}
+        }
+      }
+    }
+  }
+}

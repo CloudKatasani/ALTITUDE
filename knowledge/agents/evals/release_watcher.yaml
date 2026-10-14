@@ -1,0 +1,30 @@
+# Golden incidents for the Release Change Watcher (uses the sample bundle in knowledge/agents/behaviour_changes.yaml).
+agent_id: AG-RELEASE-CHANGE-WATCHER
+version: 1.0.0
+cases:
+  - id: EVAL-RW-001
+    description: Bundle entries are mapped to the exact query signatures, users and views that use the changed behaviour.
+    telemetry:
+      synthetic: {profile: seeded}
+    expect:
+      findings:
+        - {kind: impact, subject: BCB-SAMPLE-2026_07-01, detail: {impacted: [qh_bi_sales_dash, qh_bi_ops_live]}}
+        - {kind: impact, subject: BCB-SAMPLE-2026_07-02, detail: {impacted: [qh_elt_orders_load, qh_elt_region_reload]}}
+        - {kind: impact, subject: BCB-SAMPLE-2026_08-01, detail: {impacted: [SVC_FIVETRAN]}}
+        - {kind: impact, subject: BCB-SAMPLE-2026_08-03, detail: {impacted: [JSMITH, TEMP_CONTRACTOR]}}
+        - {kind: impact, subject: BCB-SAMPLE-2026_09-01, detail: {impacted: [EDW.MART.V_REVENUE_FINAL]}}
+      absent_findings:
+        - {subject: BCB-SAMPLE-2026_09-02}
+      max_actions: 0
+
+  - id: EVAL-RW-002
+    description: On a well-run account the security entries do not apply and only real usage is reported.
+    telemetry:
+      synthetic: {profile: clean}
+    expect:
+      findings:
+        - {kind: impact, subject: BCB-SAMPLE-2026_07-01, detail: {impacted: [qh_bi_ops_live]}}
+      absent_findings:
+        - {subject: BCB-SAMPLE-2026_08-01}
+        - {subject: BCB-SAMPLE-2026_08-03}
+        - {subject: BCB-SAMPLE-2026_09-02}

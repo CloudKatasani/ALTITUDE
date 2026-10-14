@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Package O alert catalogue (Section 7.6)",
+  "x-altitude-globs": ["observability/alerts.yaml"],
+  "type": "object",
+  "required": ["version", "alerts", "severities", "routing_test"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "routing_test": {
+      "type": "object", "required": ["interval_ref"], "additionalProperties": false,
+      "properties": {"interval_ref": {"type": "string", "pattern": "^rubric\\.obs\\."}, "message": {"type": "string"}}
+    },
+    "severities": {
+      "type": "object",
+      "required": ["critical", "high", "medium", "low"],
+      "additionalProperties": {
+        "type": "object", "additionalProperties": false,
+        "properties": {
+          "pagerduty": {"enum": ["critical", "error", "warning", "info"]},
+          "servicenow_impact": {"type": "integer"},
+          "servicenow_urgency": {"type": "integer"},
+          "slack_prefix": {"type": "string"}
+        }
+      }
+    },
+    "alerts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "class", "name", "severity", "kpi", "rule", "route_ref", "runbook", "suppression_hours",
+                     "owner_role"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^ALR-[A-Z]+-[A-Z0-9-]+$"},
+          "class": {"enum": ["credit_anomaly", "budget_breach", "idle_share", "tier1_task_failure", "freshness_breach",
+                             "accountadmin_use", "new_user_without_mfa", "masking_gap", "cortex_spend_spike",
+                             "signature_regression"]},
+          "name": {"type": "string"},
+          "severity": {"enum": ["critical", "high", "medium", "low"]},
+          "kpi": {"type": "string", "pattern": "^KPI-"},
+          "rule": {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+              "type": {"enum": ["forecast_band", "threshold", "query"]},
+              "per": {"enum": ["dimension", "total"]},
+              "at": {"enum": ["day", "month"]},
+              "op": {"enum": ["gt", "gte", "lt", "lte"]},
+              "threshold_ref": {"type": "string"},
+              "lookback_ref": {"type": "string", "pattern": "^rubric\\."},
+              "min_points_ref": {"type": "string", "pattern": "^rubric\\."},
+              "band_stdevs_ref": {"type": "string", "pattern": "^rubric\\."},
+              "min_band_pct_ref": {"type": "string", "pattern": "^rubric\\."},
+              "min_abs_ref": {"type": "string", "pattern": "^rubric\\."},
+              "sql": {"type": "string"}
+            },
+            "additionalProperties": false,
+            "allOf": [
+              {"if": {"properties": {"type": {"const": "forecast_band"}}},
+               "then": {"required": ["lookback_ref", "min_points_ref", "band_stdevs_ref", "min_band_pct_ref", "min_abs_ref"]}},
+              {"if": {"properties": {"type": {"const": "threshold"}}}, "then": {"required": ["threshold_ref", "op"]}},
+              {"if": {"properties": {"type": {"const": "query"}}}, "then": {"required": ["sql"]}}
+            ]
+          },
+          "route_ref": {"type": "string", "pattern": "^tenant\\.alert_routes\\.[a-z_]+$"},
+          "runbook": {"type": "string", "pattern": "^RB-"},
+          "suppression_hours": {"type": "number", "minimum": 0},
+          "owner_role": {"type": "string"},
+          "linked_checks": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}

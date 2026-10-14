@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--Exported by Control-M Workload Automation 9.0.21 on 2026-09-30 12:00:04-->
+<DEFTABLE xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="Folder.xsd">
+    <FOLDER DATACENTER="CTM_PROD" VERSION="921" PLATFORM="UNIX" FOLDER_NAME="DWH_NIGHTLY" MODIFIED="False" LAST_UPLOAD="20260930115812UTC" FOLDER_ORDER_METHOD="SYSTEM" REAL_FOLDER_ID="412" TYPE="1" USED_BY_CODE="0">
+        <JOB JOBISN="1" APPLICATION="DWH" SUB_APPLICATION="EXTRACT" MEMNAME="extract_erp.sh" MEMLIB="/opt/etl/bin" JOBNAME="DWH_EXTRACT_ERP" DESCRIPTION="Land ERP extracts in the staging share" CREATED_BY="ctmadm" RUN_AS="etl" PRIORITY="AA" CRITICAL="1" TASKTYPE="Job" CYCLIC="0" NODEID="etl-host01" INTERVAL="00005M" MAXRERUN="2" TIMEFROM="0130" TIMETO="0500" DAYS="ALL" WEEKDAYS="1,2,3,4,5" JAN="1" FEB="1" MAR="1" APR="1" MAY="1" JUN="1" JUL="1" AUG="1" SEP="1" OCT="1" NOV="1" DEC="1" RETRO="0" CONFIRM="0" CREATION_DATE="20190312" CREATION_TIME="101500">
+            <INCOND NAME="ERP-FILES-READY" ODATE="ODAT" AND_OR="A"/>
+            <OUTCOND NAME="DWH_EXTRACT_ERP-OK" ODATE="ODAT" SIGN="+"/>
+            <OUTCOND NAME="ERP-FILES-READY" ODATE="ODAT" SIGN="-"/>
+            <SHOUT WHEN="NOTOK" URGENCY="R" DEST="dwh-oncall@example.com" MESSAGE="ERP extract failed"/>
+        </JOB>
+        <JOB JOBISN="2" APPLICATION="DWH" SUB_APPLICATION="LOAD" JOBNAME="DWH_LOAD_DIM_CUSTOMER" DESCRIPTION="Informatica customer dimension workflow" CREATED_BY="ctmadm" RUN_AS="infa" PRIORITY="AA" CRITICAL="0" TASKTYPE="Command" CMDLINE="pmcmd startworkflow -sv IS_PROD -d DOM_PROD -u %%INFA_USER -p %%INFA_PWD -f SALES_DW -wait wf_sales_dw" NODEID="infa-host01" INTERVAL="00010M" MAXRERUN="1" DAYS="ALL" WEEKDAYS="1,2,3,4,5">
+            <VARIABLE NAME="%%INFA_USER" VALUE="svc_infa"/>
+            <INCOND NAME="DWH_EXTRACT_ERP-OK" ODATE="ODAT" AND_OR="A"/>
+            <OUTCOND NAME="DWH_EXTRACT_ERP-OK" ODATE="ODAT" SIGN="-"/>
+            <OUTCOND NAME="DWH_LOAD_DIM_CUSTOMER-OK" ODATE="ODAT" SIGN="+"/>
+            <SHOUT WHEN="EXECTIME" TIME="&gt;045" URGENCY="U" DEST="dwh-oncall@example.com" MESSAGE="Customer load running long"/>
+        </JOB>
+        <JOB JOBISN="3" APPLICATION="DWH" SUB_APPLICATION="LOAD" JOBNAME="DWH_LOAD_SALES_MART" DESCRIPTION="SSIS sales mart package" CREATED_BY="ctmadm" RUN_AS="svc_ssis" PRIORITY="AA" TASKTYPE="Command" CMDLINE="dtexec /F &quot;D:\ssis\packages\LoadSalesMart.dtsx&quot; /REP E" NODEID="ssis-host01" MAXRERUN="0" DAYS="ALL" WEEKDAYS="1,2,3,4,5">
+            <INCOND NAME="DWH_EXTRACT_ERP-OK" ODATE="ODAT" AND_OR="A"/>
+            <OUTCOND NAME="DWH_LOAD_SALES_MART-OK" ODATE="ODAT" SIGN="+"/>
+        </JOB>
+        <JOB JOBISN="4" APPLICATION="DWH" SUB_APPLICATION="MART" JOBNAME="DWH_BUILD_AGGREGATES" DESCRIPTION="Finance aggregates (business days only)" CREATED_BY="ctmadm" RUN_AS="dbt" TASKTYPE="Command" CMDLINE="dbt build --select tag:wf_sales_dw tag:load_sales_mart" NODEID="etl-host01" MAXRERUN="3" INTERVAL="00002M" DAYSCAL="FIN_BUSDAYS" DAYS="ALL" WEEKDAYS="1,2,3,4,5">
+            <INCOND NAME="DWH_LOAD_DIM_CUSTOMER-OK" ODATE="ODAT" AND_OR="A"/>
+            <INCOND NAME="DWH_LOAD_SALES_MART-OK" ODATE="ODAT" AND_OR="A"/>
+            <OUTCOND NAME="DWH_BUILD_AGGREGATES-OK" ODATE="ODAT" SIGN="+"/>
+            <SHOUT WHEN="LATETIME" TIME="0600" URGENCY="V" DEST="finance-bi@example.com" MESSAGE="Sales aggregates not ready by 06:00"/>
+        </JOB>
+        <JOB JOBISN="5" APPLICATION="DWH" SUB_APPLICATION="MART" JOBNAME="DWH_PUBLISH_FLAG" DESCRIPTION="Notify finance that the mart is ready" CREATED_BY="ctmadm" RUN_AS="etl" TASKTYPE="Command" CMDLINE="/opt/etl/bin/notify_finance.sh SALES" NODEID="etl-host01" DAYS="ALL" WEEKDAYS="1,2,3,4,5">
+            <INCOND NAME="DWH_BUILD_AGGREGATES-OK" ODATE="ODAT" AND_OR="A"/>
+        </JOB>
+        <JOB JOBISN="6" APPLICATION="DWH" SUB_APPLICATION="HOUSEKEEPING" JOBNAME="DWH_ARCHIVE_LOGS" DESCRIPTION="Weekly log housekeeping" CREATED_BY="ctmadm" RUN_AS="etl" TASKTYPE="Command" CMDLINE="find /var/log/etl -name '*.log' -mtime +30 -delete" NODEID="etl-host01" TIMEFROM="2300" DAYS="ALL" WEEKDAYS="0"/>
+    </FOLDER>
+</DEFTABLE>

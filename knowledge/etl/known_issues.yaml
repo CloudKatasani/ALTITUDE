@@ -1,0 +1,141 @@
+# ETL known issues (Section 11.1). Parsers emit these ids when their detector fires; severity S1..S4 (Section 10).
+# Each issue's severity also feeds job complexity via rubric.etl.issue_weights.
+last_verified: "2026-10-01"
+verified_by: practice-lead-etl
+known_issues:
+  # ---------------------------------------------------------------- Informatica PowerCenter
+  - id: ETL-INF-01
+    tool: informatica
+    title: Mapplets hide reusable logic that must be expanded or rebuilt
+    severity: S2
+    detector: "INSTANCE with TRANSFORMATION_TYPE Mapplet"
+    fix: "Rebuild each mapplet once as a dbt macro or ephemeral model; reuse across mappings."
+  - id: ETL-INF-02
+    tool: informatica
+    title: Lookups with caches (static/dynamic) and multi-match policies
+    severity: S1
+    detector: "Lookup with 'Lookup policy on multiple match' other than 'Report Error', or dynamic cache"
+    fix: "Deduplicate the reference model explicitly (ROW_NUMBER) and test uniqueness; dynamic caches become incremental MERGE logic."
+  - id: ETL-INF-03
+    tool: informatica
+    title: Router and Union semantics
+    severity: S1
+    detector: "Router (row reaches every group whose condition is true; default only when none) or Union"
+    fix: "Generate one predicate per group without first-match short-circuit; NULL conditions count as false; reconcile group counts."
+  - id: ETL-INF-04
+    tool: informatica
+    title: Session and Source Qualifier SQL overrides
+    severity: S2
+    detector: "Source Qualifier 'Sql Query' / 'User Defined Join' or SESSION attribute overrides"
+    fix: "Re-engineer the override as a model; overrides bypass the mapping graph and are dialect-specific SQL."
+  - id: ETL-INF-05
+    tool: informatica
+    title: Parameter files and mapping variables
+    severity: S2
+    detector: "$$PARAM / $PM* references in expressions, filters or overrides"
+    fix: "Map parameters to dbt vars with explicit defaults per environment; inventory the parameter files."
+  - id: ETL-INF-06
+    tool: informatica
+    title: Row-by-row expression logic (variable ports, unconnected lookups, Java)
+    severity: S2
+    detector: "VARIABLE ports referencing prior rows, :LKP calls, Java/Stored Procedure transformations"
+    fix: "Rewrite as set-based SQL (window functions, joins); re-engineer code transformations."
+  - id: ETL-INF-07
+    tool: informatica
+    title: Update Strategy (DD_UPDATE/DD_DELETE) requires incremental merge design
+    severity: S2
+    detector: "Update Strategy transformation"
+    fix: "Incremental model with unique_key / MERGE; deletes become soft-deletes or explicit DELETE models."
+  # ---------------------------------------------------------------- SSIS
+  - id: ETL-SSIS-01
+    tool: ssis
+    title: Script tasks and script components (C#/VB)
+    severity: S2
+    detector: "Microsoft.ScriptTask / Microsoft.ScriptComponentHost"
+    fix: "Re-engineer; never convert script code blindly (MS-07)."
+  - id: ETL-SSIS-02
+    tool: ssis
+    title: Event handlers
+    severity: S2
+    detector: "DTS:EventHandlers (OnError, OnPostExecute, ...)"
+    fix: "Move to orchestrator failure callbacks / finalizer tasks and alerts."
+  - id: ETL-SSIS-03
+    tool: ssis
+    title: Package configurations, parameters and variables
+    severity: S2
+    detector: "DTS:Configurations, package parameters, @[User::*] / @[$Package::*] in expressions"
+    fix: "Map to dbt vars / environment config; inventory configuration sources (XML files, SQL tables, env vars)."
+  - id: ETL-SSIS-04
+    tool: ssis
+    title: Lookup cache and no-match behaviour
+    severity: S1
+    detector: "Lookup NoMatchBehavior / CacheType"
+    fix: "LEFT JOIN to a deduplicated reference model; rows failing the lookup are kept (redirect/fail behaviour handled by tests)."
+  - id: ETL-SSIS-05
+    tool: ssis
+    title: Conditional Split is first-match
+    severity: S1
+    detector: "Microsoft.ConditionalSplit"
+    fix: "Each output predicate excludes rows matched by earlier outputs (ordered evaluation preserved)."
+  - id: ETL-SSIS-06
+    tool: ssis
+    title: Slowly Changing Dimension wizard
+    severity: S2
+    detector: "Microsoft.SCD"
+    fix: "Replace with dbt snapshots (check/timestamp strategy)."
+  # ---------------------------------------------------------------- cross-tool
+  - id: ETL-GEN-01
+    tool: any
+    title: Row-by-row commands against the warehouse
+    severity: S3
+    detector: "OLE DB Command / per-row SQL"
+    fix: "Set-based MERGE in an incremental model."
+  - id: ETL-GEN-02
+    tool: any
+    title: File-system side effects and file-based sources/targets
+    severity: S2
+    detector: "Flat file / Excel / FTP / file system components"
+    fix: "Stages, COPY INTO and directory tables; external access integrations for remote systems."
+  - id: ETL-GEN-03
+    tool: any
+    title: Expression not translatable to SQL
+    severity: S2
+    detector: "Expression parser cannot translate a function or construct"
+    fix: "Manual rewrite; extend the function map in knowledge if the construct recurs."
+  - id: ETL-GEN-04
+    tool: any
+    title: Execute SQL task with dialect-specific SQL
+    severity: S3
+    detector: "Execute SQL task statement that sqlglot cannot transpile to Snowflake"
+    fix: "Convert with the conversion orchestrator (SnowConvert AI) and review."
+  # ---------------------------------------------------------------- other tools (catalogue; parsers not yet implemented)
+  - id: ETL-DS-01
+    tool: datastage
+    title: Parallel job partitioning, transformer stage variables and sequence jobs
+    severity: S2
+    detector: "DSX/ISX export analysis"
+    fix: "Drop partitioning; rewrite stage variables as window functions; sequences to the orchestrator."
+  - id: ETL-ODI-01
+    tool: odi
+    title: Knowledge modules embed SQL dialect
+    severity: S2
+    detector: "Repository KM usage"
+    fix: "Regenerate logic as dbt models; do not port KMs."
+  - id: ETL-ABI-01
+    tool: abinitio
+    title: Proprietary components and PDL
+    severity: S2
+    detector: "Graph export (licensing permitting)"
+    fix: "Re-engineer per component family."
+  - id: ETL-TAL-01
+    tool: talend
+    title: Java routines in Talend jobs
+    severity: S2
+    detector: "Job items with tJava* components or routines"
+    fix: "Re-engineer as SQL or Snowpark."
+  - id: ETL-HAND-01
+    tool: hand-coded
+    title: Undocumented control flow and file-system side effects in shell + SQL
+    severity: S2
+    detector: "Script parser + AI agent"
+    fix: "Map control flow to the orchestrator; files to stages."

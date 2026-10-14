@@ -1,0 +1,13 @@
+name: review_decision
+description: Run a decision through the seven-lens Architecture Review Board and record it as an ADR with dissent.
+permission: run
+entrypoint: altitude.skills.impl:review_decision
+input_schema:
+  type: object
+  properties:
+    title: {type: string, minLength: 3}
+    facts: {type: object}
+    evidence_refs: {type: array, items: {type: string}}
+    engagement_id: {type: string}
+  required: [title, facts]
+  additionalProperties: false

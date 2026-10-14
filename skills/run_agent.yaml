@@ -1,0 +1,37 @@
+name: run_agent
+description: Run one run-operations agent (cost sentinel, rightsizer, pipeline triage, access hygiene...) on a sealed snapshot
+  under its autonomy limits.
+permission: run
+entrypoint: altitude.skills.impl_platform:run_agent
+input_schema:
+  type: object
+  properties:
+    agent_id:
+      enum:
+      - AG-COST-SENTINEL
+      - AG-WAREHOUSE-RIGHTSIZER
+      - AG-PIPELINE-TRIAGE
+      - AG-ACCESS-HYGIENE
+      - AG-DQ-INCIDENT
+      - AG-RELEASE-CHANGE-WATCHER
+    snapshot_id:
+      type: string
+      minLength: 3
+      description: snapshot id registered in the store, or a sealed .duckdb path
+    as_of:
+      type: string
+      format: date-time
+    tenant_id:
+      type: string
+    trigger:
+      type: string
+    simulate:
+      type: boolean
+    require_promoted:
+      type: boolean
+    auto_execute:
+      type: boolean
+  required:
+  - agent_id
+  - snapshot_id
+  additionalProperties: false

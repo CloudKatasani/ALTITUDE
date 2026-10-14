@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Ask {{ theme.COPILOT_NAME }}</h1>
+<form method="get" action="/sherpa" class="ask"><input name="q" value="{{ q }}" placeholder="e.g. Which warehouses waste the most credits?"><button>Ask</button></form>
+{% if answer %}
+<section class="card">
+  {% if answer.grounded %}<p class="muted">Confidence {{ "%.2f"|format(answer.confidence) }} · cites {{ answer.citations|join(", ") }}</p>
+  {% else %}<p class="flag high">Not grounded — refused rather than guessing.</p>{% endif %}
+  <pre>{{ answer.text }}</pre>
+  <p class="muted">Rationale: {{ answer.rationale }}</p>
+</section>
+{% endif %}
+{% endblock %}

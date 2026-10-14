@@ -1,0 +1,68 @@
+id: CONN-SQLSERVER
+source: sqlserver
+dialect: tsql
+version: 1.0.0
+description: >
+  Read-only harvest of a SQL Server / Azure SQL database: catalog, module code, column metadata,
+  expression dependencies, plan-cache and Query Store usage, SQL Agent jobs and the SSIS catalog.
+  The principal is never a member of db_datareader/db_owner and holds no permission on user tables.
+principal:
+  name: altitude_harvest
+  kind: login
+  notes: SQL or Entra ID login mapped to a user in each harvested database, in msdb and in SSISDB.
+required_grants:
+  - privilege: VIEW DEFINITION
+    "on": DATABASE (each harvested database)
+    why: Read object definitions (sys.sql_modules) and catalog views without any access to table rows.
+    grant_sql: GRANT VIEW DEFINITION TO altitude_harvest;
+  - privilege: VIEW DATABASE STATE
+    "on": DATABASE (each harvested database)
+    why: Read Query Store views and sys.dm_db_partition_stats (row counts and sizes, no rows).
+    grant_sql: GRANT VIEW DATABASE STATE TO altitude_harvest;
+  - privilege: VIEW SERVER STATE
+    "on": SERVER
+    why: Read plan-cache usage (sys.dm_exec_procedure_stats, sys.dm_exec_query_stats) when Query Store is off.
+    grant_sql: GRANT VIEW SERVER STATE TO altitude_harvest;
+  - privilege: SQLAgentReaderRole
+    "on": msdb
+    why: Read SQL Agent job definitions, schedules and history (scheduler inventory and job usage).
+    grant_sql: USE msdb; ALTER ROLE SQLAgentReaderRole ADD MEMBER altitude_harvest;
+  - privilege: ssis_logreader
+    "on": SSISDB
+    why: Read the SSIS catalog (folders, projects, packages, executions) for ETL inventory and usage.
+    optional: true
+    grant_sql: USE SSISDB; ALTER ROLE ssis_logreader ADD MEMBER altitude_harvest;
+objects_read:
+  - {name: "sys.objects", why: "Object inventory (tables, views, procedures, functions, triggers)", contains: catalog}
+  - {name: "sys.schemas", why: "Schema names for fully-qualified object names", contains: catalog}
+  - {name: "sys.sql_modules", why: "T-SQL source of views, procedures, functions and triggers", contains: code}
+  - {name: "sys.columns", why: "Column names, types, nullability and collation", contains: catalog}
+  - {name: "sys.types", why: "Column type names", contains: catalog}
+  - {name: "sys.sql_expression_dependencies", why: "Static dependency graph between modules and tables", contains: dependencies}
+  - {name: "sys.dm_exec_procedure_stats", why: "Procedure execution counts and last execution time", contains: usage}
+  - {name: "sys.dm_exec_query_stats", why: "Ad hoc query usage when Query Store is disabled", contains: usage}
+  - {name: "sys.database_query_store_options", why: "Whether Query Store usage history is available", contains: usage}
+  - {name: "sys.query_store_query", why: "Query Store queries (owning module, text id)", contains: usage}
+  - {name: "sys.query_store_query_text", why: "Query text, parsed in-boundary for referenced objects; never shipped", contains: usage}
+  - {name: "sys.query_store_plan", why: "Plan to query mapping for runtime statistics", contains: usage}
+  - {name: "sys.query_store_runtime_stats", why: "Execution counts per plan and interval", contains: usage}
+  - {name: "sys.query_store_runtime_stats_interval", why: "Interval start/end times for usage periods", contains: usage}
+  - {name: "sys.dm_db_partition_stats", why: "Table row counts and reserved pages (aggregates only)", contains: statistics}
+  - {name: "sys.database_permissions", why: "Object-level grants for the target RBAC mapping", contains: grants}
+  - {name: "sys.database_principals", why: "Grantee names and types", contains: grants}
+  - {name: "msdb.dbo.sysjobs", why: "SQL Agent job inventory", contains: schedule}
+  - {name: "msdb.dbo.sysjobsteps", why: "Job step commands (procedures and packages they run)", contains: schedule}
+  - {name: "msdb.dbo.sysjobschedules", why: "Job to schedule mapping", contains: schedule}
+  - {name: "msdb.dbo.sysschedules", why: "Schedule frequency (daily, weekly, monthly / month-end)", contains: schedule}
+  - {name: "msdb.dbo.sysjobhistory", why: "Job run history (job usage)", contains: usage}
+  - {name: "SSISDB.catalog.folders", why: "SSIS catalog folders", contains: etl}
+  - {name: "SSISDB.catalog.projects", why: "SSIS projects", contains: etl}
+  - {name: "SSISDB.catalog.packages", why: "SSIS package inventory", contains: etl}
+  - {name: "SSISDB.catalog.executions", why: "SSIS package executions (ETL usage)", contains: usage}
+files_read:
+  - {glob: "**/*.dtsx", why: "SSIS package definitions from the client's repository (extracted SQL and task types only)"}
+row_data: false
+never_shipped:
+  - user-table rows
+  - query text (parsed in-boundary; only object names and counts leave)
+  - parameter values and plan XML

@@ -1,0 +1,46 @@
+# Per-tenant agent policy (Section 18.1/18.3): autonomy caps, approvers, break-glass identities,
+# idempotency flags and policy object names. The `default` tenant applies when no tenant entry matches.
+version: 1.0.0
+tenants:
+  - id: TP-DEFAULT
+    tenant_id: default
+    autonomy_caps:
+      AG-COST-SENTINEL: L1
+      AG-WAREHOUSE-RIGHTSIZER: L3
+      AG-PIPELINE-TRIAGE: L3
+      AG-ACCESS-HYGIENE: L2
+      AG-DQ-INCIDENT: L2
+      AG-RELEASE-CHANGE-WATCHER: L1
+    break_glass_users: [ADMIN_1, ADMIN_2]
+    idempotent_tasks: [EDW.SALES.LOAD_ORDERS_TASK, EDW.STAGING.INGEST_EVENTS_TASK]
+    approvers:
+      warehouse.set_auto_suspend: [platform-owner]
+      warehouse.resize: [platform-owner]
+      warehouse.set_max_cluster_count: [platform-owner]
+      user.disable: [security-owner]
+      user.set_authentication_policy: [security-owner]
+      grant.revoke_role_from_user: [security-owner]
+      grant.revoke_privilege_from_role: [security-owner, data-owner]
+      table.quarantine: [data-owner]
+      task.fix_draft: [pipeline-owner]
+      task.rerun: [pipeline-owner]
+    mfa_authentication_policy: GOVERNANCE.POLICIES.AP_REQUIRE_MFA
+    quarantine_tag: GOVERNANCE.TAGS.DQ_STATUS
+    system_roles: [ACCOUNTADMIN, SECURITYADMIN, SYSADMIN, USERADMIN, ORGADMIN, PUBLIC]
+
+  - id: TP-CAUTIOUS
+    tenant_id: cautious
+    description: A newly onboarded client — L1-L2 only (Section 18.1 default for new clients).
+    autonomy_caps:
+      AG-COST-SENTINEL: L1
+      AG-WAREHOUSE-RIGHTSIZER: L2
+      AG-PIPELINE-TRIAGE: L2
+      AG-ACCESS-HYGIENE: L2
+      AG-DQ-INCIDENT: L2
+      AG-RELEASE-CHANGE-WATCHER: L1
+    break_glass_users: [ADMIN_1, ADMIN_2]
+    idempotent_tasks: []
+    approvers: {}
+    mfa_authentication_policy: GOVERNANCE.POLICIES.AP_REQUIRE_MFA
+    quarantine_tag: GOVERNANCE.TAGS.DQ_STATUS
+    system_roles: [ACCOUNTADMIN, SECURITYADMIN, SYSADMIN, USERADMIN, ORGADMIN, PUBLIC]

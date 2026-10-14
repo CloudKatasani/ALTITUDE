@@ -1,0 +1,53 @@
+# Shared helper relations available to every detector (created as TEMP objects on a read-only
+# connection to the sealed snapshot — the snapshot itself is never modified).
+# kind: view   -> CREATE TEMP VIEW <name> AS <sql>
+# kind: rubric_map -> TEMP TABLE <name>(<key_column>, <value_column>) built from a rubric mapping
+version: 1.0.0
+helpers:
+  - id: HLP-SIZE-CREDITS
+    name: _SIZE_CREDITS
+    kind: rubric_map
+    ref: rubric.diagnostics.warehouse_size_credits
+    key_column: WAREHOUSE_SIZE
+    value_column: CREDITS_PER_HOUR
+    description: Credits per hour per cluster for each warehouse size.
+  - id: HLP-TIER1
+    name: _TIER1_TABLES
+    kind: view
+    description: Tier-1 tables from the engagement intake (CLIENT_INPUTS.tier1_tables) or a TIER=tier1 tag.
+    sql: |
+      SELECT DISTINCT FQ_NAME FROM (
+        SELECT unnest(from_json(VALUE, '["VARCHAR"]')) AS FQ_NAME
+        FROM CLIENT_INPUTS WHERE KEY = 'tier1_tables'
+        UNION ALL
+        SELECT OBJECT_DATABASE || '.' || OBJECT_SCHEMA || '.' || OBJECT_NAME AS FQ_NAME
+        FROM TAG_REFERENCES
+        WHERE upper(TAG_NAME) = 'TIER' AND lower(TAG_VALUE) IN ('tier1', 'tier-1') AND DOMAIN = 'TABLE'
+      )
+  - id: HLP-WH-CREDITS
+    name: _WAREHOUSE_CREDITS
+    kind: view
+    description: Billed vs query-attributed compute credits per warehouse over the snapshot window.
+    sql: |
+      SELECT w.WAREHOUSE_NAME,
+             coalesce(b.BILLED_CREDITS, 0) AS BILLED_CREDITS,
+             coalesce(b.TOTAL_CREDITS, 0) AS TOTAL_CREDITS,
+             coalesce(a.ATTRIBUTED_CREDITS, 0) AS ATTRIBUTED_CREDITS
+      FROM WAREHOUSES w
+      LEFT JOIN (SELECT WAREHOUSE_NAME, sum(CREDITS_USED_COMPUTE) AS BILLED_CREDITS, sum(CREDITS_USED) AS TOTAL_CREDITS
+                 FROM WAREHOUSE_METERING_HISTORY GROUP BY WAREHOUSE_NAME) b ON b.WAREHOUSE_NAME = w.WAREHOUSE_NAME
+      LEFT JOIN (SELECT WAREHOUSE_NAME, sum(CREDITS_ATTRIBUTED_COMPUTE) AS ATTRIBUTED_CREDITS
+                 FROM QUERY_ATTRIBUTION_HISTORY GROUP BY WAREHOUSE_NAME) a ON a.WAREHOUSE_NAME = w.WAREHOUSE_NAME
+  - id: HLP-SIG-CREDITS
+    name: _SIGNATURE_COST
+    kind: view
+    description: Executions, attributed credits and a representative text per query signature.
+    sql: |
+      SELECT q.QUERY_PARAMETERIZED_HASH,
+             count(*) AS EXECUTIONS,
+             coalesce(sum(a.CREDITS_ATTRIBUTED_COMPUTE), 0) AS CREDITS,
+             min(q.WAREHOUSE_NAME) AS WAREHOUSE_NAME,
+             min(q.QUERY_TEXT) AS SAMPLE_TEXT
+      FROM QUERY_HISTORY q
+      LEFT JOIN QUERY_ATTRIBUTION_HISTORY a ON a.QUERY_ID = q.QUERY_ID
+      GROUP BY q.QUERY_PARAMETERIZED_HASH

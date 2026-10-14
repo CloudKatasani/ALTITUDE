@@ -1,0 +1,6 @@
+namespace: ai
+version: 1.0.0
+description: Human-review policy for AI inferences (principle 3).
+values:
+  review_confidence_min: 0.80     # below this, a human must review before the output has any effect
+  review_sample_rate: 0.10        # share of high-confidence items sampled for review

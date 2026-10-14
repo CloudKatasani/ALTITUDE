@@ -1,0 +1,18 @@
+# Package O runbook (Section 7.6) — referenced by knowledge/observability/alerts.yaml
+id: RB-GOV-MASKING-GAP
+title: Masking gap on a classified column
+alert_classes:
+- masking_gap
+owner_role: DATA_GOVERNANCE_LEAD
+autonomy: L1
+linked_kpis:
+- KPI-GOV-003
+- KPI-GOV-010
+linked_checks:
+- DX-SEC-05
+steps:
+- action: Confirm the classification tag on the column and its sensitivity.
+- action: Attach the tag-based masking policy for the classification (Package D DX-SEC-05 remediation).
+- action: Review access history for the column since classification and record any exposure.
+escalation: Data protection officer when non-privileged roles read the column while unmasked.
+verification: KPI-GOV-003 returns to 1.0.

@@ -1,0 +1,81 @@
+# AUTO-GENERATED — DO NOT EDIT. Source: knowledge/agents/catalogue.yaml. Regenerate with `altitude generate`.
+# Cortex Agent specification for Pipeline Triage — deploy with CREATE AGENT ... FROM SPECIFICATION.
+models:
+  orchestration: auto
+instructions:
+  orchestration: 'You are the Pipeline Triage (AG-PIPELINE-TRIAGE). Reads error, logs, recent changes; classifies
+    root cause; drafts fix or reruns idempotent jobs. Maximum autonomy: L3. Guardrails: idempotency_flag_as_data.
+    Use only the provided read-only tools; cite evidence IDs for every claim; state confidence and rationale. Never
+    execute a change yourself: draft it for the ALTITUDE action gateway, which enforces approvals (L2) and the pre-approved
+    catalogue (L3: task.rerun).'
+  response: Lead with the decision, then evidence IDs, confidence and the drafted action.
+tools:
+- tool_spec:
+    type: generic
+    name: task_failures
+    description: Failed task runs in the lookback window, with the task's latest state.
+    input_schema:
+      type: object
+      properties:
+        days:
+          type: number
+      required:
+      - days
+- tool_spec:
+    type: generic
+    name: task_definitions
+    description: 'Task inventory: schedule, predecessors, target table.'
+    input_schema:
+      type: object
+      properties: {}
+      required: []
+- tool_spec:
+    type: generic
+    name: task_idempotency
+    description: Tasks tagged IDEMPOTENT = 'true' in the account.
+    input_schema:
+      type: object
+      properties: {}
+      required: []
+- tool_spec:
+    type: generic
+    name: recent_ddl
+    description: DDL statements touching the given objects within a window.
+    input_schema:
+      type: object
+      properties:
+        objects:
+          type: string
+        before:
+          type: string
+        hours:
+          type: number
+      required:
+      - objects
+      - before
+      - hours
+tool_resources:
+  task_failures:
+    type: procedure
+    identifier: ALTITUDE_AGENTS.TOOLS.TASK_FAILURES
+    execution_environment:
+      type: warehouse
+      warehouse: WH_AGENTS
+  task_definitions:
+    type: procedure
+    identifier: ALTITUDE_AGENTS.TOOLS.TASK_DEFINITIONS
+    execution_environment:
+      type: warehouse
+      warehouse: WH_AGENTS
+  task_idempotency:
+    type: procedure
+    identifier: ALTITUDE_AGENTS.TOOLS.TASK_IDEMPOTENCY
+    execution_environment:
+      type: warehouse
+      warehouse: WH_AGENTS
+  recent_ddl:
+    type: procedure
+    identifier: ALTITUDE_AGENTS.TOOLS.RECENT_DDL
+    execution_environment:
+      type: warehouse
+      warehouse: WH_AGENTS

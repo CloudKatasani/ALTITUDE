@@ -1,0 +1,27 @@
+name: generate_dbt_from_mapping
+description: Turn SSIS .dtsx or Informatica XML mappings into a layered dbt project with tests and docs; optionally build
+  and test it on synthetic data.
+permission: run
+entrypoint: altitude.skills.impl_etl:generate_dbt_from_mapping
+input_schema:
+  type: object
+  properties:
+    files:
+      type: array
+      minItems: 1
+      items:
+        type: string
+    project_name:
+      type: string
+      pattern: ^[A-Za-z][A-Za-z0-9_]*$
+    usage:
+      type: object
+      additionalProperties:
+        type: integer
+    run:
+      type: boolean
+    engagement_id:
+      type: string
+  required:
+  - files
+  additionalProperties: false

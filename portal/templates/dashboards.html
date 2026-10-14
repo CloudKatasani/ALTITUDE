@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ theme.PACKAGE_O_NAME }}</h1>
+<p class="muted">Dashboards run in your own account; these are renderings of the KPI layer (each tile cites its KPI IDs).</p>
+<ul>{% for f in files %}<li><a href="/dashboards/files/{{ f }}">{{ f }}</a></li>{% else %}<li class="muted">No dashboards rendered yet — harvest, compute KPIs, then render.</li>{% endfor %}</ul>
+{% endblock %}

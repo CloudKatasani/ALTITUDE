@@ -1,0 +1,17 @@
+name: score_ai_readiness
+description: Score AI readiness (EAIRN eight pillars) for a sealed Snowflake snapshot, with maturity level and prioritised
+  gaps.
+permission: run
+entrypoint: altitude.skills.impl_platform:score_ai_readiness
+input_schema:
+  type: object
+  properties:
+    snapshot_id:
+      type: string
+      minLength: 3
+      description: snapshot id registered in the store, or a sealed .duckdb path
+    persist:
+      type: boolean
+  required:
+  - snapshot_id
+  additionalProperties: false

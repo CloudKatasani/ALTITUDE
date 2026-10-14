@@ -1,0 +1,148 @@
+# Well-Architected baseline — 14.4 Compute & Performance, 14.5 Cost Governance (FinOps). Format per Section 14.9.
+version: 1.0.0
+checks:
+  - id: WA-COMP-001
+    pillar: compute
+    waf_pillar: performance_efficiency
+    section: "14.4"
+    title: Warehouse not assigned to a known workload class
+    query: |
+      SELECT WAREHOUSE_NAME AS OBJECT_NAME, coalesce(WORKLOAD_CLASS, '(none)') AS DETAIL FROM WAREHOUSES
+      WHERE WORKLOAD_CLASS IS NULL OR NOT list_contains($classes, WORKLOAD_CLASS) ORDER BY 1
+    params: {classes: rubric.compute.allowed_workload_classes}
+    severity: low
+    rationale: Warehouses per workload class (ELT, BI, data science, ad-hoc, agents) — not per team — keep sizing and cost attribution coherent.
+    remediation: {auto_fix_available: false, autonomy: L1, playbook: PB-COMP-WORKLOAD-CLASS}
+
+  - id: WA-COMP-003
+    pillar: compute
+    waf_pillar: cost_optimization
+    section: "14.4"
+    title: Warehouse auto-suspend exceeds policy
+    query: |
+      SELECT WAREHOUSE_NAME AS OBJECT_NAME, AUTO_SUSPEND AS OBSERVED FROM WAREHOUSES
+      WHERE AUTO_SUSPEND IS NULL OR AUTO_SUSPEND = 0 OR AUTO_SUSPEND > $threshold ORDER BY 1
+    query_ref: generated/foundation/sql/wa_comp_003.sql
+    threshold_ref: rubric.compute.auto_suspend_max_seconds
+    severity: medium
+    rationale: Idle warehouses accrue credits; most workloads gain little cache benefit beyond 60s.
+    remediation: {auto_fix_available: true, autonomy: L2, playbook: PB-COMP-AUTOSUSPEND}
+
+  - id: WA-COMP-004
+    pillar: compute
+    waf_pillar: performance_efficiency
+    section: "14.4"
+    title: Warehouse auto-resume disabled
+    query: |
+      SELECT WAREHOUSE_NAME AS OBJECT_NAME, 'AUTO_RESUME = FALSE' AS DETAIL FROM WAREHOUSES WHERE NOT AUTO_RESUME ORDER BY 1
+    severity: low
+    rationale: Auto-resume lets aggressive auto-suspend run without user-visible failures.
+    remediation: {auto_fix_available: true, autonomy: L2, playbook: PB-COMP-AUTOSUSPEND}
+
+  - id: WA-COMP-005
+    pillar: compute
+    waf_pillar: cost_optimization
+    section: "14.4"
+    title: Statement timeout missing or above policy
+    query: |
+      SELECT WAREHOUSE_NAME AS OBJECT_NAME, STATEMENT_TIMEOUT_IN_SECONDS AS OBSERVED FROM WAREHOUSES
+      WHERE STATEMENT_TIMEOUT_IN_SECONDS IS NULL OR STATEMENT_TIMEOUT_IN_SECONDS > $threshold ORDER BY 1
+    threshold_ref: rubric.compute.statement_timeout_max_seconds
+    severity: medium
+    rationale: The 48-hour default lets one runaway query consume a month of credits.
+    remediation: {auto_fix_available: true, autonomy: L2, playbook: PB-COMP-TIMEOUTS}
+
+  - id: WA-COMP-006
+    pillar: compute
+    waf_pillar: performance_efficiency
+    section: "14.4"
+    title: Single-cluster warehouse queues at peak
+    query: |
+      WITH h AS (SELECT WAREHOUSE_NAME, hour(START_TIME) AS HOD, avg(AVG_QUEUED_LOAD) AS Q
+                 FROM WAREHOUSE_LOAD_HISTORY GROUP BY 1, 2)
+      SELECT h.WAREHOUSE_NAME AS OBJECT_NAME, round(max(h.Q), 3) AS OBSERVED FROM h
+      JOIN WAREHOUSES w ON w.WAREHOUSE_NAME = h.WAREHOUSE_NAME
+      WHERE coalesce(w.MAX_CLUSTER_COUNT, 1) = 1
+      GROUP BY 1 HAVING max(h.Q) > $threshold ORDER BY 1
+    threshold_ref: rubric.compute.peak_queued_load_max
+    severity: medium
+    rationale: Concurrency demand is met by scaling out (multi-cluster), decided with query-history evidence.
+    remediation: {auto_fix_available: true, autonomy: L2, playbook: PB-COMP-SCALE-OUT}
+
+  - id: WA-COMP-007
+    pillar: compute
+    waf_pillar: performance_efficiency
+    section: "14.4"
+    title: Queries spill to remote storage
+    query: |
+      SELECT WAREHOUSE_NAME AS OBJECT_NAME, round(sum(BYTES_SPILLED_TO_REMOTE_STORAGE) / pow(1024, 3), 1) AS OBSERVED
+      FROM QUERY_HISTORY WHERE WAREHOUSE_NAME IS NOT NULL GROUP BY 1
+      HAVING sum(BYTES_SPILLED_TO_REMOTE_STORAGE) / pow(1024, 3) > $threshold ORDER BY 1
+    threshold_ref: rubric.compute.remote_spill_max_gb
+    severity: medium
+    rationale: Remote spilling multiplies runtime; resize up for complex queries or rewrite them.
+    remediation: {auto_fix_available: false, autonomy: L2, playbook: PB-COMP-SPILL}
+
+  - id: WA-COST-001
+    pillar: cost
+    waf_pillar: cost_optimization
+    section: "14.5"
+    title: Warehouse without a resource monitor
+    query: |
+      SELECT WAREHOUSE_NAME AS OBJECT_NAME, 'no resource monitor' AS DETAIL FROM WAREHOUSES
+      WHERE RESOURCE_MONITOR IS NULL ORDER BY 1
+    severity: high
+    rationale: Resource monitors on every warehouse cap runaway spend and notify owners early.
+    remediation: {auto_fix_available: true, autonomy: L2, playbook: PB-COST-MONITORS}
+
+  - id: WA-COST-002
+    pillar: cost
+    waf_pillar: cost_optimization
+    section: "14.5"
+    title: No account-level resource monitor
+    query: |
+      SELECT ACCOUNT_NAME AS OBJECT_NAME, 'no ACCOUNT-level monitor' AS DETAIL FROM ACCOUNT_INFO
+      WHERE NOT EXISTS (SELECT 1 FROM RESOURCE_MONITORS WHERE LEVEL = 'ACCOUNT') ORDER BY 1
+    severity: medium
+    rationale: An account monitor bounds total spend, including warehouses created outside IaC.
+    remediation: {auto_fix_available: true, autonomy: L2, playbook: PB-COST-MONITORS}
+
+  - id: WA-COST-003
+    pillar: cost
+    waf_pillar: cost_optimization
+    section: "14.5"
+    title: Warehouse without a cost-centre tag
+    query: |
+      SELECT w.WAREHOUSE_NAME AS OBJECT_NAME, 'untagged spend' AS DETAIL FROM WAREHOUSES w
+      WHERE NOT EXISTS (SELECT 1 FROM TAG_REFERENCES t WHERE t.DOMAIN = 'WAREHOUSE' AND t.TAG_NAME = 'COST_CENTER'
+                        AND t.OBJECT_NAME = w.WAREHOUSE_NAME)
+      ORDER BY 1
+    severity: medium
+    rationale: Chargeback/showback needs every credit attributed to a cost centre.
+    remediation: {auto_fix_available: true, autonomy: L2, playbook: PB-COST-TAGGING}
+
+  - id: WA-COST-004
+    pillar: cost
+    waf_pillar: cost_optimization
+    section: "14.5"
+    title: Staging table is permanent or keeps long Time Travel
+    query: |
+      SELECT FQ_NAME AS OBJECT_NAME, RETENTION_TIME AS OBSERVED FROM TABLES
+      WHERE upper(TABLE_SCHEMA) LIKE '%STAG%' AND (NOT IS_TRANSIENT OR RETENTION_TIME > $threshold) ORDER BY 1
+    threshold_ref: rubric.foundation.staging_retention_max_days
+    severity: low
+    rationale: Re-creatable staging data should be transient with minimal Time Travel (no Fail-safe storage).
+    remediation: {auto_fix_available: true, autonomy: L2, playbook: PB-COST-STORAGE}
+
+  - id: WA-COST-005
+    pillar: cost
+    waf_pillar: cost_optimization
+    section: "14.5"
+    title: Stale clone retaining storage
+    query: |
+      SELECT FQ_NAME AS OBJECT_NAME, round(RETAINED_FOR_CLONE_BYTES / pow(1024, 3), 1) AS OBSERVED
+      FROM TABLE_STORAGE_METRICS WHERE NOT DELETED AND RETAINED_FOR_CLONE_BYTES / pow(1024, 3) > $threshold ORDER BY 1
+    threshold_ref: rubric.foundation.stale_clone_retained_gb_max
+    severity: low
+    rationale: Old clones pin micro-partitions the source has long replaced.
+    remediation: {auto_fix_available: false, autonomy: L2, playbook: PB-COST-STORAGE}
