@@ -51,6 +51,7 @@ values:
     small_cluster_factor: 0.85
     unmapped_dialect_factor: 0.7
     timestamp_precision_max_ms: 1000
+    float_rel_tolerance: 1.0e-9     # float values this close are classified as float_precision drift
     signature_confidence:
       duplicate_rows: 0.93
       trailing_space: 0.95
