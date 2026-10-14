@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-hero"><div class="wrap">
+  <div class="eyebrow">AI-Ready programme</div>
+  <h1>From "we should use Cortex" to an evaluated agent on governed data</h1>
+  <p class="lead">Most estates are not AI-ready: no semantic models, no descriptions, incomplete classification and masking, no agent identities. We score readiness on eight pillars, fix the foundations, and ship an agent with an evaluation harness.</p>
+  <p><a class="btn" href="contact.html">Get a readiness score</a></p>
+</div></section>
+
+<section class="block"><div class="wrap split">
+  <div>
+    <h2>Twelve weeks, six steps</h2>
+    <ol><li>Score — readiness snapshot across eight pillars</li><li>Fix foundations — descriptions, classification, masking</li><li>Build semantic views for 3–5 KPI domains (one definition per KPI, enforced)</li><li>Stand up Cortex Analyst, Search and one Cortex Agent with an evaluation harness</li><li>Launch in Snowflake Intelligence for a pilot group</li><li>Re-score and publish the delta</li></ol>
+    <p class="muted">{{ offer["OFF-AI"].duration_weeks[0] }}–{{ offer["OFF-AI"].duration_weeks[1] }} weeks · {{ offer["OFF-AI"].fee_usd|usd_range }}</p>
+  </div>
+  <div class="card">
+    <div class="eyebrow">Sample readiness score <span class="sample-tag">synthetic estate</span></div>
+    <h3>{{ s.ai.overall }} / 100 · level {{ s.ai.level }} ({{ s.ai.label }})</h3>
+    {% for p, v in s.ai.pillars.items() %}{% set pct = (v or 0) / 100 %}
+    <div class="bar-row"><span>{{ p|label|title }}</span><div class="bar-track"><div class="bar-fill {{ 'low' if pct < 0.45 else ('mid' if pct < 0.7 else '') }}" style="width: {{ (pct * 100)|round(0) }}%"></div></div><b>{{ v if v is not none else "n/a" }}</b></div>
+    {% endfor %}
+  </div>
+</div></section>
+
+<section class="block alt"><div class="wrap">
+  <h2>Use-case packs, utilities first</h2>
+  <p class="sub">Each pack ships a data model, dbt models, a semantic view, a Cortex Agent spec, demo questions with golden answers and a value-case template.</p>
+  <div class="grid g4">{% for u in ["AMI consumption analytics", "Outage impact", "Asset health", "Vegetation management", "Procurement spend", "Customer churn & arrears", "Regulatory reporting assistant", "Banking, insurance, healthcare and retail packs next"] %}<div class="card"><b>{{ u }}</b></div>{% endfor %}</div>
+</div></section>
+{% endblock %}

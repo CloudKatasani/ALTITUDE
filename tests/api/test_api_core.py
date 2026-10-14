@@ -129,11 +129,11 @@ def test_hs256_and_rs256_tokens(monkeypatch):
 def test_portal_pages_render_with_theme(client):
     c, store = client
     from altitude.api.app import Context  # noqa: F401
-    assert c.get("/", follow_redirects=False).status_code == 303
+    assert c.get("/app", follow_redirects=False).status_code == 303
     c.post("/login", data={"user": "lead@acme", "role": "delivery_lead"})
     c.post("/api/v1/engagements", headers=H(), json={"tenant": "Acme", "client": "Acme Utilities",
                                                       "package": "D2", "name": "Acme Package D"})
-    home = c.get("/")
+    home = c.get("/app")
     assert home.status_code == 200 and "Acme Package D" in home.text and "Next three actions" in home.text
     assert "ALTITUDE" in home.text  # from the theme token, not the template
     for path in ("/review", "/sherpa?q=idle+warehouses", "/decisions"):
@@ -145,6 +145,6 @@ def test_white_label_partner_theme_is_configuration_only(tmp_path, monkeypatch):
     monkeypatch.setenv("ALTITUDE_THEME", "partner_example")
     c = TestClient(create_app(store=Store(), workspace=tmp_path))
     c.post("/login", data={"user": "p@x", "role": "partner_admin"})
-    for path in ("/", "/review", "/sherpa", "/decisions", "/login"):
+    for path in ("/app", "/review", "/sherpa", "/decisions", "/login"):
         html = c.get(path).text
         assert "Summit Insight" in html and "ALTITUDE" not in html and "Sherpa" not in html, path

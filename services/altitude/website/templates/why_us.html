@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-hero"><div class="wrap">
+  <div class="eyebrow">Why us</div>
+  <h1>Senior people, evidence you can audit, and fees behind the outcome</h1>
+  <p class="lead">{{ site.pitch }}</p>
+</div></section>
+
+<section class="block"><div class="wrap">
+  <h2>The honest test</h2>
+  <p class="sub">A differentiator is only real if you can verify it in the first meeting and a large competitor would find it awkward to copy.</p>
+  <table><thead><tr><th>Claim you will hear everywhere</th><th>Verdict</th></tr></thead><tbody>
+  {% for c, v in [("AI-accelerated migration", "Table stakes — Snowflake's SnowConvert AI is free"), ("Fixed-fee offers", "Table stakes"), ("Accelerators / toolkit", "Table stakes"), ("Free health check / WAF scan", "Commoditised — Snowflake's own assessment is free; we use it as an input"), ("Certified engineers", "Table stakes — we will not win on headcount")] %}
+  <tr><td>{{ c }}</td><td>{{ v }}</td></tr>{% endfor %}
+  </tbody></table>
+  <div class="grid g4" style="margin-top:28px">
+  {% for d in site.differentiators %}<div class="card"><h3>{{ d.title }}</h3><p>{{ d.text }}</p><div class="proof">First-meeting proof: {{ d.proof }}</div></div>{% endfor %}
+  </div>
+</div></section>
+
+<section class="block alt"><div class="wrap grid g2">
+  <div><h2>What each buyer hears</h2><table><tbody>{% for b in site.buyers %}<tr><th>{{ b.buyer }}</th><td>{{ b.hears }}</td></tr>{% endfor %}</tbody></table></div>
+  <div><h2>When we are not the right choice</h2><p class="sub">Saying this openly builds trust and protects both sides.</p><ul class="ticks cross">{% for n in site.not_for_you %}<li>{{ n }}</li>{% endfor %}</ul></div>
+</div></section>
+
+<section class="block"><div class="wrap">
+  <h2>Questions buyers ask</h2>
+  {% for f in site.faq %}<details><summary>{{ f.q }}</summary><p>{{ f.a }}</p></details>{% endfor %}
+</div></section>
+{% endblock %}

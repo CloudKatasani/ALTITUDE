@@ -1,0 +1,22 @@
+# Engagement facts people record in the portal (Engagement facts page). Sherpa's challenges, next actions and
+# the review board reason over these. Facts the platform derives itself (review queue size, sealed snapshots,
+# quick wins, open P1 issues ...) are not listed: they are computed, not typed in.
+groups:
+  - name: Plan
+    facts:
+      - {key: pattern, label: Migration pattern, type: choice, choices: [lift_and_shift, re_platform, re_architect, greenfield, hybrid, open_lakehouse], help: "Chosen pattern for the current wave or programme."}
+      - {key: deadline_weeks, label: Deadline (weeks), type: integer, min: 0, help: "Weeks until the hard deadline (licence, hardware, data-centre exit)."}
+      - {key: coexistence, label: Coexistence with legacy, type: boolean, help: "Snowflake runs alongside the legacy platform for a period."}
+      - {key: decommission_date, label: Legacy decommission date, type: date, help: "Required whenever coexistence is planned."}
+      - {key: modernise_backlog, label: "'Modernise later' backlog with owners", type: boolean, help: "Agreed backlog of deferred refactors, each with a named owner."}
+  - name: Estate
+    facts:
+      - {key: procedural_object_count, label: Procedural objects / scripts, type: integer, min: 0, help: "Stored procedures, BTEQ/PL/SQL/T-SQL scripts in scope."}
+      - {key: dead_object_share, label: Unused object share, type: number, min: 0, max: 1, help: "Share of harvested objects with no use in the evidence window (0-1)."}
+      - {key: pruning_done, label: Dead objects pruned, type: boolean, help: "Unused objects have been removed from scope."}
+  - name: Delivery readiness
+    facts:
+      - {key: test_harness, label: Test harness in place, type: boolean, help: "Unit tests and L1-L3 reconciliation suites exist for converted code."}
+      - {key: access_confirmed, label: Read-only access confirmed, type: boolean, help: "Bootstrap script run; diagnostics role works without ACCOUNTADMIN."}
+      - {key: alerts_routed, label: Alert routing tested, type: boolean, help: "Every alert class delivered to its route in the last test."}
+      - {key: tier1_open_mismatches, label: Open Tier-1 mismatches, type: integer, min: 0, help: "Tier-1 reconciliation mismatches neither fixed nor accepted by a data owner."}

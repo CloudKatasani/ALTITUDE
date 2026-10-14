@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-hero"><div class="wrap">
+  <div class="eyebrow">Package D</div>
+  <h1>{{ theme.PACKAGE_D_NAME }}</h1>
+  <p class="lead">A metadata-only, evidence-backed diagnostic of your Snowflake estate that answers five executive questions — and turns every answer into a prioritised, costed suggestion that is ready to implement as code.</p>
+  <p><a class="btn" href="contact.html">Start with a free D0 Snapshot</a> <a class="btn outline" href="#sample">See a sample</a></p>
+</div></section>
+
+<section class="block"><div class="wrap split">
+  <div>
+    <h2>Five questions, answered with evidence</h2>
+    <ol><li><b>Where are we wasting money?</b></li><li><b>Where are we exposed?</b></li><li><b>What is likely to break?</b></li><li><b>Which reports and KPIs can we trust, and which can we retire?</b></li><li><b>What stops us being AI-ready?</b></li></ol>
+    <h3>Ten domains</h3>
+    <p>The five Snowflake Well-Architected pillars plus architecture, the BI and consumption layer, AI-readiness and the operating model — at workload, query-signature, pipeline, report and KPI level.</p>
+  </div>
+  <div class="card">
+    <h3>How it goes beyond a free WAF scan</h3>
+    <table><tbody>
+    <tr><th>Scope</th><td>10 domains, not only control checks</td></tr>
+    <tr><th>Quantification</th><td>Annualised $ (p50 and conservative), risk score, effort, confidence</td></tr>
+    <tr><th>Root cause</th><td>Clusters by query signature, warehouse, dashboard, pipeline and owner</td></tr>
+    <tr><th>Access</th><td>Least-privilege SNOWFLAKE database roles; no row data</td></tr>
+    <tr><th>Output</th><td>Readout, findings register, backlog, remediation-as-code PRs, savings model</td></tr>
+    <tr><th>After the report</th><td>Fee credit into remediation; Package O measures realised value</td></tr>
+    </tbody></table>
+  </div>
+</div></section>
+
+<section class="block alt" id="sample"><div class="wrap">
+  <div class="eyebrow">Live sample <span class="sample-tag">synthetic estate</span></div>
+  <h2>A Package D run, exactly as our platform produced it</h2>
+  <p class="sub">Snapshot <code>{{ s.snapshot_id }}</code> ({{ s.window[0] }} → {{ s.window[1] }}). Same snapshot + same rubric ⇒ the same numbers, every time.</p>
+  <div class="stats">
+    <div class="stat"><b>{{ s.phi }}</b><span>{{ theme.HEALTH_INDEX_NAME }}</span></div>
+    <div class="stat"><b>{{ s.value_p50|usd }}</b><span>identified value / year (p50)</span></div>
+    <div class="stat"><b>{{ s.suggestions }}</b><span>suggestions · {{ s.quadrants.quick_win }} quick wins</span></div>
+    <div class="stat"><b>{{ s.wa.findings }}</b><span>Well-Architected baseline gaps</span></div>
+  </div>
+  <div class="grid g2" style="margin-top:26px">
+    <div class="card"><h3>Scorecard by domain (1–5)</h3>
+      {% for d in s.domains %}{% set pct = (d.score or 0) / 5 %}
+      <div class="bar-row"><span>{{ d.id }} {{ d.name }}</span><div class="bar-track"><div class="bar-fill {{ 'low' if pct < 0.45 else ('mid' if pct < 0.7 else '') }}" style="width: {{ (pct * 100)|round(0) }}%"></div></div><b>{{ d.score }}</b></div>
+      {% endfor %}
+    </div>
+    <div class="card"><h3>Prioritisation</h3>
+      <table><tbody>
+      <tr><th>Quick wins</th><td>High value, low effort — first 30 days</td><td class="num"><b>{{ s.quadrants.quick_win }}</b></td></tr>
+      <tr><th>Strategic</th><td>High value, high effort — 90-day plan</td><td class="num"><b>{{ s.quadrants.strategic }}</b></td></tr>
+      <tr><th>Hygiene</th><td>Low value, low effort — batched sprint</td><td class="num"><b>{{ s.quadrants.hygiene }}</b></td></tr>
+      <tr><th>Defer</th><td>Low value, high effort — backlog with rationale</td><td class="num"><b>{{ s.quadrants.defer }}</b></td></tr>
+      </tbody></table>
+      <p style="margin-top:14px"><a href="samples/diagnostic_report.html">Open the full sample report</a> · <a href="samples/findings_register.csv">Download the findings register (CSV)</a></p>
+    </div>
+  </div>
+  <h3 style="margin-top:30px">Top ten suggestions</h3>
+  <table><thead><tr><th>#</th><th>Suggestion</th><th>Check</th><th class="num">Value / yr</th><th>Confidence</th><th>Evidence (sample)</th></tr></thead><tbody>
+  {% for t in s.top %}
+  <tr><td>{{ t.priority.rank }}</td><td><b>{{ t.title }}</b><br><span class="muted">{{ t.value.method }}</span></td><td>{{ t.check_id }}</td>
+  <td class="num">{% if t.value.annualised_usd and t.value.annualised_usd.p50 %}{{ t.value.annualised_usd.p50|usd }}{% else %}risk{% endif %}</td><td>{{ "%.2f"|format(t.confidence) }}</td>
+  <td>{% for e in t.evidence %}<code>{{ e.id }}</code> {{ e.object }}<br>{% endfor %}</td></tr>
+  {% endfor %}
+  </tbody></table>
+</div></section>
+
+<section class="block"><div class="wrap">
+  <h2>Four weeks, value in week two (D2 Deep)</h2>
+  <table><thead><tr><th>Week</th><th>Activities</th><th>Output</th></tr></thead><tbody>
+  {% for m in site.method_d2 %}<tr><td><b>{{ m.week }}</b></td><td>{{ m.activities }}</td><td>{{ m.output }}</td></tr>{% endfor %}
+  </tbody></table>
+  <div class="grid g2" style="margin-top:26px">
+    <div class="card"><h3>Deliverables — all from one sealed snapshot</h3><ul class="ticks">{% for d in site.deliverables_d %}<li>{{ d }}</li>{% endfor %}</ul></div>
+    <div class="card"><h3>Tiers</h3><table><thead><tr><th>Tier</th><th>Scope</th><th>Weeks</th><th class="num">Fee</th></tr></thead><tbody>
+    {% for t in tiers if t.package == "D" %}<tr><td><b>{{ t.tier }}</b></td><td>{{ t.accounts if t.accounts < 99 else "Org-wide" }} account(s){% if t.domains %} · {{ t.domains|length }} domains{% endif %}</td><td>{{ t.weeks }}</td><td class="num">{{ t.fee_usd|usd_range }}</td></tr>{% endfor %}
+    </tbody></table><p class="muted">D2 Deep is the flagship. <a href="pricing.html">Guarantees →</a></p></div>
+  </div>
+</div></section>
+{% endblock %}

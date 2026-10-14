@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-hero"><div class="wrap">
+  <div class="eyebrow">Package O · add-on</div>
+  <h1>{{ theme.PACKAGE_O_NAME }} you own</h1>
+  <p class="lead">Continuous observability of cost, performance, reliability, security, governance, data quality and AI usage — delivered as a data product inside your account, not as a third-party SaaS that copies your telemetry out.</p>
+  <p><a class="btn" href="contact.html">Talk to us</a> <a class="btn outline" href="#sample">See sample dashboards</a></p>
+</div></section>
+
+<section class="block"><div class="wrap grid g3">
+  <div class="card"><h3>Multi-account archive</h3><p>An immutable, append-only RAW archive keeps history beyond the native one-year window — so trends, chargeback and before/after evidence survive.</p></div>
+  <div class="card"><h3>~80 KPIs as a catalogue</h3><p>{{ s.observability.kpis_implemented }} implemented today across {{ s.observability.kpi_domains|length }} domains, each with a definition, grain, freshness SLA, owner and the checks it links to.</p></div>
+  <div class="card"><h3>Alerts with runbooks</h3><p>Credit anomalies against a forecast band, budget breaches, failed Tier-1 tasks, freshness misses, ACCOUNTADMIN use, masking gaps, Cortex spend spikes — routed to Slack, Teams, PagerDuty or ServiceNow.</p></div>
+  <div class="card"><h3>Chargeback</h3><p>Monthly statements per cost centre from your tags, reconciled to the Snowflake bill.</p></div>
+  <div class="card"><h3>Ask the platform</h3><p>A Cortex Agent in Snowflake Intelligence over certified semantic views — every answer cites the KPI and the rows it used.</p></div>
+  <div class="card"><h3>Suggestion-to-value loop</h3><p>Package D suggestions name the KPIs to watch; Package O measures them before and after and records realised value — the number your CFO remembers.</p></div>
+</div></section>
+
+<section class="block alt" id="sample"><div class="wrap">
+  <div class="eyebrow">Live sample <span class="sample-tag">synthetic estate</span></div>
+  <h2>Dashboards rendered from the KPI layer</h2>
+  <p class="sub">Sixty days of synthetic telemetry, harvested, archived and computed by the same code that runs in a client account.</p>
+  <div class="grid g4">
+    <a class="card" href="samples/observability/executive_cost_value.html"><h3>Executive Cost & Value</h3><p class="muted">Spend, forecast vs budget, cost by cost centre, costliest query signatures</p></a>
+    <a class="card" href="samples/observability/platform_health.html"><h3>Platform Health</h3><p class="muted">Health index by Well-Architected pillar</p></a>
+    <a class="card" href="samples/observability/pipelines_freshness.html"><h3>Pipelines & Freshness</h3><p class="muted">Task success, freshness SLA attainment</p></a>
+    <a class="card" href="samples/observability/chargeback/index.html"><h3>Chargeback statements</h3><p class="muted">Monthly, per cost centre, exportable</p></a>
+  </div>
+  <div class="grid g2" style="margin-top:22px">
+    <div class="card"><h3>Alerts that fired</h3>
+      <div class="scroll"><table><thead><tr><th>Alert</th><th>Object</th><th>Route</th></tr></thead><tbody>
+      {% for a in s.observability.alerts %}<tr><td><span class="chip {{ 'warn' if a.severity == 'high' else '' }}">{{ a.severity }}</span> <b>{{ a.alert|replace("ALR-", "")|replace("-", " ")|lower|capitalize }}</b><br><span class="muted">runbook <code>{{ a.runbook }}</code></span></td>
+      <td class="wrap-any">{{ a.object or "account" }}</td><td>#{{ a.route }}</td></tr>{% endfor %}
+      </tbody></table></div></div>
+    <div class="card"><h3>Ask the platform</h3>
+      <p><b>Q:</b> {{ s.observability.ask.question }}</p>
+      <p><b>A:</b> {{ s.observability.ask.answer }}</p>
+      <p class="muted">Cites {{ s.observability.ask.citations|join(", ") }} · refuses when the semantic layer can't support an answer</p></div>
+  </div>
+</div></section>
+
+<section class="block"><div class="wrap">
+  <h2>Tiers — flat by spend band, never a percentage of your spend</h2>
+  <table><thead><tr><th>Tier</th><th>Accounts</th><th>Onboarding</th><th class="num">Setup</th><th class="num">Subscription</th></tr></thead><tbody>
+  {% for t in tiers if t.package == "O" %}<tr><td><b>{{ t.tier }}</b> {{ {"O1": "Observe", "O2": "Observe+", "O3": "Observe & Operate"}[t.tier] }}</td><td>up to {{ t.accounts }}</td><td>{{ t.weeks }} weeks</td><td class="num">{{ t.fee_usd|usd_range }}</td><td class="num">{{ t.monthly_usd|usd_range }}/month</td></tr>{% endfor %}
+  </tbody></table>
+  <div class="callout" style="margin-top:20px"><b>You own it.</b> Everything runs under your roles. If you leave, the deployment keeps running; we simply stop updating the catalogue and agents. Nothing leaves your account unless you opt into anonymised benchmarking.</div>
+</div></section>
+{% endblock %}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Editable engagement fact catalogue",
+  "x-altitude-globs": ["advisory/facts.yaml"],
+  "type": "object",
+  "required": ["groups"],
+  "additionalProperties": false,
+  "properties": {
+    "groups": {"type": "array", "minItems": 1, "items": {
+      "type": "object", "required": ["name", "facts"], "additionalProperties": false,
+      "properties": {"name": {"type": "string"}, "facts": {"type": "array", "items": {
+        "type": "object", "required": ["key", "label", "type", "help"], "additionalProperties": false,
+        "properties": {
+          "key": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+          "label": {"type": "string"}, "help": {"type": "string"},
+          "type": {"enum": ["boolean", "integer", "number", "text", "date", "choice"]},
+          "choices": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+          "min": {"type": "number"}, "max": {"type": "number"}},
+        "if": {"properties": {"type": {"const": "choice"}}}, "then": {"required": ["choices"]}}}}}}
+  }
+}

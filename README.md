@@ -13,6 +13,7 @@ confidence and a rationale and waits for a human when it should.
 ```bash
 make install                       # venv + editable install
 make check                         # knowledge validate, lints, generated-diff check, full test suite
+make site                          # public website as static HTML in out/site (samples from the synthetic estate)
 make demo                          # live server + full flow through the API; screenshots in out/demo/screenshots
 make demo-serve                    # same, then leave the portal running on :8099
 
@@ -20,7 +21,7 @@ make demo-serve                    # same, then leave the portal running on :809
 .venv/bin/altitude synthetic snapshot --out .altitude/snapshots --ground-truth gt.json
 .venv/bin/altitude diag run --snapshot .altitude/snapshots/SNAP-ACME-2026-09-30-SEEDED.duckdb --out out/diag
 .venv/bin/altitude patterns scan --dialect teradata my_script.sql      # open-source drift checker
-ALTITUDE_AUTH=dev .venv/bin/altitude serve                              # API + portal on :8080
+ALTITUDE_AUTH=dev .venv/bin/altitude serve                              # website on / , portal on /app, API on /api/v1
 .venv/bin/altitude mcp                                                  # MCP server (stdio) for AI clients
 ```
 
@@ -32,7 +33,8 @@ ALTITUDE_AUTH=dev .venv/bin/altitude serve                              # API + 
 
 | Layer | Where | Notes |
 |---|---|---|
-| Experience | `services/altitude/api/portal.py`, `portal/` | Server-rendered portal: guided outcome path, findings with evidence drill-through, progress board (identified vs realised), review queue, Sherpa, review board, agent approvals, dashboards |
+| Website | `services/altitude/website/`, `knowledge/website/` | Public startup site at `/`: every offering from the service catalogue, live samples computed from the synthetic estate, contact form recorded as a buying signal; static export via `altitude site build` |
+| Experience | `services/altitude/api/portal.py`, `portal/` | Server-rendered client portal at `/app`: guided outcome path, engagement facts form, findings with evidence drill-through, progress board (identified vs realised), review queue, Sherpa, review board, agent approvals, dashboards |
 | Access | `services/altitude/api/`, `services/altitude/mcp/`, `skills/` | REST `/api/v1`, RBAC as data (6 roles), OIDC RS256/JWKS and HS256 tokens; MCP server and REST share one skills registry |
 | Services | `services/altitude/<module>/`, `agents/`, `connectors/` | see below |
 | Knowledge | `knowledge/` | 136 schema-governed YAML files: checks, KPIs, known issues, mappings, rubrics, gates, playbooks, prompts |

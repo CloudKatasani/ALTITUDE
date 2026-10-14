@@ -37,6 +37,7 @@ ROUTER_MODULES = [
     "altitude.api.routes.migration",
     "altitude.api.routes.agents",
     "altitude.api.routes.skills",
+    "altitude.api.routes.website",
 ]
 
 

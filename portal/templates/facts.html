@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Engagement facts</h1>
+{% if not engagement %}
+<p class="muted">No engagement yet.</p>
+{% else %}
+<p class="muted">What the delivery team knows about <b>{{ engagement.name }}</b>. {{ theme.COPILOT_NAME }}'s challenges,
+the next-three-actions list and the {{ theme.REVIEW_BOARD_NAME }} reason over these. Leave a field empty to clear it.</p>
+{% if engagements|length > 1 %}
+<form method="get" action="/facts" class="inline"><select name="engagement" onchange="this.form.submit()">
+{% for e in engagements %}<option value="{{ e.engagement_id }}" {% if e.engagement_id == engagement.engagement_id %}selected{% endif %}>{{ e.name }}</option>{% endfor %}
+</select></form>
+{% endif %}
+{% if saved %}<p class="flag low" role="status">Saved: {{ saved|join(", ") }}.</p>{% endif %}
+{% if errors %}<p class="flag high" role="alert">Nothing was saved — fix the {{ errors|length }} highlighted field(s).</p>{% endif %}
+<div class="grid">
+<form method="post" action="/facts" class="card facts">
+  <input type="hidden" name="engagement_id" value="{{ engagement.engagement_id }}">
+  {% for g in groups %}
+  <fieldset><legend>{{ g.name }}</legend>
+  {% for f in g.facts %}
+    {% set v = values.get(f.key) %}
+    <label class="{% if errors.get(f.key) %}invalid{% endif %}">{{ f.label }}
+      {% if f.type == "boolean" %}
+      <select name="{{ f.key }}" {% if not editable %}disabled{% endif %}>
+        <option value="" {% if v is none or v == "" %}selected{% endif %}>— not set —</option>
+        <option value="yes" {% if v in [true, "yes", "true", "on"] %}selected{% endif %}>Yes</option>
+        <option value="no" {% if v in [false, "no", "false", "off"] %}selected{% endif %}>No</option>
+      </select>
+      {% elif f.type == "choice" %}
+      <select name="{{ f.key }}" {% if not editable %}disabled{% endif %}>
+        <option value="">— not set —</option>
+        {% for c in f.choices %}<option value="{{ c }}" {% if v == c %}selected{% endif %}>{{ c.replace("_", " ") }}</option>{% endfor %}
+      </select>
+      {% else %}
+      <input name="{{ f.key }}" value="{{ '' if v is none else v }}"
+             type="{{ 'date' if f.type == 'date' else ('number' if f.type in ['integer', 'number'] else 'text') }}"
+             {% if f.type == 'number' %}step="any"{% elif f.type == 'integer' %}step="1"{% endif %}
+             {% if f.min is defined %}min="{{ f.min }}"{% endif %} {% if f.max is defined %}max="{{ f.max }}"{% endif %}
+             {% if not editable %}disabled{% endif %}>
+      {% endif %}
+      <small class="muted">{{ f.help }}{% if history.get(f.key) and f.key in current %} · set by {{ history[f.key].set_by }} {{ history[f.key].set_at.strftime("%Y-%m-%d %H:%M") }}{% endif %}</small>
+      {% if errors.get(f.key) %}<small class="error">{{ errors[f.key] }}</small>{% endif %}
+    </label>
+  {% endfor %}
+  </fieldset>
+  {% endfor %}
+  {% if editable %}<button type="submit">Save facts</button>{% else %}<p class="muted">Your role can view but not edit these facts.</p>{% endif %}
+</form>
+<section class="card">
+  <h2>{{ theme.COPILOT_NAME }} challenges from these facts</h2>
+  {% for c in challenges %}<p class="flag {{ c.severity }}"><b>[{{ c.id }}]</b> {{ c.message }}</p>
+  {% else %}<p class="muted">No risks flagged from the current facts.</p>{% endfor %}
+  <p class="muted"><a href="/app">Back to the outcome path</a></p>
+</section>
+</div>
+{% endif %}
+{% endblock %}

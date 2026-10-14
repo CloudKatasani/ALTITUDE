@@ -1,7 +1,7 @@
 PY ?= .venv/bin/python
 ALT ?= .venv/bin/altitude
 
-.PHONY: install check test lint generate demo demo-serve
+.PHONY: install check test lint generate demo demo-serve site
 
 install:
 	python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
@@ -25,3 +25,6 @@ demo:
 
 demo-serve:
 	$(PY) tools/demo.py out/demo --keep-running
+
+site:
+	$(ALT) site build --out out/site

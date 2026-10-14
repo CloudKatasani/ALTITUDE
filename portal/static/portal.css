@@ -38,3 +38,8 @@ ol.path li.current { border-top-color: var(--accent); box-shadow: 0 2px 6px rgba
 pre { white-space: pre-wrap; font-family: inherit; }
 code { font-size: .85em; }
 .bar { height: 10px; background: var(--accent); border-radius: 4px; }
+form.facts fieldset { border: 0; border-top: 1px solid rgba(0,0,0,.1); margin: 0 0 .75rem; padding: .5rem 0 0; }
+form.facts legend { font-weight: 600; padding-right: .5rem; }
+form.facts small { display: block; margin-top: .15rem; font-size: .78rem; }
+form.facts label.invalid input, form.facts label.invalid select { border-color: var(--danger); }
+small.error { color: var(--danger); opacity: 1; }

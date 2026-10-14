@@ -44,7 +44,22 @@ def current_facts(store, engagement_id: str) -> dict:
     for r in rows:
         v = json.loads(r["value"]) if isinstance(r["value"], str) else r["value"]
         out[r["fact_key"]] = v["v"] if isinstance(v, dict) and "v" in v else v
-    return out
+    return {k: v for k, v in out.items() if v is not None}  # a null value clears the fact
+
+
+def fact_history(store, engagement_id: str) -> dict:
+    """Who last set each fact, and when."""
+    rows = store.query("SELECT fact_key, set_by, set_at FROM engagement_fact WHERE engagement_id = ? ORDER BY set_at",
+                       [engagement_id])
+    return {r["fact_key"]: {"set_by": r["set_by"], "set_at": r["set_at"]} for r in rows}
+
+
+def write_facts(store, engagement_id: str, facts: dict, actor: str) -> None:
+    now = _now()
+    store.insert("engagement_fact", [{"engagement_id": engagement_id, "fact_key": k, "value": {"v": v},
+                                      "set_by": actor, "set_at": now} for k, v in sorted(facts.items())])
+    audit.record(store, actor, "engagement.facts", subject_type="engagement", subject_id=engagement_id,
+                 details={"keys": sorted(facts)})
 
 
 def _now() -> datetime:
@@ -110,11 +125,12 @@ def get_facts(engagement_id: str, p: Principal = Depends(require("read")), ctx: 
 @router.put("/engagements/{engagement_id}/facts")
 def put_facts(engagement_id: str, body: FactsIn, p: Principal = Depends(require("run")),
               ctx: Context = Depends(get_ctx)) -> dict:
+    from altitude.advisory.facts import validate_api
+
     if not ctx.store.get("engagement", engagement_id=engagement_id):
         raise HTTPException(404, f"no engagement {engagement_id}")
-    now = _now()
-    ctx.store.insert("engagement_fact", [{"engagement_id": engagement_id, "fact_key": k, "value": {"v": v},
-                                          "set_by": p.user, "set_at": now} for k, v in sorted(body.facts.items())])
-    audit.record(ctx.store, p.user, "engagement.facts", subject_type="engagement", subject_id=engagement_id,
-                 details={"keys": sorted(body.facts)})
+    facts, errors = validate_api(body.facts)
+    if errors:
+        raise HTTPException(422, {"errors": errors})
+    write_facts(ctx.store, engagement_id, facts, p.user)
     return json_safe(current_facts(ctx.store, engagement_id))

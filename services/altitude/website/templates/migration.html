@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-hero"><div class="wrap">
+  <div class="eyebrow">Migration factory</div>
+  <h1>Migrate the whole operating system of the warehouse — with proof every answer still matches</h1>
+  <p class="lead">Conversion tools convert SQL. Programmes overrun on ETL behaviour, schedules, security, BI semantics and silent drift. We wrap SnowConvert AI and Cortex Code rather than compete with them, and add what conversion leaves out.</p>
+  <p><a class="btn" href="contact.html">Scope a migration assessment</a></p>
+</div></section>
+
+<section class="block"><div class="wrap">
+  <h2>Eight phases, evidence-based gates</h2>
+  <div class="journey" style="grid-template-columns: repeat(4, 1fr)">
+    {% for name, gate in [("0 · Discover", "Sponsor signs off objectives and success KPIs"), ("1 · Assess", "≥95% of objects classified; business case approved"), ("2 · Plan", "Wave 1 frozen; architecture board approval"), ("3 · Foundation", "Well-Architected baseline checks pass"), ("4 · Convert", "Zero open P1 issues; every AI change reviewed"), ("5 · Move & validate", "Reconciliation thresholds met per table tier"), ("6 · Cutover", "Business sign-off; rollback rehearsed"), ("7 · Operate & decommission", "Legacy off; savings booked")] %}
+    <a><b>{{ name }}</b><span>{{ gate }}</span></a>{% endfor %}
+  </div>
+</div></section>
+
+<section class="block alt"><div class="wrap split">
+  <div>
+    <div class="eyebrow">Pattern Library</div>
+    <h2>{{ s.patterns.issues }} known semantic-drift issues, each with a detector and a fix</h2>
+    <p>Mappings, known issues, fix patterns and golden tests are stored as versioned data and re-verified against Snowflake behaviour changes. {{ s.patterns.mappings }} mappings and {{ s.patterns.tests }} test cases today.</p>
+    <table><thead><tr><th>Source</th><th class="num">Known issues</th><th class="num">Silent-wrong-answer (S1)</th></tr></thead><tbody>
+    {% set names = {"common": "Cross-source", "sqlserver": "SQL Server", "teradata": "Teradata", "oracle": "Oracle", "netezza": "Netezza", "redshift": "Amazon Redshift"} %}
+    {% for d, n in s.patterns.by_dialect.items() %}<tr><td>{{ names.get(d, d|label|title) }}</td><td class="num">{{ n }}</td><td class="num">{{ s.patterns.s1_by_dialect.get(d, 0) }}</td></tr>{% endfor %}
+    </tbody></table>
+  </div>
+  <div>
+    <div class="eyebrow">Open drift checker <span class="sample-tag">live output</span></div>
+    <h3>Teradata → Snowflake</h3>
+    <pre class="code">{{ s.drift_sql.teradata }}</pre>
+    <table><tbody>{% for h in s.drift.teradata %}<tr><td><span class="chip {{ 'warn' if h.severity == 'S1' else '' }}">{{ h.severity }}</span></td><td><code>{{ h.issue_id }}</code> line {{ h.line }}</td><td>{{ h.message }}</td></tr>{% endfor %}</tbody></table>
+    <h3 style="margin-top:18px">Oracle → Snowflake</h3>
+    <pre class="code">{{ s.drift_sql.oracle }}</pre>
+    <table><tbody>{% for h in s.drift.oracle %}<tr><td><span class="chip {{ 'warn' if h.severity == 'S1' else '' }}">{{ h.severity }}</span></td><td><code>{{ h.issue_id }}</code> line {{ h.line }}</td><td>{{ h.message }}</td></tr>{% endfor %}</tbody></table>
+  </div>
+</div></section>
+
+<section class="block"><div class="wrap grid g3">
+  <div class="card"><h3>Patterns per wave</h3><p>Lift-and-shift, re-platform, re-architect, greenfield, hybrid and open-lakehouse — recommended per workload wave from the harvested estate, with confidence, rationale and recorded dissent.</p></div>
+  <div class="card"><h3>Read-only extraction agent</h3><p>Runs in your network, harvests catalogs, code and query logs from SQL Server, Oracle and Teradata, and ships only metadata. A kill-test proves it cannot write.</p></div>
+  <div class="card"><h3>ETL and schedulers, not just SQL</h3><p>SSIS and Informatica mappings become tested dbt projects; Control-M and SQL Agent schedules become Snowflake task graphs or Airflow DAGs.</p></div>
+  <div class="card"><h3>AI remediation under review</h3><p>Every AI change carries confidence, rationale, model and prompt version, and lands as a pull request with generated tests. Nothing is promoted without a named reviewer.</p></div>
+  <div class="card"><h3>L0–L5 validation</h3><p>Schema, counts, aggregates, row hashes, KPI parity and performance parity by table tier — with normalisation rules as data and mismatches clustered to their known issue.</p></div>
+  <div class="card"><h3>Go/no-go evidence packs</h3><p>Reconciliation by tier, performance vs SLA, grant mapping, rehearsed rollback and sign-offs — generated from snapshots. Decommissioning is blocked while legacy consumers remain.</p></div>
+</div></section>
+
+<section class="block alt" id="foundation"><div class="wrap split">
+  <div><h2>Snowflake Foundation (greenfield)</h2><p>A 6–10 week landing zone generated as Terraform from a reviewed role and warehouse model, followed by a first data product end to end — with Package O Core from day one.</p></div>
+  <div class="card"><ul class="ticks"><li>Access → functional roles; never object privileges to users</li><li>Warehouses per workload class with monitors and auto-suspend</li><li>Tag-based masking, network rules, budgets, agent roles</li><li>31 automated Well-Architected checks with remediation playbooks</li></ul></div>
+</div></section>
+{% endblock %}

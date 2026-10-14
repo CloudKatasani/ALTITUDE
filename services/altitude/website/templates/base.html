@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% if page != "index.html" %}{{ title }} · {% endif %}{{ theme.PRODUCT_NAME }} — {{ site.hero.eyebrow }}</title>
+<meta name="description" content="{{ site.pitch[:155] }}">
+<style>
+:root { --primary: {{ theme.COLOR_PRIMARY }}; --accent: {{ theme.COLOR_ACCENT }}; --warn: {{ theme.COLOR_WARN }};
+        --danger: {{ theme.COLOR_DANGER }}; --surface: {{ theme.COLOR_SURFACE }}; --text: {{ theme.COLOR_TEXT }}; }
+</style>
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site">
+  <div class="wrap bar">
+    <a class="brand" href="index.html">{{ theme.PRODUCT_NAME }}</a>
+    <nav aria-label="Main">
+      {% for f, label in nav %}<a href="{{ f }}" {% if f == page %}aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+    </nav>
+    <div class="cta-bar">
+      {% if live %}<a class="signin" href="/login">Client sign in</a>{% endif %}
+      <a class="btn small" href="contact.html">Book a D0 Snapshot</a>
+    </div>
+  </div>
+</header>
+<main id="main">{% block content %}{% endblock %}</main>
+<footer class="site">
+  <div class="wrap cols">
+    <div><b>{{ theme.COMPANY_NAME }}</b><p class="muted">{{ site.hero.eyebrow }}. Diagnose · Fix · Observe · Operate · Migrate · AI-Ready.</p></div>
+    <div><b>Offerings</b>{% for o in offers[:6] %}<a href="offerings.html#{{ o.id }}">{{ o.name.split(" — ")[0] }}</a>{% endfor %}</div>
+    <div><b>Company</b><a href="why-us.html">Why us</a><a href="industries.html">Industries</a><a href="pricing.html">Pricing & guarantees</a><a href="contact.html">Contact</a></div>
+  </div>
+  <div class="wrap fine muted">Sample figures on this site are computed by our platform from a <b>synthetic</b> Snowflake estate ({{ s.snapshot_id }}) — they illustrate the deliverables, not a client's results. Indicative prices are hypotheses to validate. Snowflake is a trademark of Snowflake Inc.; we are an independent partner.</div>
+</footer>
+</body>
+</html>

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-hero"><div class="wrap">
+  <div class="eyebrow">Pricing & guarantees</div>
+  <h1>Fixed scope. Fees tied to outcomes.</h1>
+  <p class="lead">We put part of our fee behind the result — and price observability flat by spend band, so we gain nothing when your Snowflake bill rises.</p>
+</div></section>
+
+<section class="block"><div class="wrap grid g3">
+  {% for g in guarantees %}<div class="card"><h3>{{ g.name }}</h3><p>{{ g.terms }}</p><p class="muted">Applies to {{ g.applies_to|join(", ") }}</p></div>{% endfor %}
+</div>
+<div class="wrap" style="margin-top:20px"><div class="callout"><b>How the value floor works.</b> If the identified annualised opportunity (p50) on a D2/D3 diagnostic is below {{ guardrails.value_floor_multiple|int }}× the fee, we credit the difference, capped at the fee. Example: a {{ 60000|usd }} D2 that identifies {{ 120000|usd }} credits {{ 60000|usd }}. Applies above {{ guardrails.qualification_min_annual_spend_usd|usd }} annual Snowflake spend; fee credit applies to follow-on work signed within {{ guardrails.fee_credit_window_days }} days.</div></div>
+</section>
+
+<section class="block alt"><div class="wrap">
+  <h2>Indicative pricing</h2>
+  <p class="sub">US market, hypotheses to validate on our first engagements; Snowflake partner programmes may co-fund diagnostics for qualifying accounts.</p>
+  <table><thead><tr><th>Offering</th><th>Duration</th><th>Buyer</th><th class="num">Fee</th><th class="num">Subscription</th></tr></thead><tbody>
+  {% for o in offers %}<tr><td><b>{{ o.name }}</b></td><td>{{ o.duration_weeks[0] }}{% if o.duration_weeks[1] != o.duration_weeks[0] %}–{{ o.duration_weeks[1] }}{% endif %} wks</td><td>{{ o.buyer }}</td><td class="num">{{ o.fee_usd|usd_range if o.fee_usd[1] or not o.monthly_usd else "—" }}</td><td class="num">{% if o.monthly_usd %}{{ o.monthly_usd|usd_range }}/mo{% else %}—{% endif %}</td></tr>{% endfor %}
+  </tbody></table>
+  <h3 style="margin-top:30px">Package tiers</h3>
+  <table><thead><tr><th>Tier</th><th>Package</th><th>Weeks</th><th>Accounts</th><th class="num">Fee</th><th class="num">Monthly</th></tr></thead><tbody>
+  {% for t in tiers %}<tr><td><b>{{ t.tier }}</b></td><td>{{ "Diagnostics" if t.package == "D" else "Observability" }}</td><td>{{ t.weeks }}</td><td>{{ t.accounts if t.accounts < 99 else "Org-wide" }}</td><td class="num">{{ t.fee_usd|usd_range }}</td><td class="num">{% if t.monthly_usd %}{{ t.monthly_usd|usd_range }}{% else %}—{% endif %}</td></tr>{% endfor %}
+  </tbody></table>
+</div></section>
+{% endblock %}
