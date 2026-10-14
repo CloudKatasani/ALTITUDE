@@ -1,0 +1,38 @@
+id: CONN-TERADATA
+source: teradata
+dialect: teradata
+version: 1.0.0
+description: >
+  Read-only harvest of a Teradata system through DBC views and DBQL, plus BTEQ scripts read from the
+  client's repository. Harvest at least a full fiscal year of DBQL to catch quarter and year-end jobs.
+principal:
+  name: ALTITUDE_HARVEST
+  kind: user
+  notes: Dedicated user with SELECT on DBC views only; no access rights on application databases.
+required_grants:
+  - privilege: LOGON
+    "on": SYSTEM
+    why: Log on to the system; no data access is implied.
+  - privilege: SELECT
+    "on": DBC (TablesV, ColumnsV, TableSizeV, AccessRightsV, DBCInfoV)
+    why: Read the catalog, table sizes and access rights without reading any application table.
+    grant_sql: GRANT SELECT ON DBC TO ALTITUDE_HARVEST;
+  - privilege: SELECT
+    "on": DBC.QryLogV, DBC.QryLogObjectsV
+    why: Read DBQL query and object logs for usage (counts and distinct users; query text parsed in-boundary).
+    grant_sql: GRANT SELECT ON DBC.QryLogV TO ALTITUDE_HARVEST; GRANT SELECT ON DBC.QryLogObjectsV TO ALTITUDE_HARVEST;
+objects_read:
+  - {name: "DBC.TablesV", why: "Object inventory; RequestText holds view/macro/procedure DDL", contains: catalog}
+  - {name: "DBC.ColumnsV", why: "Columns incl. CASESPECIFIC and CHAR padding attributes", contains: catalog}
+  - {name: "DBC.TableSizeV", why: "Current perm space per table (aggregate)", contains: statistics}
+  - {name: "DBC.QryLogV", why: "DBQL query log (time, user, statement type)", contains: usage}
+  - {name: "DBC.QryLogObjectsV", why: "DBQL object log (objects touched per query)", contains: usage}
+  - {name: "DBC.AccessRightsV", why: "Access rights for the target RBAC mapping", contains: grants}
+  - {name: "DBC.DBCInfoV", why: "Release and version", contains: catalog}
+files_read:
+  - {glob: "**/*.bteq", why: "BTEQ scripts from the client's repository (code inventory and lineage)"}
+  - {glob: "**/*.btq", why: "BTEQ scripts (alternate extension)"}
+row_data: false
+never_shipped:
+  - user-table rows
+  - DBQL query text and literals

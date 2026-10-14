@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Connector permission manifest (read-only grants the extraction agent needs, and why)",
+  "x-altitude-globs": ["connectors/*.yaml"],
+  "type": "object",
+  "required": ["id", "source", "dialect", "version", "principal", "required_grants", "objects_read", "row_data"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {"type": "string", "pattern": "^CONN-[A-Z0-9-]+$"},
+    "source": {"type": "string", "enum": ["sqlserver", "oracle", "teradata"]},
+    "dialect": {"type": "string"},
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "description": {"type": "string"},
+    "principal": {
+      "type": "object",
+      "required": ["name", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string"},
+        "kind": {"type": "string", "enum": ["login", "user", "role"]},
+        "notes": {"type": "string"}
+      }
+    },
+    "required_grants": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["privilege", "on", "why"],
+        "additionalProperties": false,
+        "properties": {
+          "privilege": {
+            "description": "Only read privileges are permitted; a write privilege fails validation.",
+            "type": "string",
+            "enum": ["SELECT", "VIEW DEFINITION", "VIEW ANY DEFINITION", "VIEW SERVER STATE",
+                     "VIEW DATABASE STATE", "SQLAgentReaderRole", "ssis_logreader", "SELECT_CATALOG_ROLE",
+                     "AUDIT_VIEWER", "CREATE SESSION", "LOGON"]
+          },
+          "on": {"type": "string"},
+          "why": {"type": "string", "minLength": 10},
+          "optional": {"type": "boolean"},
+          "grant_sql": {"type": "string"}
+        }
+      }
+    },
+    "objects_read": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "why", "contains"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {"type": "string"},
+          "why": {"type": "string"},
+          "contains": {"type": "string", "enum": ["catalog", "code", "dependencies", "usage", "schedule",
+                                                    "grants", "statistics", "etl"]}
+        }
+      }
+    },
+    "files_read": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["glob", "why"],
+        "additionalProperties": false,
+        "properties": {"glob": {"type": "string"}, "why": {"type": "string"}}
+      }
+    },
+    "row_data": {"const": false, "description": "The extraction agent never reads user-table rows."},
+    "never_shipped": {"type": "array", "items": {"type": "string"}}
+  }
+}

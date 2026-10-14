@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts" DTS:ObjectName="ExportBudget" DTS:ExecutableType="Microsoft.Package">
+  <DTS:Executables>
+    <DTS:Executable DTS:refId="Package\Export budget" DTS:ObjectName="Export budget" DTS:ExecutableType="Microsoft.Pipeline">
+      <DTS:ObjectData>
+        <pipeline version="1">
+          <components>
+            <component refId="Budget" componentClassID="Microsoft.OLEDBSource" name="Budget">
+              <properties>
+                <property dataType="System.String" name="OpenRowset">[dbo].[FactBudget]</property>
+              </properties>
+            </component>
+            <component refId="Budget file" componentClassID="Microsoft.FlatFileDestination" name="Budget file">
+              <properties>
+                <property dataType="System.String" name="FileName">\\fileshare\exports\budget.csv</property>
+              </properties>
+            </component>
+          </components>
+        </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+</DTS:Executable>
