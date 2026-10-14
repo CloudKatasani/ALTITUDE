@@ -59,6 +59,7 @@ ALTITUDE_AUTH=dev .venv/bin/altitude serve                              # websit
 | M10 | `altitude_agents` | 16-agent catalogue, 6 implemented; L0–L3 autonomy, approvals, pre-approved catalogue with blast radius, auto-rollback, eval-gated promotion |
 | M11 | `altitude.airready` | EAIRN 8-pillar score, KPI registry (one definition per KPI) → semantic views, Cortex templates + eval harness |
 | M12 | `altitude.packaging`, `altitude.mcp`, `altitude.skills` | Native App bundle (in-account D0), board pack (PPTX/PDF/HTML from one snapshot), MCP server, white-label tokens |
+| §26–27 | `altitude.marketplace` | data product and marketplace-agent manifests; evidence-based certification (contract, owner, docs, DMFs, masking, freshness); secure views, shares, organization listings and Cortex Agent specs; publishing emits SQL only for certified items |
 | §13 | `altitude.cutover` | go/no-go evidence pack, human decision with override reason, decommission blocking, savings realisation |
 | §12 | `altitude.movement` | volume-band load plans, landing DDL with lineage columns, CDC selection, restartable checkpoints |
 | §5–6, 34 | `altitude.commercial` | offer catalogue, fee credit / value floor guarantees, SOW and business-case drafts |

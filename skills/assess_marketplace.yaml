@@ -1,0 +1,11 @@
+name: assess_marketplace
+description: Certify data products and check marketplace agents against a sealed snapshot; lists blockers and the fix for each.
+permission: read
+entrypoint: altitude.skills.impl:assess_marketplace
+input_schema:
+  type: object
+  properties:
+    snapshot_id: {type: string}
+    package_o: {type: boolean, description: "Package O semantic layer is deployed"}
+  required: [snapshot_id]
+  additionalProperties: false

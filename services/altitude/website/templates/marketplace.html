@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% set m = s.marketplace %}
+{% block content %}
+<section class="page-hero"><div class="wrap">
+  <div class="eyebrow">Data Product &amp; Agent Marketplace</div>
+  <h1>Publish data products and AI agents people can trust</h1>
+  <p class="lead">We implement an internal marketplace on Snowflake where every data product carries a contract, an owner and an SLA, and every agent runs on certified products only. Nothing is listed until the evidence says it is ready.</p>
+  <p><a class="btn" href="contact.html">Plan your marketplace</a> <a class="btn outline" href="#products">See sample products</a></p>
+</div></section>
+
+<section class="block"><div class="wrap">
+  <h2>What we implement</h2>
+  <p class="sub">{{ offer["OFF-MKT"].duration_weeks[0] }}–{{ offer["OFF-MKT"].duration_weeks[1] }} weeks · {{ offer["OFF-MKT"]|price }} · builds on the evidence from Package D and the telemetry from Package O.</p>
+  <div class="grid g3">
+    <div class="card"><h3>Data product contracts</h3><p>Each product is a manifest: the objects and columns it exposes, its owner and steward, freshness SLA, classification, certified KPIs and endpoints (SQL, semantic view, MCP, share).</p></div>
+    <div class="card"><h3>Evidence-based certification</h3><p>Products are certified from your account's metadata: objects and contract columns exist, owner tag, documentation, data metric functions, masking on every PII column, on-time loads. Failures name the fix.</p></div>
+    <div class="card"><h3>Internal marketplace listings</h3><p>Secure contract views in a managed-access schema, a share per product and an organization listing with the data dictionary, support contact and approver — generated from the manifest, never hand-edited.</p></div>
+    <div class="card"><h3>Agents on certified data</h3><p>Cortex Analyst and Cortex Search agents published beside the products they use, each with its own role, a spend budget and an evaluation suite of golden questions that gates every change.</p></div>
+    <div class="card"><h3>Adoption and chargeback</h3><p>Consumers per product from access history, cost per product and per agent answer from Package O, and deprecation with notice for products nobody uses.</p></div>
+    <div class="card"><h3>Open endpoints</h3><p>Products and agents are also reachable through our MCP server and REST API, so Claude, Cursor or Cortex Code users get the same certified answers as Snowflake Intelligence users.</p></div>
+  </div>
+</div></section>
+
+<section class="block alt" id="products"><div class="wrap">
+  <div class="eyebrow">Live sample <span class="sample-tag">synthetic estate</span></div>
+  <h2>Sample data products, certified from evidence</h2>
+  <p class="sub">Scored by our platform against the synthetic estate as found ({{ m.summary_before.certified }} of {{ m.summary_before.products }} certified) and after the Package D fixes are applied ({{ m.summary_after.certified }} of {{ m.summary_after.products }}). Each blocker names the diagnostic check that fixes it.</p>
+  <div class="grid g2">
+  {% for p in m.products %}
+    <div class="card">
+      <span class="chip">{{ p.domain }}</span> <span class="chip">{{ p.classification }}</span>
+      <h3 style="margin-top:8px">{{ p.name }} <span class="muted" style="font-weight:400;font-size:.85rem">{{ p.id }}</span></h3>
+      <p>{{ p.description }}</p>
+      <table><tbody>
+        <tr><th>Owner</th><td>{{ p.owner }}</td></tr>
+        <tr><th>Exposes</th><td>{% for o in p.objects %}<code>{{ o.table }}</code> ({{ o.columns|length }} columns)<br>{% endfor %}</td></tr>
+        {% if p.freshness %}<tr><th>SLA</th><td>Loaded daily by {{ p.freshness.deadline_utc }} UTC</td></tr>{% endif %}
+        <tr><th>Endpoints</th><td>{{ p.endpoints|join(", ") }}</td></tr>
+        {% if p.kpis %}<tr><th>Certified KPIs</th><td>{{ p.kpis|join(", ") }}</td></tr>{% endif %}
+        <tr><th>As found</th><td><span class="chip {{ 'accent' if p.before.certified else 'warn' }}">{{ p.before.status }}</span> trust {{ "%.0f"|format(p.before.score * 100) }}/100 · {{ p.before.consumers }} consumers in 90 days
+          {% for c in p.before.checks if not c.passed %}<br><span class="muted">✕ {{ c.detail }}{% if c.fix %} → fix {{ c.fix }}{% endif %}</span>{% endfor %}</td></tr>
+        <tr><th>After fixes</th><td><span class="chip {{ 'accent' if p.after.certified else 'warn' }}">{{ p.after.status }}</span> trust {{ "%.0f"|format(p.after.score * 100) }}/100
+          {% for c in p.after.checks if not c.passed %}<br><span class="muted">✕ {{ c.detail }}{% if c.fix %} → fix {{ c.fix }}{% endif %}</span>{% endfor %}</td></tr>
+      </tbody></table>
+    </div>
+  {% endfor %}
+  </div>
+</div></section>
+
+<section class="block" id="agents"><div class="wrap">
+  <h2>Sample marketplace agents</h2>
+  <p class="sub">Business-facing agents listed beside the products they use. An agent is ready only when its products are certified and it has a dedicated role, a Cortex budget, its semantic view or search service, and enough golden questions — as found {{ m.summary_before.ready }} of {{ m.summary_before.agents }} ready, after fixes {{ m.summary_after.ready }} of {{ m.summary_after.agents }}.</p>
+  <div class="grid g2">
+  {% for a in m.agents %}
+    <div class="card">
+      <span class="chip">{{ "Cortex Search" if a.kind == "cortex_search" else "Cortex Analyst" }}</span> {% for au in a.audience %}<span class="chip">{{ au }}</span> {% endfor %}
+      <h3 style="margin-top:8px">{{ a.name }} <span class="muted" style="font-weight:400;font-size:.85rem">{{ a.id }}</span></h3>
+      <p>{{ a.description }}</p>
+      <p class="muted">Uses {% if a.products %}{{ a.products|join(", ") }}{% elif a.search_service %}<code>{{ a.search_service }}</code>{% else %}the Package O semantic layer{% endif %} · runs as <code>{{ a.role }}</code> · {{ a.golden_questions }} golden questions</p>
+      <ul class="ticks">{% for q in a.sample_questions %}<li>“{{ q }}”</li>{% endfor %}</ul>
+      <p><span class="chip {{ 'accent' if a.before.ready else 'warn' }}">as found: {{ a.before.status }}</span> <span class="chip {{ 'accent' if a.after.ready else 'warn' }}">after fixes: {{ a.after.status }}</span></p>
+      {% for c in a.before.checks if not c.passed %}<p class="muted" style="margin:.2rem 0">✕ {{ c.detail }}{% if c.fix %} → fix {{ c.fix }}{% endif %}</p>{% endfor %}
+    </div>
+  {% endfor %}
+  </div>
+</div></section>
+
+<section class="block alt"><div class="wrap split">
+  <div>
+    <h2>How the programme runs</h2>
+    <table><thead><tr><th>Weeks</th><th>Step</th><th>Outcome</th></tr></thead><tbody>
+      <tr><td>1–2</td><td>Domain map and product inventory from usage evidence</td><td>Prioritised product backlog with owners</td></tr>
+      <tr><td>3–4</td><td>Manifests and contracts; semantic views for product KPIs</td><td>One definition per KPI</td></tr>
+      <tr><td>5–7</td><td>Certify, then remediate what blocks certification</td><td>Products pass on evidence</td></tr>
+      <tr><td>8–9</td><td>Secure views, shares and internal listings</td><td>Products discoverable and requestable</td></tr>
+      <tr><td>10–12</td><td>Agents with roles, budgets and evaluation suites</td><td>Agents in Snowflake Intelligence</td></tr>
+      <tr><td>13–14</td><td>Adoption, chargeback and handover to the run service</td><td>Cost per product and per answer</td></tr>
+    </tbody></table>
+  </div>
+  <div class="callout"><b>Nothing is listed until it passes.</b>
+    <p>Publishing emits listing and agent SQL only for items that certify on the latest snapshot; everything else is held back with its reasons. The listing manifest is generated from the product contract, so the marketplace, the semantic layer and the documentation never drift apart.</p>
+    <p class="muted">Listing and agent syntax is re-verified against current Snowflake documentation on every engagement.</p></div>
+</div></section>
+{% endblock %}

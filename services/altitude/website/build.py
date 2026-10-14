@@ -30,9 +30,10 @@ PAGES = [
     ("migration.html", "migration.html", "Migration", "Migration factory"),
     ("managed-run.html", "managed_run.html", "Managed Run", "Managed Run & agents"),
     ("ai-ready.html", "ai_ready.html", "AI-Ready", "AI-Ready programme"),
+    ("marketplace.html", "marketplace.html", "Marketplace", "Data Product & Agent Marketplace"),
     ("pricing.html", "pricing.html", "Pricing", "Pricing & guarantees"),
     ("why-us.html", "why_us.html", "Why us", "Why choose us"),
-    ("industries.html", "industries.html", "Industries", "Industries"),
+    ("industries.html", "industries.html", None, "Industries"),
     ("contact.html", "contact.html", None, "Book a D0 Snapshot"),
 ]
 

@@ -1,3 +1,4 @@
+import html
 import re
 from html.parser import HTMLParser
 from pathlib import Path
@@ -37,7 +38,7 @@ def test_every_offering_and_page_is_rendered(built):
     offers = load_yaml("commercial/catalog.yaml")["offers"]
     offerings = files["offerings.html"]
     for o in offers:
-        assert f'id="{o["id"]}"' in offerings and o["name"] in offerings
+        assert f'id="{o["id"]}"' in offerings and html.escape(o["name"], quote=False) in offerings
     assert "{{" not in "".join(files.values())  # every theme token rendered
     assert "Section 6" not in offerings and "Free + " not in offerings  # catalogue copy, not spec references
 
