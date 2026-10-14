@@ -1,0 +1,27 @@
+name: convert_module
+description: Convert one legacy SQL module (Teradata, Oracle, T-SQL) to Snowflake with SnowConvert AI or the sqlglot fallback;
+  records artifacts and EWIs.
+permission: run
+entrypoint: altitude.skills.impl_conversion:convert_module
+input_schema:
+  type: object
+  properties:
+    source_sql:
+      type: string
+      minLength: 1
+    dialect:
+      type: string
+      description: teradata | oracle | tsql (aliases accepted)
+    name:
+      type: string
+      pattern: ^[A-Za-z0-9_.-]+$
+    engagement_id:
+      type: string
+    source_system_id:
+      type: string
+    remediate:
+      type: boolean
+  required:
+  - source_sql
+  - dialect
+  additionalProperties: false

@@ -1,0 +1,38 @@
+name: harvest_source
+description: "Harvest a legacy source (SQL Server, Oracle, Teradata) read-only \u2014 a bundled sample estate or an exported\
+  \ catalog in DuckDB \u2014 and seal a harvest snapshot."
+permission: run
+entrypoint: altitude.skills.impl_assessment:harvest_source
+input_schema:
+  type: object
+  properties:
+    source:
+      enum:
+      - sqlserver
+      - oracle
+      - teradata
+    engagement_id:
+      type: string
+      pattern: ^[A-Za-z0-9_-]+$
+    system_name:
+      type: string
+    duckdb_path:
+      type: string
+      description: emulated/exported catalog (opened read-only); omit for the bundled sample estate
+    attach:
+      type: object
+      additionalProperties:
+        type: string
+      propertyNames:
+        pattern: ^[A-Za-z_][A-Za-z0-9_]*$
+      description: extra DuckDB catalogs NAME -> path (e.g. msdb, SSISDB)
+    script_dirs:
+      type: array
+      items:
+        type: string
+    as_of:
+      type: string
+      format: date-time
+  required:
+  - source
+  additionalProperties: false

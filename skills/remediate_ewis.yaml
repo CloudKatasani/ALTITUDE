@@ -1,0 +1,13 @@
+name: remediate_ewis
+description: AI-remediate a converted artifact's EWIs and known issues into a PR pack (diffs, tests, review checklist) that
+  awaits human review.
+permission: run
+entrypoint: altitude.skills.impl_conversion:remediate_ewis
+input_schema:
+  type: object
+  properties:
+    artifact_id:
+      type: string
+    run_id:
+      type: string
+  additionalProperties: false

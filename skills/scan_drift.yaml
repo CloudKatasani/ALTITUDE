@@ -1,0 +1,19 @@
+name: scan_drift
+description: Scan legacy SQL for semantic drift against Snowflake (NULL/empty-string, case, rounding, timestamps...) using
+  the Pattern Library detectors.
+permission: read
+entrypoint: altitude.skills.impl_platform:scan_drift
+input_schema:
+  type: object
+  properties:
+    sql:
+      type: string
+      minLength: 1
+    dialect:
+      type: string
+    source:
+      type: string
+  required:
+  - sql
+  - dialect
+  additionalProperties: false

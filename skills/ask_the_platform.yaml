@@ -1,0 +1,35 @@
+name: ask_the_platform
+description: Ask a question about the Snowflake platform (cost, performance, security KPIs); answers come from certified KPIs
+  with citations, or are refused.
+permission: read
+entrypoint: altitude.skills.impl_platform:ask_the_platform
+input_schema:
+  type: object
+  properties:
+    question:
+      type: string
+      minLength: 3
+    account:
+      type: string
+    seed_synthetic:
+      type: object
+      additionalProperties: false
+      description: populate an empty observability database from a synthetic account
+      properties:
+        account_name:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+        profile:
+          enum:
+          - seeded
+          - clean
+        days:
+          type: integer
+          minimum: 7
+          maximum: 365
+        end_date:
+          type: string
+          format: date
+  required:
+  - question
+  additionalProperties: false

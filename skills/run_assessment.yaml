@@ -1,0 +1,19 @@
+name: run_assessment
+description: 'Assess a harvest snapshot: object dispositions, complexity, anti-patterns and semantic-drift risk; seals an
+  assessment snapshot and exports the report.'
+permission: run
+entrypoint: altitude.skills.impl_assessment:run_assessment
+input_schema:
+  type: object
+  properties:
+    harvest_snapshot_id:
+      type: string
+      minLength: 3
+      description: snapshot id registered in the store, or a sealed .duckdb path
+    report:
+      type: boolean
+    tenant_id:
+      type: string
+  required:
+  - harvest_snapshot_id
+  additionalProperties: false

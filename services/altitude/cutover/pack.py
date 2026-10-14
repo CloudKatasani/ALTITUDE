@@ -63,7 +63,7 @@ def _security(store: Any, engagement_id: str) -> dict:
         "SELECT g.mapping_status FROM \"grant\" g JOIN source_system s ON g.source_system_id = s.source_system_id "
         "WHERE s.engagement_id = ?", [engagement_id])
     total = len(rows)
-    mapped = sum(1 for r in rows if r["mapping_status"] in ("mapped", "intentionally_retired"))
+    mapped = sum(1 for r in rows if r["mapping_status"] in ("mapped", "retired", "intentionally_retired"))
     return {"legacy_grants": total, "mapped_or_retired": mapped,
             "grants_mapped_pct": round(100.0 * mapped / total, 2) if total else 100.0}
 

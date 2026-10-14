@@ -1,0 +1,14 @@
+name: generate_unit_tests
+description: Generate (and optionally run) the unit tests attached to each AI change of a converted artifact's PR pack.
+permission: run
+entrypoint: altitude.skills.impl_conversion:generate_unit_tests
+input_schema:
+  type: object
+  properties:
+    artifact_id:
+      type: string
+    run_id:
+      type: string
+    run:
+      type: boolean
+  additionalProperties: false

@@ -1,0 +1,35 @@
+name: estimate_wave
+description: Estimate effort (p50/p80 hours, confidence, factors) for a planned wave, a set of objects or the whole programme.
+permission: run
+entrypoint: altitude.skills.impl_planning:estimate_wave
+input_schema:
+  type: object
+  properties:
+    assessment_snapshot_id:
+      type: string
+      minLength: 3
+      description: assessment snapshot id or path
+    harvest_snapshot_id:
+      type: string
+      minLength: 3
+      description: harvest snapshot id or path (assessed on demand)
+    inputs:
+      type: object
+      description: 'programme inputs (Appendix B): deadline_weeks, start_date, appetite_for_change, ...'
+    wave:
+      type: integer
+      minimum: 1
+    object_ids:
+      type: array
+      items:
+        type: string
+    names:
+      type: array
+      items:
+        type: string
+    cutovers:
+      type: integer
+      minimum: 1
+    record:
+      type: boolean
+  additionalProperties: false
