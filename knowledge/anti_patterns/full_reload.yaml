@@ -1,0 +1,15 @@
+description: Appliance-era truncate-and-reload of large tables (Sections 8.2.1, 8.2.2).
+anti_patterns:
+  - id: AP-03
+    name: full_reload
+    title: Full reload of a large table (TRUNCATE / unqualified DELETE followed by INSERT)
+    severity: S3
+    applies_to: [procedure, package, macro, script, etl_job]
+    detector: full_reload
+    size_sensitive: true
+    threshold_ref: rubric.assessment.anti_patterns.large_table_rows_min
+    credits_per_run_ref: rubric.assessment.anti_patterns.credits_per_run.full_reload
+    recommendation: >
+      Load incrementally: MERGE from a stream or a change-tracking watermark, or a dynamic table with a
+      target lag; reserve full rebuilds for small dimensions.
+    last_verified: "2026-10-01"

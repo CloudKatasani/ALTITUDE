@@ -1,0 +1,15 @@
+description: View stacking (Section 31, TD-07).
+anti_patterns:
+  - id: AP-04
+    name: nested_views
+    title: Views nested deeper than the rubric limit
+    severity: S3
+    applies_to: [view]
+    detector: nested_views
+    threshold_ref: rubric.assessment.anti_patterns.nested_view_depth_max
+    credits_per_run_ref: rubric.assessment.anti_patterns.credits_per_run.nested_views
+    recommendation: >
+      Flatten the stack or materialise intermediate layers as dynamic tables; deep stacks recompile and rescan
+      on every query.
+    known_issues: [TD-07]
+    last_verified: "2026-10-01"

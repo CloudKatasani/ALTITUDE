@@ -1,0 +1,59 @@
+# {{PRODUCT_NAME}} — Estate assessment: {{ s.source }} ({{ s.engagement_id or "engagement" }})
+
+Prepared by {{COMPANY_NAME}}. Every figure below is computed from sealed snapshot `{{ snapshot_id }}`
+(harvest `{{ s.harvest_snapshot_id }}`, as of {{ s.as_of }}) with rubric `{{ s.rubric_version }}`;
+re-running the assessment on the same inputs reproduces it exactly.
+
+## Summary
+
+| Measure | Value |
+|---|---|
+| Objects assessed | {{ s.objects }} |
+{% for k, v in s.objects_by_type.items() %}| — {{ k }} | {{ v }} |
+{% endfor %}| Keep / rewrite / retire | {{ s.dispositions.get("keep", 0) }} / {{ s.dispositions.get("rewrite", 0) }} / {{ s.dispositions.get("retire", 0) }} |
+| Classified without review | {{ s.objects_classified_pct }}% |
+| Awaiting human review | {{ s.review_items }} |
+| Complexity (low / medium / high) | {{ s.complexity_bands.get("low", 0) }} / {{ s.complexity_bands.get("medium", 0) }} / {{ s.complexity_bands.get("high", 0) }} |
+| Anti-pattern findings | {{ s.anti_pattern_hits }} (est. {{ "%.2f"|format(s.anti_pattern_credits_month) }} credits ≈ ${{ "%.2f"|format(s.anti_pattern_usd_month) }} / month) |
+| Drift-risk scan | {{ s.drift_scan.status }}{% if s.drift_scan.reason %} — {{ s.drift_scan.reason }}{% endif %} |
+
+## Awaiting review (confidence below the review threshold)
+
+{% if review %}| Object | Proposed | Confidence | Rationale |
+|---|---|---|---|
+{% for r in review %}| `{{ r.fq_name }}` | {{ r.disposition }} | {{ "%.2f"|format(r.confidence) }} | {{ r.rationale }} |
+{% endfor %}{% else %}None.
+{% endif %}
+## Retire candidates
+
+{% if retire %}| Object | Type | Last used | Confidence | Rationale |
+|---|---|---|---|---|
+{% for r in retire %}| `{{ r.fq_name }}` | {{ r.object_type }} | {{ r.last_used_at or "never" }} | {{ "%.2f"|format(r.confidence) }} | {{ r.rationale }} |
+{% endfor %}{% else %}None.
+{% endif %}
+## Rewrite candidates
+
+{% if rewrite %}| Object | Type | Complexity | Rationale |
+|---|---|---|---|
+{% for r in rewrite %}| `{{ r.fq_name }}` | {{ r.object_type }} | {{ r.complexity_score }} ({{ r.complexity_band }}) | {{ r.rationale }} |
+{% endfor %}{% else %}None.
+{% endif %}
+## Top anti-patterns by estimated credit impact
+
+{% if hits %}| Pattern | Object | Line | Credits / month | Evidence | Recommendation |
+|---|---|---|---|---|---|
+{% for h in hits %}| {{ h.pattern_id }} {{ h.pattern }} | `{{ h.fq_name }}` | {{ h.line }} | {{ "%.4f"|format(h.credits_month) }} | `{{ h.snippet }}` | {{ h.recommendation }} |
+{% endfor %}{% else %}No anti-patterns detected.
+{% endif %}
+## Drift risk (semantic-drift known issues)
+
+{% if s.drift_scan.status == "skipped" %}Not assessed: {{ s.drift_scan.reason }}.
+{% elif drift %}| Issue | Severity | Object | Line | Message |
+|---|---|---|---|---|
+{% for d in drift %}| {{ d.issue_id }} | {{ d.severity }} | `{{ d.fq_name }}` | {{ d.line }} | {{ d.message }} |
+{% endfor %}{% else %}No drift risks detected in {{ s.drift_scan.objects_scanned }} code objects.
+{% endif %}
+---
+Method: dispositions from usage + lineage with rubric confidences; low-confidence items have no effect until a
+named reviewer approves them. Credit impacts are estimates (runs/month × credits/run × size factor). Questions:
+{{SUPPORT_EMAIL}}.

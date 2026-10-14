@@ -1,0 +1,78 @@
+namespace: assessment
+version: 1.0.0
+description: >
+  Assessment engine (M3): disposition classification from usage + lineage, complexity scoring and
+  anti-pattern credit impact. Seed values; calibrate per engagement and record changes below.
+calibration:
+  - date: "2026-10-01"
+    sample_size: 0
+    note: Initial seed values from Sections 9, 16, 31 and 32; not yet calibrated against engagement actuals.
+values:
+  usage:
+    retire_after_days: 365        # no observed use for longer than this → retire candidate
+    min_history_days: 180         # usage history shorter than this lowers disposition confidence
+  disposition:
+    confidence:
+      keep_direct_use: 0.95       # used directly in the usage window
+      keep_lineage: 0.88          # not queried directly, but feeds a live object
+      keep_dormant: 0.62          # last used inside the retire window (possible quarter/year-end) → review
+      keep_dynamic_reference: 0.55  # only referenced from dynamic SQL of live code → review
+      keep_unobserved_writer: 0.6   # writes a live table but never observed running → review
+      retire_never_used: 0.93
+      retire_stale: 0.9
+      retire_dead_consumers: 0.84   # every consumer is itself unused
+      retire_dead_output: 0.66      # populated by a live process but never read → review
+      rewrite_complexity: 0.88
+      rewrite_constructs: 0.85
+      ai_disagreement_cap: 0.6      # an approved AI provider disagreeing caps confidence → review
+      short_history_penalty: 0.15
+    rewrite:
+      bands: [high]
+      constructs: [cursor, row_loop, dynamic_sql, script_task, bteq_control]
+  complexity:
+    weights:
+      loc_per_100: 4
+      cursor: 10
+      row_loop: 8
+      dynamic_sql: 12
+      error_handling: 2
+      control_flow: 1
+      temp_table: 2
+      transaction: 2
+      package_state: 6
+      script_task: 15
+      bteq_control: 2
+      known_issue_s1: 6
+      known_issue_s2: 4
+      known_issue_other: 1
+      dependency_fan_out: 0.5
+    caps:
+      loc_per_100: 30
+      error_handling: 10
+      control_flow: 12
+      dependency_fan_out: 8
+    max_score: 100
+    bands:
+      medium_min: 15
+      high_min: 35
+  anti_patterns:
+    nested_view_depth_max: 3          # views stacked deeper than this are flagged
+    large_table_rows_min: 10000000    # full reloads of tables at least this large are flagged
+    large_table_bytes_min: 5000000000
+    rows_per_size_unit: 100000000     # size factor for size-sensitive patterns = rows / this (at least 1)
+    bytes_per_size_unit: 50000000000
+    runs_per_month_default: 30        # live object with no observed run count (e.g. called only by a job)
+    usage_months: 3                   # usage_90d spans this many months
+    credit_price_usd: 3.0
+    wide_column_types: [xml, json, variant, clob, blob, xmltype, "nvarchar(max)", "varchar(max)", "varbinary(max)"]
+    credits_per_run:                  # estimated Snowflake credits per affected run (seed values)
+      row_by_row: 0.08
+      select_star_pipeline: 0.01
+      full_reload: 0.4
+      nested_views: 0.01
+      cross_join: 0.05
+      non_sargable: 0.01
+      unnecessary_distinct: 0.005
+      wide_variant_scan: 0.03
+  report:
+    top_n: 10

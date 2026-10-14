@@ -1,0 +1,35 @@
+description: Pipeline statements that scan or carry more data than needed (Section 31).
+anti_patterns:
+  - id: AP-02
+    name: select_star_pipeline
+    title: SELECT * in a pipeline or view definition
+    severity: S3
+    applies_to: [view, procedure, package, macro, script, etl_job]
+    detector: select_star_pipeline
+    credits_per_run_ref: rubric.assessment.anti_patterns.credits_per_run.select_star_pipeline
+    recommendation: >
+      Name the columns. SELECT * couples the pipeline to upstream schema changes and defeats column pruning
+      on wide tables.
+    last_verified: "2026-10-01"
+  - id: AP-07
+    name: unnecessary_distinct
+    title: Unnecessary DISTINCT (with GROUP BY, inside IN/EXISTS, or before UNION)
+    severity: S4
+    applies_to: [view, procedure, function, package, macro, script]
+    detector: unnecessary_distinct
+    credits_per_run_ref: rubric.assessment.anti_patterns.credits_per_run.unnecessary_distinct
+    recommendation: Remove the DISTINCT; the GROUP BY, semi-join or UNION already de-duplicates.
+    last_verified: "2026-10-01"
+  - id: AP-08
+    name: wide_variant_scan
+    title: Wide semi-structured / LOB column scanned wholesale (VARIANT, XML, CLOB, JSON, MAX types)
+    severity: S3
+    applies_to: [view, procedure, package, macro, script, etl_job]
+    detector: wide_variant_scan
+    size_sensitive: true
+    credits_per_run_ref: rubric.assessment.anti_patterns.credits_per_run.wide_variant_scan
+    recommendation: >
+      Project only the paths needed (col:path::type) or flatten into typed columns at ingestion; avoid
+      SELECT * over tables with VARIANT or LOB columns.
+    known_issues: [OR-09]
+    last_verified: "2026-10-01"

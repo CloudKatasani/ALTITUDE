@@ -1,0 +1,25 @@
+description: Query shapes that defeat pruning or multiply rows (Section 31).
+anti_patterns:
+  - id: AP-05
+    name: cross_join
+    title: Cross join (explicit CROSS JOIN or comma join without a join predicate)
+    severity: S3
+    applies_to: [view, procedure, function, package, macro, script, etl_job]
+    detector: cross_join
+    size_sensitive: true
+    credits_per_run_ref: rubric.assessment.anti_patterns.credits_per_run.cross_join
+    recommendation: Replace with an inner join on the intended keys; if a cartesian product is intended, document and bound it.
+    last_verified: "2026-10-01"
+  - id: AP-06
+    name: non_sargable
+    title: Non-sargable predicate (function or arithmetic on a filtered column, leading-wildcard LIKE)
+    severity: S3
+    applies_to: [view, procedure, function, package, macro, script]
+    detector: non_sargable
+    size_sensitive: true
+    credits_per_run_ref: rubric.assessment.anti_patterns.credits_per_run.non_sargable
+    recommendation: >
+      Compare the bare column to a computed range (e.g. OrderDate >= DATE_FROM_PARTS(:y,1,1) AND OrderDate <
+      DATE_FROM_PARTS(:y+1,1,1)) so micro-partition pruning applies; normalise case at ingestion.
+    known_issues: [MS-01, TD-02]
+    last_verified: "2026-10-01"
