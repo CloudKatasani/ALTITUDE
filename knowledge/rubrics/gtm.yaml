@@ -1,0 +1,14 @@
+namespace: gtm
+version: 1.0.0
+description: Buying-signal scoring weights (Section 2, 35.2). Hypotheses — calibrate against won deals.
+values:
+  weights:
+    renewal_window: 40
+    ae_referral: 30
+    job_posting: 10
+    snowflake_customer: 15
+    regulated_industry: 10
+    cost_overrun_news: 15
+  renewal_window_months: {min: 12, max: 24}
+  job_posting_cap: 3
+  priority_cutoffs: {hot: 60, warm: 30}

@@ -1,0 +1,5 @@
+namespace: benchmark
+version: 1.0.0
+description: Peer benchmark publication rules.
+values:
+  min_contributors: 5           # never publish a cohort position below this many distinct contributors

@@ -1,0 +1,6 @@
+# Which offer each signal pattern opens (Section 35.2 channels).
+plays:
+  - {id: PLAY-01, when: "snowflake_customer and (cost_overrun_news or regulated_industry)", offer: OFF-D0, pitch: "Free D0 Snapshot in your own account, then Package D with fee credit"}
+  - {id: PLAY-02, when: "renewal_window", offer: OFF-ASSESS, pitch: "Paid migration assessment ahead of the legacy renewal"}
+  - {id: PLAY-03, when: "ae_referral", offer: OFF-D, pitch: "Co-sell Package D as efficiency that funds new workloads"}
+  - {id: PLAY-04, when: "true", offer: OFF-D0, pitch: "D0 Snapshot as the first meeting"}
