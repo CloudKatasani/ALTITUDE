@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card narrow">
+  <h1>Sign in to {{ theme.PRODUCT_NAME }}</h1>
+  <form method="post" action="/login">
+    <label>SSO / API token<input name="token" type="password" autocomplete="off"></label>
+    {% if dev %}
+    <p class="muted">Development mode: pick a role instead.</p>
+    <label>User<input name="user" value="dev@local"></label>
+    <label>Role<select name="role">{% for r in roles %}<option value="{{ r }}">{{ r }}</option>{% endfor %}</select></label>
+    {% endif %}
+    <button type="submit">Continue</button>
+  </form>
+</section>
+{% endblock %}

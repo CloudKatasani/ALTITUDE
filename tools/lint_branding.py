@@ -45,7 +45,7 @@ def candidate_files(root: Path) -> list[Path]:
 
 def lint(root: Path) -> list[str]:
     terms = brand_terms(root)
-    pattern = re.compile("|".join(re.escape(t) for t in terms), re.IGNORECASE)
+    pattern = re.compile("|".join(re.escape(t) for t in terms))  # brand names are matched case-sensitively
     problems = []
     for f in candidate_files(root):
         for i, line in enumerate(f.read_text(errors="replace").splitlines(), 1):

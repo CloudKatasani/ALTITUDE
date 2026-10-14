@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{% if engagement %}{{ engagement.name }}{% else %}No engagement yet{% endif %}</h1>
+<ol class="path">
+  {% for ph in path %}
+  <li class="{% if ph.id == phase %}current{% endif %}">
+    <strong>{{ ph.name }}</strong><span>{{ ph.package }}</span>
+    {% if ph.id == phase %}<em>Gate: {{ ph.gate }}</em>{% endif %}
+  </li>
+  {% endfor %}
+</ol>
+<div class="grid">
+  <section class="card">
+    <h2>Next three actions</h2>
+    <ol>{% for a in actions %}<li>{{ a }}</li>{% else %}<li class="muted">Nothing pending.</li>{% endfor %}</ol>
+  </section>
+  <section class="card">
+    <h2>{{ theme.COPILOT_NAME }} challenges</h2>
+    {% for c in challenges %}<p class="flag {{ c.severity }}"><b>[{{ c.id }}]</b> {{ c.message }}</p>
+    {% else %}<p class="muted">No risks flagged from the current evidence.</p>{% endfor %}
+  </section>
+</div>
+{% block extra %}{% endblock %}
+{% endblock %}

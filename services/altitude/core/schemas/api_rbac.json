@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Portal/API RBAC",
+  "x-altitude-globs": ["api/rbac.yaml"],
+  "type": "object",
+  "required": ["roles"],
+  "properties": {
+    "roles": {"type": "object", "minProperties": 6, "additionalProperties": {
+      "type": "object", "required": ["description", "permissions"], "additionalProperties": false,
+      "properties": {"description": {"type": "string"},
+        "permissions": {"type": "array", "items": {"type": "string", "pattern": "^(read|run|review|approve|approve:data|decide:gate|decide:board|admin:engagement|admin:tenant|admin:theme)$"}}}}}
+  }
+}
