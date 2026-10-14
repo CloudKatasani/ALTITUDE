@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}} · {{PRODUCT_NAME}}</title>
+<style>
+  :root {
+    --primary: {{COLOR_PRIMARY}};
+    --accent: {{COLOR_ACCENT}};
+    --warn: {{COLOR_WARN}};
+    --danger: {{COLOR_DANGER}};
+    --surface: {{COLOR_SURFACE}};
+    --text: {{COLOR_TEXT}};
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--surface);
+         color: var(--text); line-height: 1.45; }
+  header { background: var(--primary); color: var(--surface); padding: 20px 28px; }
+  header h1 { margin: 0; font-size: 22px; font-weight: 600; }
+  header p { margin: 4px 0 0; opacity: .85; font-size: 13px; }
+  main { padding: 20px 28px 40px; max-width: 1280px; margin: 0 auto; }
+  nav { margin: 0 0 16px; font-size: 13px; }
+  nav a { color: var(--primary); margin-right: 14px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .tile { background: white; border-radius: 8px; padding: 14px 16px; border-top: 4px solid var(--accent);
+          box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .tile.warn { border-top-color: var(--warn); }
+  .tile.bad { border-top-color: var(--danger); }
+  .tile .label { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; opacity: .7; }
+  .tile .value { font-size: 26px; font-weight: 650; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .tile .note { font-size: 12px; opacity: .7; margin-top: 2px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; }
+  section.card { background: white; border-radius: 8px; padding: 16px 18px; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  section.card h2 { margin: 0 0 4px; font-size: 15px; }
+  section.card .kpi-ref { font-size: 11px; opacity: .6; margin-bottom: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid rgba(0,0,0,.08); }
+  th { font-weight: 600; font-size: 12px; opacity: .8; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.total td { font-weight: 650; border-top: 2px solid var(--primary); }
+  .rag { display: inline-block; min-width: 54px; text-align: center; border-radius: 10px; padding: 1px 8px;
+         font-size: 11px; color: white; }
+  .rag.green { background: var(--accent); }
+  .rag.amber { background: var(--warn); }
+  .rag.red { background: var(--danger); }
+  .rag.none { background: rgba(0,0,0,.35); }
+  svg { width: 100%; height: auto; display: block; }
+  svg .axis { stroke: rgba(0,0,0,.25); stroke-width: 1; }
+  svg .grid-line { stroke: rgba(0,0,0,.07); stroke-width: 1; }
+  svg .line { fill: none; stroke: var(--primary); stroke-width: 2; }
+  svg .area { fill: var(--accent); opacity: .15; }
+  svg .bar { fill: var(--primary); }
+  svg .bar.alt { fill: var(--accent); }
+  svg .bar.warn { fill: var(--warn); }
+  svg .bar.bad { fill: var(--danger); }
+  svg .target { stroke: var(--danger); stroke-dasharray: 4 3; stroke-width: 1.5; }
+  svg text { font-size: 11px; fill: var(--text); }
+  svg text.muted { opacity: .6; }
+  .empty { opacity: .6; font-style: italic; font-size: 13px; }
+  footer { font-size: 11px; opacity: .65; margin-top: 28px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>{{TITLE}}</h1>
+  <p>{{PACKAGE_O_NAME}} · {{SUBTITLE}}</p>
+</header>
+<main>
+  <nav>{{NAV}}</nav>
+  {{BODY}}
+  <footer>{{FOOTER}} · {{PRODUCT_NAME}} by {{COMPANY_NAME}} · support: {{SUPPORT_EMAIL}}</footer>
+</main>
+</body>
+</html>
