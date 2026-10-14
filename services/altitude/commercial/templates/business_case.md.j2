@@ -1,0 +1,15 @@
+# Business case (draft)
+
+| Item | Annual / one-off |
+|---|---|
+| Legacy run cost | ${{ "{:,.0f}".format(case.legacy_annual_cost) }} / yr |
+| Snowflake run cost (forecast) | ${{ "{:,.0f}".format(case.snowflake_annual_cost) }} / yr |
+| Annual saving | ${{ "{:,.0f}".format(case.annual_saving) }} / yr |
+| Migration cost | ${{ "{:,.0f}".format(case.migration_cost) }} one-off |
+| NPV ({{ case.horizon_years }} yrs @ {{ "%.0f"|format(case.discount_rate * 100) }}%) | ${{ "{:,.0f}".format(case.npv) }} |
+| Payback | {% if case.payback_months %}{{ case.payback_months }} months{% else %}no payback within horizon{% endif %} |
+
+## Assumptions
+{% for a in case.assumptions %}- {{ a }}
+{% endfor %}
+_Rubric `{{ case.rubric_version }}`._

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Service catalogue, tiers and guarantees",
+  "x-altitude-globs": ["commercial/*.yaml"],
+  "type": "object",
+  "required": ["offers", "tiers", "guarantees"],
+  "additionalProperties": false,
+  "properties": {
+    "offers": {"type": "array", "items": {"type": "object", "required": ["id", "name", "package", "duration_weeks", "fee_usd", "buyer", "scope"],
+      "properties": {"id": {"type": "string", "pattern": "^OFF-"}, "fee_usd": {"type": "array", "minItems": 2, "maxItems": 2},
+        "duration_weeks": {"type": "array", "minItems": 2, "maxItems": 2}}}},
+    "tiers": {"type": "array", "items": {"type": "object", "required": ["id", "package", "fee_usd", "weeks"]}},
+    "guarantees": {"type": "array", "items": {"type": "object", "required": ["id", "name", "applies_to", "terms"],
+      "properties": {"id": {"type": "string", "pattern": "^GUA-"}}}}
+  }
+}

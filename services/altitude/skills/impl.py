@@ -61,3 +61,18 @@ def build_go_no_go_pack(context: Any = None, engagement_id: str = "", plan_id: s
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(render_markdown(pack))
     return {**pack, "report_path": str(out)}
+
+
+def draft_sow(context: Any = None, offer_id: str = "", client: str = "", tier_id: str | None = None,
+              scope_notes: list | None = None, fee_usd: float | None = None) -> dict:
+    from altitude.commercial import draft_sow as draft
+
+    return {"markdown": draft(offer_id, client, tier_id, scope_notes, fee_usd)}
+
+
+def draft_business_case(context: Any = None, legacy_annual_costs: dict | None = None,
+                        snowflake_annual_cost: float = 0.0, migration_cost: float = 0.0,
+                        estimate: dict | None = None) -> dict:
+    from altitude.commercial import draft_business_case as draft
+
+    return draft(legacy_annual_costs or {}, snowflake_annual_cost, migration_cost, estimate)
