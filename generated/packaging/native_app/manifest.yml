@@ -1,0 +1,17 @@
+# AUTO-GENERATED — DO NOT EDIT. Source: altitude.packaging.native_app (harvest contract + check catalogue). Regenerate with `altitude generate`.
+manifest_version: 1
+version:
+  name: V1
+  label: "ALTITUDE D0 Snapshot"
+  comment: "Metadata-only Snowflake estate diagnostics running inside your account"
+artifacts:
+  setup_script: setup.sql
+  readme: README.md
+privileges:
+  - IMPORTED PRIVILEGES ON SNOWFLAKE DB:
+      description: "Read ACCOUNT_USAGE metadata (usage, metering, grants, tags). No row data is read."
+  - MONITOR USAGE:
+      description: "SHOW WAREHOUSES / resource monitors for configuration checks."
+configuration:
+  log_level: INFO
+  trace_level: OFF

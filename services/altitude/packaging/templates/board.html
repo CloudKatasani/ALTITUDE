@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ theme("PRODUCT_NAME") }} board dashboard</title>
+<style>
+:root { --primary: {{ theme("COLOR_PRIMARY") }}; --accent: {{ theme("COLOR_ACCENT") }}; --text: {{ theme("COLOR_TEXT") }}; --surface: {{ theme("COLOR_SURFACE") }}; }
+body { font-family: system-ui, sans-serif; margin: 0; background: var(--surface); color: var(--text); }
+header { background: var(--primary); color: white; padding: 1rem 1.5rem; }
+main { padding: 1.5rem; max-width: 1100px; margin: auto; }
+.tiles { display: flex; flex-wrap: wrap; gap: 1rem; }
+.tile { background: white; border-radius: 8px; padding: .8rem 1rem; min-width: 200px; border-top: 4px solid var(--accent); }
+.tile b { display: block; font-size: 1.6rem; }
+table { width: 100%; border-collapse: collapse; background: white; margin-top: 1rem; }
+td, th { padding: .4rem .6rem; border-bottom: 1px solid rgba(0,0,0,.08); text-align: left; }
+footer { font-size: .8rem; opacity: .6; padding: 1rem 1.5rem; }
+</style></head>
+<body data-numbers-hash="{{ n.numbers_hash }}" data-snapshot-id="{{ n.snapshot_id }}">
+<header><h1>{{ theme("PRODUCT_NAME") }} — board dashboard</h1><p>Snapshot {{ n.snapshot_id }} · rubric {{ n.rubric_version }}</p></header>
+<main>
+<div class="tiles">
+<div class="tile">{{ theme("HEALTH_INDEX_NAME") }}<b id="phi">{{ n.platform_health_index }}</b></div>
+<div class="tile">Identified value (p50)<b id="value">{{ usd(n.identified_value_p50_usd) }}</b></div>
+<div class="tile">Suggestions<b id="suggestions">{{ n.suggestions }}</b>quick wins {{ n.quick_wins }}</div>
+<div class="tile">Well-Architected<b id="wa">{{ n.well_architected.overall }}</b>{{ n.well_architected.rating }}</div>
+<div class="tile">AI readiness<b id="ai">{{ n.ai_readiness.overall }}</b>level {{ n.ai_readiness.level }}</div>
+</div>
+<h2>Top suggestions</h2>
+<table><tr><th>Suggestion</th><th>Value p50</th><th>Quadrant</th><th>Evidence</th></tr>
+{% for s in n.top %}<tr><td>{{ s.title }}<br><code>{{ s.id }}</code></td><td>{{ usd(s.value_p50_usd) }}</td><td>{{ s.quadrant }}</td><td>{{ s.evidence_refs|join(", ") }}</td></tr>{% endfor %}
+</table>
+<h2>Scorecard</h2>
+<table><tr><th>Domain</th><th>Score (1-5)</th></tr>
+{% for d in n.domains %}<tr><td>{{ d.id }} {{ d.name }}</td><td>{{ d.score }}</td></tr>{% endfor %}
+</table>
+</main>
+<footer>{{ theme("COMPANY_NAME") }} · numbers hash {{ n.numbers_hash }} — identical in the deck and PDF</footer>
+</body></html>

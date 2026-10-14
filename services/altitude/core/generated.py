@@ -42,6 +42,7 @@ GENERATOR_MODULES = [
     "altitude_agents.generate",
     "altitude.etl.generate",
     "altitude_connectors.generate",
+    "altitude.packaging.generate",
 ]
 
 

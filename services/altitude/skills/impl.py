@@ -76,3 +76,15 @@ def draft_business_case(context: Any = None, legacy_annual_costs: dict | None = 
     from altitude.commercial import draft_business_case as draft
 
     return draft(legacy_annual_costs or {}, snowflake_annual_cost, migration_cost, estimate)
+
+
+def generate_board_pack(context: Any = None, snapshot_id: str = "", tier: str = "D2") -> dict:
+    from altitude.core.snapshot import Snapshot
+    from altitude.packaging.board_pack import build
+
+    ctx = coerce(context)
+    row = ctx.store.get("snapshot", snapshot_id=snapshot_id)
+    if row is None:
+        raise KeyError(f"no snapshot {snapshot_id}")
+    out = ctx.workspace / "board_pack" / snapshot_id
+    return {**build(Snapshot.open(row["location"]), out, tier), "directory": str(out)}
