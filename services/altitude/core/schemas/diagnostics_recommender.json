@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Package D next-package recommender (Section 6.13)",
+  "x-altitude-globs": ["diagnostics/recommender.yaml"],
+  "type": "object",
+  "required": ["version", "recommendations"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "recommendations": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "pattern", "package", "when"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^NXT-[A-Z0-9-]+$"},
+          "pattern": {"type": "string"},
+          "package": {"type": "string"},
+          "when": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": false,
+            "properties": {
+              "checks_any": {"type": "array", "items": {"type": "string", "pattern": "^DX-"}},
+              "domains_any": {"type": "array", "items": {"type": "string", "pattern": "^D([1-9]|10)$"}},
+              "severity": {"enum": ["critical", "high", "medium", "low"]},
+              "min_checks_ref": {"type": "string", "pattern": "^rubric\\."},
+              "client_input_list": {"type": "string"},
+              "min_items_ref": {"type": "string", "pattern": "^rubric\\."},
+              "domain_score_max": {
+                "type": "object",
+                "required": ["domain", "score_ref"],
+                "additionalProperties": false,
+                "properties": {"domain": {"type": "string"}, "score_ref": {"type": "string", "pattern": "^rubric\\."}}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

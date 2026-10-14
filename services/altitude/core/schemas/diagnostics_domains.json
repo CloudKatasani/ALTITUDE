@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Package D diagnostic domains and WAF pillar mapping",
+  "x-altitude-globs": ["diagnostics/domains.yaml"],
+  "type": "object",
+  "required": ["version", "waf_pillars", "domains"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "last_verified": {"type": "string"},
+    "waf_pillars": {
+      "type": "array", "minItems": 5, "maxItems": 5,
+      "items": {
+        "type": "object",
+        "required": ["pillar", "name"],
+        "additionalProperties": false,
+        "properties": {
+          "pillar": {"enum": ["security_governance", "operational_excellence", "reliability", "performance_efficiency", "cost_optimization"]},
+          "name": {"type": "string"},
+          "baseline_sections": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "domains": {
+      "type": "array", "minItems": 10, "maxItems": 10,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "waf_pillar", "weight_ref", "key_question"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^D([1-9]|10)$"},
+          "name": {"type": "string"},
+          "waf_pillar": {"enum": ["security_governance", "operational_excellence", "reliability", "performance_efficiency", "cost_optimization", "extension"]},
+          "weight_ref": {"type": "string", "pattern": "^rubric\\."},
+          "key_question": {"type": "string"},
+          "primary_evidence": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}

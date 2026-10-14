@@ -1,0 +1,293 @@
+# D4 Security & Access checks (Section 6.4).
+version: 1.0.0
+checks:
+  - id: DX-SEC-01
+    title: Weak authentication
+    description: Human users with a password but no MFA or SSO; service users authenticating by password.
+    domain: D4
+    waf_pillar: security_governance
+    severity: critical
+    confidence_class: high
+    detector:
+      requires: [USERS, LOGIN_HISTORY]
+      inputs: []
+      cluster_by: theme
+      params:
+        service_user_types: {value: [SERVICE, LEGACY_SERVICE]}
+      signals: |
+        WITH l AS (
+          SELECT USER_NAME, count(*) AS LOGINS,
+                 count(*) FILTER (WHERE FIRST_AUTHENTICATION_FACTOR = 'PASSWORD' AND SECOND_AUTHENTICATION_FACTOR IS NULL) AS SINGLE_FACTOR_LOGINS
+          FROM LOGIN_HISTORY WHERE IS_SUCCESS = 'YES' GROUP BY USER_NAME)
+        SELECT u.NAME AS OBJECT_NAME,
+               CASE WHEN list_contains($service_user_types, coalesce(u.TYPE, 'PERSON')) THEN 'service_password' ELSE 'human_without_mfa' END AS CLUSTER_KEY,
+               coalesce(u.TYPE, 'PERSON') AS USER_TYPE, u.HAS_PASSWORD, u.HAS_MFA, u.HAS_RSA_PUBLIC_KEY,
+               CASE WHEN u.EXT_AUTHN_UID IS NOT NULL THEN 1 ELSE 0 END AS HAS_SSO,
+               coalesce(l.LOGINS, 0) AS LOGINS, coalesce(l.SINGLE_FACTOR_LOGINS, 0) AS SINGLE_FACTOR_LOGINS
+        FROM USERS u LEFT JOIN l ON l.USER_NAME = u.NAME
+        WHERE NOT coalesce(u.DISABLED, false)
+      rule: >-
+        (CLUSTER_KEY = 'human_without_mfa' AND HAS_PASSWORD AND NOT HAS_MFA AND HAS_SSO = 0)
+        OR (CLUSTER_KEY = 'service_password' AND HAS_PASSWORD)
+    evidence:
+      kind: USR
+      fields: [USER_TYPE, HAS_PASSWORD, HAS_MFA, HAS_RSA_PUBLIC_KEY, HAS_SSO, LOGINS, SINGLE_FACTOR_LOGINS]
+    value:
+      method: "credential-compromise risk = likelihood × impact (rubric); single-factor logins reported as evidence"
+    risk:
+      likelihood_ref: rubric.diagnostics.risk_model.sec_01.likelihood
+      impact_ref: rubric.diagnostics.risk_model.sec_01.impact
+      method: "Password-only access is the most common account-takeover path (likelihood × impact, 1–5 each)"
+    effort: {size: S}
+    title_template: "{{ 'Enforce MFA for ' ~ n ~ ' human user' ~ ('s' if n != 1 else '') if cluster_key == 'human_without_mfa' else 'Move ' ~ n ~ ' service user' ~ ('s' if n != 1 else '') ~ ' from passwords to key-pair' }}"
+    rationale_template: >-
+      {% for r in rows %}{{ r.OBJECT_NAME }} ({{ r.USER_TYPE }}): password {{ 'yes' if r.HAS_PASSWORD else 'no' }}, MFA {{ 'yes' if r.HAS_MFA else 'no' }},
+      {{ r.SINGLE_FACTOR_LOGINS }} single-factor logins{{ '; ' if not loop.last }}{% endfor %}.
+    remediation:
+      type: sql
+      autonomy: L2
+      template: |
+        {% if cluster_key == 'human_without_mfa' %}CREATE AUTHENTICATION POLICY IF NOT EXISTS ALTITUDE_SEC.POLICIES.AP_REQUIRE_MFA
+          MFA_ENROLLMENT = REQUIRED COMMENT = 'Require MFA for password users';
+        {% for r in rows %}ALTER USER {{ r.OBJECT_NAME }} SET AUTHENTICATION POLICY ALTITUDE_SEC.POLICIES.AP_REQUIRE_MFA;
+        {% endfor %}{% else %}-- Register the public key from the secret manager first, then remove the password.
+        {% for r in rows %}ALTER USER {{ r.OBJECT_NAME }} SET TYPE = SERVICE RSA_PUBLIC_KEY = '<PUBLIC_KEY_FROM_SECRET_MANAGER>';
+        ALTER USER {{ r.OBJECT_NAME }} UNSET PASSWORD;
+        {% endfor %}{% endif %}
+      rollback: |
+        {% if cluster_key == 'human_without_mfa' %}{% for r in rows %}ALTER USER {{ r.OBJECT_NAME }} UNSET AUTHENTICATION POLICY;
+        {% endfor %}{% else %}-- The removed password cannot be restored; re-issue one from the vault if a rollback is required.
+        {% for r in rows %}ALTER USER {{ r.OBJECT_NAME }} SET TYPE = {{ r.USER_TYPE }};
+        ALTER USER {{ r.OBJECT_NAME }} UNSET RSA_PUBLIC_KEY;
+        {% endfor %}{% endif %}
+    kpis_to_watch: [KPI-SEC-001, KPI-SEC-003]
+    last_verified: "2026-10-01"
+
+  - id: DX-SEC-02
+    title: ACCOUNTADMIN sprawl
+    description: More ACCOUNTADMIN grantees than the break-glass model allows, or routine use of the role.
+    domain: D4
+    waf_pillar: security_governance
+    severity: critical
+    confidence_class: high
+    detector:
+      requires: [GRANTS_TO_USERS, QUERY_HISTORY, USERS]
+      inputs: []
+      cluster_by: theme
+      params:
+        max_accountadmin_grantees: {threshold_ref: rubric.diagnostics.checks.sec_02.max_accountadmin_grantees}
+        max_accountadmin_usage_day_share: {threshold_ref: rubric.diagnostics.checks.sec_02.max_accountadmin_usage_day_share}
+      signals: |
+        WITH g AS (
+          SELECT gu.GRANTEE_NAME, u.HAS_MFA, CASE WHEN u.EXT_AUTHN_UID IS NOT NULL THEN 1 ELSE 0 END AS HAS_SSO, u.CREATED_ON
+          FROM GRANTS_TO_USERS gu LEFT JOIN USERS u ON u.NAME = gu.GRANTEE_NAME
+          WHERE gu.ROLE = 'ACCOUNTADMIN'),
+        ranked AS (
+          SELECT *, row_number() OVER (ORDER BY HAS_SSO DESC, HAS_MFA DESC, CREATED_ON, GRANTEE_NAME) AS KEEP_RANK FROM g),
+        used AS (
+          SELECT count(*) AS USAGE_QUERIES, count(DISTINCT CAST(START_TIME AS DATE)) AS USAGE_DAYS,
+                 count(DISTINCT USER_NAME) AS USAGE_USERS
+          FROM QUERY_HISTORY WHERE ROLE_NAME = 'ACCOUNTADMIN')
+        SELECT 'ACCOUNTADMIN' AS OBJECT_NAME, 'break_glass' AS CLUSTER_KEY,
+               (SELECT count(*) FROM g) AS GRANTEES,
+               (SELECT string_agg(GRANTEE_NAME, ', ' ORDER BY GRANTEE_NAME) FROM g) AS GRANTEE_LIST,
+               (SELECT string_agg(GRANTEE_NAME, ',' ORDER BY GRANTEE_NAME) FROM ranked WHERE KEEP_RANK > $max_accountadmin_grantees) AS REVOKE_CANDIDATES,
+               used.USAGE_QUERIES, used.USAGE_DAYS, used.USAGE_USERS,
+               used.USAGE_DAYS / $window_days AS USAGE_DAY_SHARE
+        FROM used
+      rule: GRANTEES > $max_accountadmin_grantees OR USAGE_DAY_SHARE > $max_accountadmin_usage_day_share
+    evidence:
+      kind: ROLE
+      fields: [GRANTEES, GRANTEE_LIST, USAGE_QUERIES, USAGE_DAYS, USAGE_USERS, USAGE_DAY_SHARE]
+    value:
+      method: "privileged-access risk = likelihood × impact (rubric); grantees and usage days reported as evidence"
+    risk:
+      likelihood_ref: rubric.diagnostics.risk_model.sec_02.likelihood
+      impact_ref: rubric.diagnostics.risk_model.sec_02.impact
+      method: "Every routine ACCOUNTADMIN holder widens the blast radius of a compromise (likelihood × impact, 1–5 each)"
+    effort: {size: S}
+    title_template: "Adopt a break-glass model for ACCOUNTADMIN ({{ rows[0].GRANTEES }} grantees)"
+    rationale_template: >-
+      ACCOUNTADMIN is granted to {{ rows[0].GRANTEES }} users ({{ rows[0].GRANTEE_LIST }}; rubric max {{ params.max_accountadmin_grantees }})
+      and was used on {{ rows[0].USAGE_DAYS }} days by {{ rows[0].USAGE_USERS }} users ({{ pct(rows[0].USAGE_DAY_SHARE) }} of days).
+    remediation:
+      type: sql
+      autonomy: L2
+      template: |
+        -- Keep the strongest-authenticated break-glass holders; revoke the rest (confirm the list with the security owner).
+        {% for u in (rows[0].REVOKE_CANDIDATES or '').split(',') if u %}REVOKE ROLE ACCOUNTADMIN FROM USER {{ u }};
+        {% endfor %}
+      rollback: |
+        {% for u in (rows[0].REVOKE_CANDIDATES or '').split(',') if u %}GRANT ROLE ACCOUNTADMIN TO USER {{ u }};
+        {% endfor %}
+    kpis_to_watch: [KPI-SEC-002]
+    last_verified: "2026-10-01"
+
+  - id: DX-SEC-03
+    title: Dormant users and orphan roles
+    description: Enabled users who have not logged in within the rubric window, and custom roles granted to nobody.
+    domain: D4
+    waf_pillar: security_governance
+    severity: medium
+    confidence_class: medium
+    detector:
+      requires: [USERS, ROLES, GRANTS_TO_USERS, GRANTS_TO_ROLES]
+      inputs: []
+      cluster_by: theme
+      params:
+        dormant_days: {threshold_ref: rubric.diagnostics.checks.sec_03.dormant_days}
+        system_roles: {value: [ACCOUNTADMIN, SECURITYADMIN, SYSADMIN, USERADMIN, ORGADMIN, PUBLIC]}
+      signals: |
+        SELECT u.NAME AS OBJECT_NAME, 'dormant_user' AS CLUSTER_KEY,
+               date_diff('day', coalesce(u.LAST_SUCCESS_LOGIN, u.CREATED_ON), $as_of) AS DAYS_SINCE_LOGIN,
+               NULL::BIGINT AS USER_GRANTS, NULL::BIGINT AS PARENT_ROLES, NULL::VARCHAR AS GRANTS_HELD
+        FROM USERS u WHERE NOT coalesce(u.DISABLED, false)
+        UNION ALL
+        SELECT r.NAME, 'orphan_role', NULL,
+               (SELECT count(*) FROM GRANTS_TO_USERS gu WHERE gu.ROLE = r.NAME),
+               (SELECT count(*) FROM GRANTS_TO_ROLES gr WHERE gr.GRANTED_ON = 'ROLE' AND gr.NAME = r.NAME),
+               (SELECT string_agg(gr.PRIVILEGE || '|' || gr.GRANTED_ON || '|' ||
+                        coalesce(gr.TABLE_CATALOG || '.', '') || coalesce(gr.TABLE_SCHEMA || '.', '') || gr.NAME, ';'
+                        ORDER BY gr.PRIVILEGE, gr.NAME)
+                FROM GRANTS_TO_ROLES gr WHERE gr.GRANTEE_NAME = r.NAME)
+        FROM ROLES r WHERE NOT list_contains($system_roles, r.NAME)
+      rule: >-
+        (CLUSTER_KEY = 'dormant_user' AND DAYS_SINCE_LOGIN >= $dormant_days)
+        OR (CLUSTER_KEY = 'orphan_role' AND USER_GRANTS = 0 AND PARENT_ROLES = 0)
+    evidence:
+      kind: USR
+      fields: [DAYS_SINCE_LOGIN, USER_GRANTS, PARENT_ROLES, GRANTS_HELD]
+    value:
+      method: "access-hygiene risk = likelihood × impact (rubric)"
+    risk:
+      likelihood_ref: rubric.diagnostics.risk_model.sec_03.likelihood
+      impact_ref: rubric.diagnostics.risk_model.sec_03.impact
+      method: "Unused identities and privileges are unmonitored attack surface (likelihood × impact, 1–5 each)"
+    effort: {size: XS}
+    title_template: "{{ 'Disable ' ~ n ~ ' dormant user' ~ ('s' if n != 1 else '') if cluster_key == 'dormant_user' else 'Drop ' ~ n ~ ' orphan role' ~ ('s' if n != 1 else '') }}"
+    rationale_template: >-
+      {% for r in rows %}{% if cluster_key == 'dormant_user' %}{{ r.OBJECT_NAME }}: no login for {{ r.DAYS_SINCE_LOGIN }} days (rubric {{ params.dormant_days }}){% else %}{{ r.OBJECT_NAME }}: granted to no user or role, holds {{ (r.GRANTS_HELD or '').split(';') | select | list | length }} privilege(s){% endif %}{{ '; ' if not loop.last }}{% endfor %}.
+    remediation:
+      type: sql
+      autonomy: L2
+      template: |
+        {% if cluster_key == 'dormant_user' %}{% for r in rows %}ALTER USER {{ r.OBJECT_NAME }} SET DISABLED = TRUE;
+        {% endfor %}{% else %}{% for r in rows %}DROP ROLE IF EXISTS {{ r.OBJECT_NAME }};
+        {% endfor %}{% endif %}
+      rollback: |
+        {% if cluster_key == 'dormant_user' %}{% for r in rows %}ALTER USER {{ r.OBJECT_NAME }} SET DISABLED = FALSE;
+        {% endfor %}{% else %}{% for r in rows %}CREATE ROLE IF NOT EXISTS {{ r.OBJECT_NAME }};
+        {% for g in (r.GRANTS_HELD or '').split(';') if g %}{% set p = g.split('|') %}GRANT {{ p[0] }} ON {{ p[1] }} {{ p[2] }} TO ROLE {{ r.OBJECT_NAME }};
+        {% endfor %}{% endfor %}{% endif %}
+    kpis_to_watch: [KPI-SEC-004]
+    last_verified: "2026-10-01"
+
+  - id: DX-SEC-04
+    title: Missing network policy
+    description: The account has no network policy, or service users have no user-level network policy.
+    domain: D4
+    waf_pillar: security_governance
+    severity: high
+    confidence_class: high
+    detector:
+      requires: [ACCOUNT_INFO, USERS, LOGIN_HISTORY, NETWORK_POLICIES]
+      inputs: []
+      cluster_by: object
+      params:
+        service_user_types: {value: [SERVICE, LEGACY_SERVICE]}
+      signals: |
+        SELECT 'ACCOUNT' AS OBJECT_NAME, 'network_policy' AS CLUSTER_KEY,
+               a.NETWORK_POLICY AS ACCOUNT_POLICY,
+               CASE WHEN a.NETWORK_POLICY IS NULL THEN 0 ELSE 1 END AS HAS_ACCOUNT_POLICY,
+               (SELECT count(*) FROM USERS u WHERE list_contains($service_user_types, u.TYPE) AND u.NETWORK_POLICY IS NULL) AS SERVICE_USERS_WITHOUT_POLICY,
+               (SELECT string_agg(u.NAME, ', ' ORDER BY u.NAME) FROM USERS u
+                WHERE list_contains($service_user_types, u.TYPE) AND u.NETWORK_POLICY IS NULL) AS SERVICE_USERS_LIST,
+               (SELECT string_agg(DISTINCT regexp_extract(CLIENT_IP, '^([0-9]+\.[0-9]+)\.', 1) || '.0.0/16', ',' ORDER BY 1)
+                FROM LOGIN_HISTORY WHERE IS_SUCCESS = 'YES' AND regexp_matches(CLIENT_IP, '^[0-9]+\.[0-9]+\.')) AS OBSERVED_CIDRS
+        FROM ACCOUNT_INFO a
+      rule: HAS_ACCOUNT_POLICY = 0 OR SERVICE_USERS_WITHOUT_POLICY > 0
+    evidence:
+      kind: ACCT
+      fields: [ACCOUNT_POLICY, HAS_ACCOUNT_POLICY, SERVICE_USERS_WITHOUT_POLICY, SERVICE_USERS_LIST, OBSERVED_CIDRS]
+    value:
+      method: "network-exposure risk = likelihood × impact (rubric)"
+    risk:
+      likelihood_ref: rubric.diagnostics.risk_model.sec_04.likelihood
+      impact_ref: rubric.diagnostics.risk_model.sec_04.impact
+      method: "Without network rules, stolen credentials work from anywhere (likelihood × impact, 1–5 each)"
+    effort: {size: M}
+    title_template: "Apply an account network policy"
+    rationale_template: >-
+      Account network policy: {{ rows[0].ACCOUNT_POLICY or 'none' }}; {{ rows[0].SERVICE_USERS_WITHOUT_POLICY }} service users without a user-level
+      policy{% if rows[0].SERVICE_USERS_LIST %} ({{ rows[0].SERVICE_USERS_LIST }}){% endif %}. Observed client ranges: {{ rows[0].OBSERVED_CIDRS or 'n/a' }}.
+    remediation:
+      type: sql
+      autonomy: L1
+      template: |
+        -- Allowed ranges are derived from observed successful logins; validate with the network team before activation.
+        CREATE NETWORK POLICY IF NOT EXISTS NP_ALTITUDE_ACCOUNT
+          ALLOWED_IP_LIST = ({% for c in (rows[0].OBSERVED_CIDRS or '').split(',') if c %}'{{ c }}'{{ ', ' if not loop.last }}{% endfor %})
+          COMMENT = 'Account network policy drafted from observed login ranges';
+        ALTER ACCOUNT SET NETWORK_POLICY = NP_ALTITUDE_ACCOUNT;
+      rollback: |
+        ALTER ACCOUNT UNSET NETWORK_POLICY;
+        DROP NETWORK POLICY IF EXISTS NP_ALTITUDE_ACCOUNT;
+    kpis_to_watch: [KPI-SEC-005, KPI-SEC-003]
+    last_verified: "2026-10-01"
+
+  - id: DX-SEC-05
+    title: Sensitive columns without masking
+    description: Columns tagged as sensitive (PII) with no active masking policy, directly or through the tag.
+    domain: D4
+    waf_pillar: security_governance
+    severity: critical
+    confidence_class: high
+    detector:
+      requires: [TAG_REFERENCES, POLICY_REFERENCES]
+      inputs: []
+      cluster_by: object
+      params:
+        sensitive_tags: {value: [PII, SENSITIVE, PHI, PCI, CONFIDENTIAL]}
+      signals: |
+        WITH pii AS (
+          SELECT OBJECT_DATABASE || '.' || OBJECT_SCHEMA || '.' || OBJECT_NAME AS TABLE_FQ, COLUMN_NAME,
+                 TAG_DATABASE || '.' || TAG_SCHEMA || '.' || TAG_NAME AS TAG_FQ, TAG_NAME, TAG_VALUE
+          FROM TAG_REFERENCES WHERE DOMAIN = 'COLUMN' AND list_contains($sensitive_tags, upper(TAG_NAME))),
+        col_masked AS (
+          SELECT REF_DATABASE_NAME || '.' || REF_SCHEMA_NAME || '.' || REF_ENTITY_NAME AS TABLE_FQ, REF_COLUMN_NAME
+          FROM POLICY_REFERENCES WHERE POLICY_KIND = 'MASKING_POLICY' AND coalesce(POLICY_STATUS, 'ACTIVE') = 'ACTIVE'),
+        tag_masked AS (
+          SELECT DISTINCT upper(TAG_NAME) AS TAG_NAME FROM POLICY_REFERENCES
+          WHERE POLICY_KIND = 'MASKING_POLICY' AND TAG_NAME IS NOT NULL)
+        SELECT pii.TABLE_FQ || '.' || pii.COLUMN_NAME AS OBJECT_NAME, pii.TABLE_FQ AS CLUSTER_KEY,
+               pii.TAG_FQ, pii.TAG_VALUE,
+               CASE WHEN cm.REF_COLUMN_NAME IS NOT NULL OR tm.TAG_NAME IS NOT NULL THEN 1 ELSE 0 END AS IS_MASKED
+        FROM pii
+        LEFT JOIN col_masked cm ON cm.TABLE_FQ = pii.TABLE_FQ AND cm.REF_COLUMN_NAME = pii.COLUMN_NAME
+        LEFT JOIN tag_masked tm ON tm.TAG_NAME = upper(pii.TAG_NAME)
+      rule: IS_MASKED = 0
+    evidence:
+      kind: COL
+      fields: [TAG_FQ, TAG_VALUE, IS_MASKED]
+    value:
+      method: "regulatory-exposure risk = likelihood × impact (rubric)"
+    risk:
+      likelihood_ref: rubric.diagnostics.risk_model.sec_05.likelihood
+      impact_ref: rubric.diagnostics.risk_model.sec_05.impact
+      method: "Unmasked PII is readable by every role with SELECT (likelihood × impact, 1–5 each)"
+    effort: {size: S}
+    title_template: "Mask {{ n }} sensitive column{{ 's' if n != 1 else '' }} in {{ cluster_key }} with tag-based masking"
+    rationale_template: >-
+      {% for r in rows %}{{ r.OBJECT_NAME }} is tagged {{ r.TAG_FQ }}={{ r.TAG_VALUE }} but has no active masking policy{{ '; ' if not loop.last }}{% endfor %}.
+    remediation:
+      type: sql
+      autonomy: L2
+      template: |
+        -- Tag-based masking: bind a masking policy to the sensitivity tag so every tagged column is protected mechanically.
+        CREATE MASKING POLICY IF NOT EXISTS ALTITUDE_SEC.POLICIES.MP_SENSITIVE_STRING AS (val STRING) RETURNS STRING ->
+          CASE WHEN IS_ROLE_IN_SESSION('PII_READER') THEN val ELSE '***MASKED***' END;
+        ALTER TAG {{ rows[0].TAG_FQ }} SET MASKING POLICY ALTITUDE_SEC.POLICIES.MP_SENSITIVE_STRING;
+      rollback: |
+        ALTER TAG {{ rows[0].TAG_FQ }} UNSET MASKING POLICY ALTITUDE_SEC.POLICIES.MP_SENSITIVE_STRING;
+    kpis_to_watch: [KPI-GOV-003]
+    last_verified: "2026-10-01"

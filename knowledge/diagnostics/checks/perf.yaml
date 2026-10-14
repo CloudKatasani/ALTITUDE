@@ -1,0 +1,259 @@
+# D2 Performance & Workload checks (Section 6.4).
+version: 1.0.0
+checks:
+  - id: DX-PERF-01
+    title: Queueing on interactive warehouses at peak
+    description: BI / ad-hoc warehouses with sustained queued load and no multi-cluster scale-out headroom.
+    domain: D2
+    waf_pillar: performance_efficiency
+    severity: high
+    confidence_class: high
+    detector:
+      requires: [WAREHOUSES, WAREHOUSE_LOAD_HISTORY, QUERY_HISTORY]
+      inputs: []
+      cluster_by: warehouse
+      params:
+        queued_load_min: {threshold_ref: rubric.diagnostics.checks.perf_01.queued_load_min}
+        min_queued_hours: {threshold_ref: rubric.diagnostics.checks.perf_01.min_queued_hours}
+        target_max_cluster_count: {threshold_ref: rubric.diagnostics.checks.perf_01.target_max_cluster_count}
+        interactive_workload_classes: {value: [bi, adhoc, agents]}
+      signals: |
+        WITH l AS (
+          SELECT WAREHOUSE_NAME,
+                 count(*) FILTER (WHERE AVG_QUEUED_LOAD >= $queued_load_min) AS QUEUED_HOURS,
+                 max(AVG_QUEUED_LOAD) AS MAX_QUEUED_LOAD
+          FROM WAREHOUSE_LOAD_HISTORY GROUP BY WAREHOUSE_NAME),
+        q AS (
+          SELECT WAREHOUSE_NAME, sum(QUEUED_OVERLOAD_TIME) / $ms_per_hour AS USER_HOURS_QUEUED,
+                 count(*) FILTER (WHERE QUEUED_OVERLOAD_TIME > 0) AS QUEUED_QUERIES
+          FROM QUERY_HISTORY GROUP BY WAREHOUSE_NAME)
+        SELECT w.WAREHOUSE_NAME AS OBJECT_NAME, w.WAREHOUSE_NAME AS CLUSTER_KEY, w.WORKLOAD_CLASS,
+               w.MIN_CLUSTER_COUNT, w.MAX_CLUSTER_COUNT, w.SCALING_POLICY,
+               CASE WHEN list_contains($interactive_workload_classes, w.WORKLOAD_CLASS) THEN 1 ELSE 0 END AS INTERACTIVE,
+               coalesce(l.QUEUED_HOURS, 0) AS QUEUED_HOURS, coalesce(l.MAX_QUEUED_LOAD, 0) AS MAX_QUEUED_LOAD,
+               coalesce(q.USER_HOURS_QUEUED, 0) AS USER_HOURS_QUEUED, coalesce(q.QUEUED_QUERIES, 0) AS QUEUED_QUERIES
+        FROM WAREHOUSES w
+        LEFT JOIN l ON l.WAREHOUSE_NAME = w.WAREHOUSE_NAME
+        LEFT JOIN q ON q.WAREHOUSE_NAME = w.WAREHOUSE_NAME
+      rule: INTERACTIVE = 1 AND QUEUED_HOURS >= $min_queued_hours AND MAX_CLUSTER_COUNT < $target_max_cluster_count
+    evidence:
+      kind: WH
+      fields: [WORKLOAD_CLASS, MAX_CLUSTER_COUNT, QUEUED_HOURS, MAX_QUEUED_LOAD, USER_HOURS_QUEUED, QUEUED_QUERIES]
+    value:
+      method: "SLA risk = likelihood × impact (rubric); user-hours lost to queueing reported as evidence"
+    risk:
+      likelihood_ref: rubric.diagnostics.risk_model.perf_01.likelihood
+      impact_ref: rubric.diagnostics.risk_model.perf_01.impact
+      method: "Peak queueing breaches interactive SLAs and wastes analyst time (likelihood × impact, 1–5 each)"
+    effort: {size: XS}
+    title_template: "Enable multi-cluster scale-out on {{ rows[0].OBJECT_NAME }}"
+    rationale_template: >-
+      {{ rows[0].OBJECT_NAME }} ({{ rows[0].WORKLOAD_CLASS }}) had {{ rows[0].QUEUED_HOURS }} hours with queued load at or above
+      {{ params.queued_load_min }} (rubric min {{ params.min_queued_hours }} hours), {{ num(rows[0].USER_HOURS_QUEUED) }} user-hours queued,
+      with max cluster count {{ rows[0].MAX_CLUSTER_COUNT }}.
+    remediation:
+      type: sql
+      autonomy: L2
+      template: |
+        -- Scale out (not up) for concurrency; requires Enterprise Edition or higher.
+        {% for r in rows %}ALTER WAREHOUSE {{ r.OBJECT_NAME }} SET MIN_CLUSTER_COUNT = 1 MAX_CLUSTER_COUNT = {{ params.target_max_cluster_count }} SCALING_POLICY = 'STANDARD';
+        {% endfor %}
+      rollback: |
+        {% for r in rows %}ALTER WAREHOUSE {{ r.OBJECT_NAME }} SET MIN_CLUSTER_COUNT = {{ r.MIN_CLUSTER_COUNT }} MAX_CLUSTER_COUNT = {{ r.MAX_CLUSTER_COUNT }} SCALING_POLICY = '{{ r.SCALING_POLICY }}';
+        {% endfor %}
+    kpis_to_watch: [KPI-PERF-002, KPI-PERF-001, KPI-COST-002]
+    last_verified: "2026-10-01"
+
+  - id: DX-PERF-02
+    title: Spilling to local or remote storage
+    description: Query signatures that spill heavily — memory-starved for their warehouse size or in need of a rewrite.
+    domain: D2
+    waf_pillar: performance_efficiency
+    severity: medium
+    confidence_class: high
+    detector:
+      requires: [QUERY_HISTORY, QUERY_ATTRIBUTION_HISTORY]
+      inputs: [contract_price_per_credit]
+      cluster_by: query_signature
+      params:
+        min_avg_remote_spill_bytes: {threshold_ref: rubric.diagnostics.checks.perf_02.min_avg_remote_spill_bytes}
+        min_avg_local_spill_bytes: {threshold_ref: rubric.diagnostics.checks.perf_02.min_avg_local_spill_bytes}
+        auto_suspend_seconds: {threshold_ref: rubric.diagnostics.checks.cost_01.auto_suspend_max_seconds}
+      signals: |
+        SELECT q.QUERY_PARAMETERIZED_HASH AS OBJECT_NAME, q.QUERY_PARAMETERIZED_HASH AS CLUSTER_KEY,
+               min(q.WAREHOUSE_NAME) AS WAREHOUSE_NAME, min(q.WAREHOUSE_SIZE) AS WAREHOUSE_SIZE,
+               count(*) AS EXECUTIONS,
+               avg(q.BYTES_SPILLED_TO_LOCAL_STORAGE) AS AVG_LOCAL_SPILL_BYTES,
+               avg(q.BYTES_SPILLED_TO_REMOTE_STORAGE) AS AVG_REMOTE_SPILL_BYTES,
+               avg(q.EXECUTION_TIME) AS AVG_EXECUTION_MS,
+               coalesce(sum(a.CREDITS_ATTRIBUTED_COMPUTE), 0) AS CREDITS,
+               (SELECT t.WAREHOUSE_SIZE FROM _SIZE_CREDITS t
+                WHERE t.CREDITS_PER_HOUR > (SELECT s.CREDITS_PER_HOUR FROM _SIZE_CREDITS s WHERE s.WAREHOUSE_SIZE = min(q.WAREHOUSE_SIZE))
+                ORDER BY t.CREDITS_PER_HOUR LIMIT 1) AS TARGET_SIZE
+        FROM QUERY_HISTORY q
+        LEFT JOIN QUERY_ATTRIBUTION_HISTORY a ON a.QUERY_ID = q.QUERY_ID
+        WHERE q.WAREHOUSE_NAME IS NOT NULL
+        GROUP BY q.QUERY_PARAMETERIZED_HASH
+      rule: AVG_REMOTE_SPILL_BYTES >= $min_avg_remote_spill_bytes OR AVG_LOCAL_SPILL_BYTES >= $min_avg_local_spill_bytes
+    evidence:
+      kind: QRY
+      fields: [WAREHOUSE_NAME, WAREHOUSE_SIZE, EXECUTIONS, AVG_LOCAL_SPILL_BYTES, AVG_REMOTE_SPILL_BYTES, AVG_EXECUTION_MS, CREDITS]
+    value:
+      method: "runtime × credits: attributed credits of the spilling signature × expected runtime reduction once spilling stops × contract price, annualised"
+      p50: CREDITS * spill_runtime_reduction * price_per_credit * annualise
+      conservative: CREDITS * spill_runtime_reduction * conservative_factor * price_per_credit * annualise
+      factors:
+        spill_runtime_reduction: rubric.diagnostics.checks.perf_02.spill_runtime_reduction
+        conservative_factor: rubric.diagnostics.checks.perf_02.conservative_factor
+    effort: {size: M}
+    title_template: "Stop spilling in signature {{ cluster_key }}"
+    rationale_template: >-
+      {{ cluster_key }} on {{ rows[0].WAREHOUSE_NAME }} ({{ rows[0].WAREHOUSE_SIZE }}) spills {{ gb(rows[0].AVG_REMOTE_SPILL_BYTES) }} remote and
+      {{ gb(rows[0].AVG_LOCAL_SPILL_BYTES) }} local per execution (rubric min {{ gb(params.min_avg_remote_spill_bytes) }} remote) across {{ rows[0].EXECUTIONS }} runs.
+    remediation:
+      type: sql
+      autonomy: L2
+      template: |
+        -- Option A (preferred): rewrite to aggregate before joining so the working set fits in memory.
+        -- Option B (this draft): run the step on a dedicated warehouse one size larger and route it with a query tag.
+        CREATE WAREHOUSE IF NOT EXISTS {{ rows[0].WAREHOUSE_NAME }}_HEAVY
+          WITH WAREHOUSE_SIZE = '{{ rows[0].TARGET_SIZE or rows[0].WAREHOUSE_SIZE }}' AUTO_SUSPEND = {{ params.auto_suspend_seconds }} AUTO_RESUME = TRUE INITIALLY_SUSPENDED = TRUE
+          COMMENT = 'Spill remediation for signature {{ cluster_key }}';
+      rollback: |
+        DROP WAREHOUSE IF EXISTS {{ rows[0].WAREHOUSE_NAME }}_HEAVY;
+    kpis_to_watch: [KPI-PERF-003, KPI-PERF-001, KPI-COST-006]
+    last_verified: "2026-10-01"
+
+  - id: DX-PERF-03
+    title: Poor pruning on large, frequently filtered tables
+    description: Large tables without a clustering key where frequent queries scan most partitions.
+    domain: D2
+    waf_pillar: performance_efficiency
+    severity: medium
+    confidence_class: medium
+    detector:
+      requires: [TABLES, ACCESS_HISTORY, QUERY_HISTORY, QUERY_ATTRIBUTION_HISTORY, COLUMNS]
+      inputs: [contract_price_per_credit]
+      cluster_by: object
+      params:
+        min_partitions_total: {threshold_ref: rubric.diagnostics.checks.perf_03.min_partitions_total}
+        poor_pruning_ratio: {threshold_ref: rubric.diagnostics.checks.perf_03.poor_pruning_ratio}
+        min_table_bytes: {threshold_ref: rubric.diagnostics.checks.perf_03.min_table_bytes}
+        min_poor_pruning_scans: {threshold_ref: rubric.diagnostics.checks.perf_03.min_poor_pruning_scans}
+        clustering_candidate_pattern: {value: "(?i)_DATE$"}
+      signals: |
+        WITH r AS (
+          SELECT ah.OBJECT_NAME, q.QUERY_ID, q.PARTITIONS_SCANNED, q.PARTITIONS_TOTAL,
+                 coalesce(a.CREDITS_ATTRIBUTED_COMPUTE, 0) AS CREDITS
+          FROM ACCESS_HISTORY ah
+          JOIN QUERY_HISTORY q ON q.QUERY_ID = ah.QUERY_ID
+          LEFT JOIN QUERY_ATTRIBUTION_HISTORY a ON a.QUERY_ID = q.QUERY_ID
+          WHERE ah.ACCESS_TYPE = 'READ' AND q.PARTITIONS_TOTAL >= $min_partitions_total)
+        SELECT t.FQ_NAME AS OBJECT_NAME, t.FQ_NAME AS CLUSTER_KEY, t.BYTES AS TABLE_BYTES,
+               t.BYTES / $bytes_per_tb AS TABLE_TB, t.CLUSTERING_KEY,
+               count(r.QUERY_ID) AS LARGE_SCANS,
+               count(r.QUERY_ID) FILTER (WHERE r.PARTITIONS_SCANNED >= $poor_pruning_ratio * r.PARTITIONS_TOTAL) AS POOR_PRUNING_SCANS,
+               coalesce(sum(r.CREDITS) FILTER (WHERE r.PARTITIONS_SCANNED >= $poor_pruning_ratio * r.PARTITIONS_TOTAL), 0) AS POOR_PRUNING_CREDITS,
+               (SELECT min(c.COLUMN_NAME) FROM COLUMNS c WHERE c.FQ_NAME = t.FQ_NAME
+                AND regexp_matches(c.COLUMN_NAME, $clustering_candidate_pattern)) AS SUGGESTED_KEY
+        FROM TABLES t LEFT JOIN r ON r.OBJECT_NAME = t.FQ_NAME
+        GROUP BY t.FQ_NAME, t.BYTES, t.CLUSTERING_KEY
+      rule: CLUSTERING_KEY IS NULL AND TABLE_BYTES >= $min_table_bytes AND POOR_PRUNING_SCANS >= $min_poor_pruning_scans
+    evidence:
+      kind: TBL
+      fields: [TABLE_BYTES, CLUSTERING_KEY, LARGE_SCANS, POOR_PRUNING_SCANS, POOR_PRUNING_CREDITS, SUGGESTED_KEY]
+    value:
+      method: "scan reduction vs clustering cost: poor-pruning credits × expected scan reduction × contract price, annualised, minus modelled automatic-clustering credits (TB × credits per TB-month × 12 × price)"
+      p50: max(POOR_PRUNING_CREDITS * scan_reduction_share * price_per_credit * annualise - TABLE_TB * clustering_credits_per_tb_month * months_per_year * price_per_credit, 0)
+      conservative: max(POOR_PRUNING_CREDITS * scan_reduction_share * conservative_factor * price_per_credit * annualise - TABLE_TB * clustering_credits_per_tb_month * months_per_year * price_per_credit, 0)
+      factors:
+        scan_reduction_share: rubric.diagnostics.checks.perf_03.scan_reduction_share
+        clustering_credits_per_tb_month: rubric.diagnostics.checks.perf_03.clustering_credits_per_tb_month
+        conservative_factor: rubric.diagnostics.checks.perf_03.conservative_factor
+    effort: {size: M}
+    title_template: "Cluster {{ rows[0].OBJECT_NAME }} by {{ rows[0].SUGGESTED_KEY or 'its main filter column' }}"
+    rationale_template: >-
+      {{ rows[0].OBJECT_NAME }} ({{ tb(rows[0].TABLE_BYTES) }}, no clustering key): {{ num(rows[0].POOR_PRUNING_SCANS) }} of
+      {{ num(rows[0].LARGE_SCANS) }} large scans read at least {{ pct(params.poor_pruning_ratio) }} of partitions.
+    remediation:
+      type: sql
+      autonomy: L2
+      template: |
+        -- Clustering candidate (cost-benefit modelled in the savings model; monitor KPI-COST-008 for clustering credits).
+        ALTER TABLE {{ rows[0].OBJECT_NAME }} CLUSTER BY ({{ rows[0].SUGGESTED_KEY or '<FILTER_COLUMN>' }});
+      rollback: |
+        ALTER TABLE {{ rows[0].OBJECT_NAME }} DROP CLUSTERING KEY;
+    kpis_to_watch: [KPI-PERF-004, KPI-PERF-001, KPI-COST-008]
+    last_verified: "2026-10-01"
+
+  - id: DX-PERF-04
+    title: Costly query signatures with anti-patterns
+    description: Top signatures by attributed cost combining anti-patterns (SELECT * across joins, exploding joins, non-sargable filters).
+    domain: D2
+    waf_pillar: performance_efficiency
+    severity: medium
+    confidence_class: low
+    detector:
+      requires: [QUERY_HISTORY, QUERY_ATTRIBUTION_HISTORY]
+      inputs: [contract_price_per_credit]
+      cluster_by: query_signature
+      params:
+        top_n_signatures: {threshold_ref: rubric.diagnostics.checks.perf_04.top_n_signatures}
+        exploding_rows_min: {threshold_ref: rubric.diagnostics.checks.perf_04.exploding_rows_min}
+        min_anti_patterns: {threshold_ref: rubric.diagnostics.checks.perf_04.min_anti_patterns}
+        select_star_join_pattern: {value: "(?is)select\\s+\\*.*\\bjoin\\b"}
+        non_sargable_pattern: {value: "(?i)where\\s+(to_char|to_varchar|upper|lower|trim|cast|date_trunc)\\s*\\("}
+      signals: |
+        WITH sig AS (
+          SELECT q.QUERY_PARAMETERIZED_HASH AS H, min(q.QUERY_TEXT) AS SAMPLE_TEXT, min(q.WAREHOUSE_NAME) AS WAREHOUSE_NAME,
+                 count(*) AS EXECUTIONS, avg(q.ROWS_PRODUCED) AS AVG_ROWS_PRODUCED, avg(q.EXECUTION_TIME) AS AVG_EXECUTION_MS,
+                 coalesce(sum(a.CREDITS_ATTRIBUTED_COMPUTE), 0) AS CREDITS
+          FROM QUERY_HISTORY q LEFT JOIN QUERY_ATTRIBUTION_HISTORY a ON a.QUERY_ID = q.QUERY_ID
+          WHERE q.QUERY_TYPE = 'SELECT'
+          GROUP BY q.QUERY_PARAMETERIZED_HASH),
+        flags AS (
+          SELECT *, rank() OVER (ORDER BY CREDITS DESC) AS COST_RANK,
+                 CASE WHEN regexp_matches(SAMPLE_TEXT, $select_star_join_pattern) THEN 1 ELSE 0 END AS SELECT_STAR_JOIN,
+                 CASE WHEN regexp_matches(SAMPLE_TEXT, $non_sargable_pattern) THEN 1 ELSE 0 END AS NON_SARGABLE,
+                 CASE WHEN AVG_ROWS_PRODUCED >= $exploding_rows_min THEN 1 ELSE 0 END AS EXPLODING_JOIN
+          FROM sig)
+        SELECT H AS OBJECT_NAME, H AS CLUSTER_KEY, WAREHOUSE_NAME, EXECUTIONS, AVG_ROWS_PRODUCED, AVG_EXECUTION_MS, CREDITS,
+               COST_RANK, SELECT_STAR_JOIN, NON_SARGABLE, EXPLODING_JOIN,
+               SELECT_STAR_JOIN + NON_SARGABLE + EXPLODING_JOIN AS ANTI_PATTERNS, SAMPLE_TEXT
+        FROM flags
+      rule: COST_RANK <= $top_n_signatures AND ANTI_PATTERNS >= $min_anti_patterns
+    evidence:
+      kind: QRY
+      fields: [WAREHOUSE_NAME, EXECUTIONS, CREDITS, COST_RANK, AVG_ROWS_PRODUCED, SELECT_STAR_JOIN, NON_SARGABLE, EXPLODING_JOIN]
+    value:
+      method: "signature cost (attributed credits) × expected reduction from the rewrite × contract price, annualised"
+      p50: CREDITS * expected_reduction * price_per_credit * annualise
+      conservative: CREDITS * expected_reduction * conservative_factor * price_per_credit * annualise
+      factors:
+        expected_reduction: rubric.diagnostics.checks.perf_04.expected_reduction
+        conservative_factor: rubric.diagnostics.checks.perf_04.conservative_factor
+    effort: {size: M}
+    title_template: "Rewrite costly signature {{ cluster_key }}"
+    rationale_template: >-
+      {{ cluster_key }} is cost rank {{ rows[0].COST_RANK }} ({{ num(rows[0].CREDITS) }} credits, {{ num(rows[0].EXECUTIONS) }} runs) with
+      {{ rows[0].ANTI_PATTERNS }} anti-patterns:{{ ' SELECT * across a join;' if rows[0].SELECT_STAR_JOIN }}{{ ' exploding join (avg ' ~ num(rows[0].AVG_ROWS_PRODUCED) ~ ' rows);' if rows[0].EXPLODING_JOIN }}{{ ' non-sargable filter;' if rows[0].NON_SARGABLE }}
+    remediation:
+      type: sql
+      autonomy: L1
+      template: |
+        -- Rewrite pack for {{ cluster_key }} with a before/after equivalence test.
+        -- 1. BEFORE: the current statement, captured as a view in a sandbox schema.
+        CREATE SCHEMA IF NOT EXISTS ALTITUDE_REMEDIATION.REWRITES;
+        CREATE OR REPLACE VIEW ALTITUDE_REMEDIATION.REWRITES.V_{{ cluster_key | upper }}_BEFORE AS
+        {{ rows[0].SAMPLE_TEXT }};
+        -- 2. AFTER: engineer edits this copy — project only consumed columns and aggregate before joining.
+        CREATE OR REPLACE VIEW ALTITUDE_REMEDIATION.REWRITES.V_{{ cluster_key | upper }}_AFTER AS
+        {{ rows[0].SAMPLE_TEXT }};
+        -- 3. TEST: row counts must match before the rewrite is promoted.
+        SELECT (SELECT COUNT(*) FROM ALTITUDE_REMEDIATION.REWRITES.V_{{ cluster_key | upper }}_BEFORE) AS ROWS_BEFORE,
+               (SELECT COUNT(*) FROM ALTITUDE_REMEDIATION.REWRITES.V_{{ cluster_key | upper }}_AFTER) AS ROWS_AFTER;
+      rollback: |
+        DROP VIEW IF EXISTS ALTITUDE_REMEDIATION.REWRITES.V_{{ cluster_key | upper }}_AFTER;
+        DROP VIEW IF EXISTS ALTITUDE_REMEDIATION.REWRITES.V_{{ cluster_key | upper }}_BEFORE;
+    kpis_to_watch: [KPI-COST-006, KPI-PERF-001]
+    last_verified: "2026-10-01"

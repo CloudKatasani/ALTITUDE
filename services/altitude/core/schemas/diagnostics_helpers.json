@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Package D shared detector helper relations",
+  "x-altitude-globs": ["diagnostics/helpers.yaml"],
+  "type": "object",
+  "required": ["version", "helpers"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "helpers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "kind", "description"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^HLP-[A-Z0-9-]+$"},
+          "name": {"type": "string", "pattern": "^_[A-Z0-9_]+$"},
+          "kind": {"enum": ["view", "rubric_map"]},
+          "description": {"type": "string"},
+          "sql": {"type": "string"},
+          "ref": {"type": "string", "pattern": "^rubric\\."},
+          "key_column": {"type": "string"},
+          "value_column": {"type": "string"}
+        },
+        "allOf": [
+          {"if": {"properties": {"kind": {"const": "view"}}}, "then": {"required": ["sql"]}},
+          {"if": {"properties": {"kind": {"const": "rubric_map"}}}, "then": {"required": ["ref", "key_column", "value_column"]}}
+        ]
+      }
+    }
+  }
+}

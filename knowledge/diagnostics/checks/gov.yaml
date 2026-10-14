@@ -1,0 +1,172 @@
+# D5 Governance & Data Quality checks (Section 6.4).
+version: 1.0.0
+checks:
+  - id: DX-GOV-01
+    title: Tier-1 objects without owner or description
+    description: Tier-1 tables with no owner tag or no table comment; the owner is bootstrapped from write usage.
+    domain: D5
+    waf_pillar: security_governance
+    severity: medium
+    confidence_class: high
+    detector:
+      requires: [TABLES, TAG_REFERENCES, ACCESS_HISTORY, CLIENT_INPUTS]
+      inputs: [tier1_tables, owner_tag]
+      cluster_by: owner
+      params:
+        default_owner_tag: {value: DATA_OWNER}
+      signals: |
+        WITH tagname AS (
+          SELECT upper(coalesce((SELECT VALUE ->> '$' FROM CLIENT_INPUTS WHERE KEY = 'owner_tag'), $default_owner_tag)) AS TAG),
+        owners AS (
+          SELECT OBJECT_DATABASE || '.' || OBJECT_SCHEMA || '.' || OBJECT_NAME AS FQ_NAME,
+                 TAG_DATABASE || '.' || TAG_SCHEMA || '.' || TAG_NAME AS TAG_FQ, TAG_VALUE
+          FROM TAG_REFERENCES, tagname WHERE DOMAIN = 'TABLE' AND upper(TAG_NAME) = tagname.TAG),
+        writers AS (
+          SELECT OBJECT_NAME, USER_NAME, count(*) AS N,
+                 row_number() OVER (PARTITION BY OBJECT_NAME ORDER BY count(*) DESC, USER_NAME) AS RN
+          FROM ACCESS_HISTORY WHERE ACCESS_TYPE = 'WRITE' GROUP BY OBJECT_NAME, USER_NAME)
+        SELECT t.FQ_NAME AS OBJECT_NAME,
+               coalesce(w.USER_NAME, t.TABLE_OWNER) AS CLUSTER_KEY,
+               CASE WHEN o.TAG_VALUE IS NULL THEN 0 ELSE 1 END AS HAS_OWNER_TAG,
+               CASE WHEN t.COMMENT IS NULL OR trim(t.COMMENT) = '' THEN 0 ELSE 1 END AS HAS_COMMENT,
+               coalesce(w.USER_NAME, t.TABLE_OWNER) AS SUGGESTED_OWNER,
+               coalesce((SELECT min(TAG_FQ) FROM owners), 'GOVERNANCE.TAGS.' || (SELECT TAG FROM tagname)) AS OWNER_TAG_FQ
+        FROM TABLES t
+        JOIN _TIER1_TABLES tt ON tt.FQ_NAME = t.FQ_NAME
+        LEFT JOIN owners o ON o.FQ_NAME = t.FQ_NAME
+        LEFT JOIN writers w ON w.OBJECT_NAME = t.FQ_NAME AND w.RN = 1
+      rule: HAS_OWNER_TAG = 0 OR HAS_COMMENT = 0
+    evidence:
+      kind: TBL
+      fields: [HAS_OWNER_TAG, HAS_COMMENT, SUGGESTED_OWNER]
+    value:
+      method: "governance value: ownerless Tier-1 data has no accountable steward; risk = likelihood × impact (rubric)"
+    risk:
+      likelihood_ref: rubric.diagnostics.risk_model.gov_01.likelihood
+      impact_ref: rubric.diagnostics.risk_model.gov_01.impact
+      method: "Issues on unowned Tier-1 data are not triaged (likelihood × impact, 1–5 each)"
+    effort: {size: XS}
+    title_template: "Assign owners and descriptions to {{ n }} Tier-1 table{{ 's' if n != 1 else '' }}"
+    rationale_template: >-
+      {% for r in rows %}{{ r.OBJECT_NAME }}: owner tag {{ 'present' if r.HAS_OWNER_TAG else 'missing' }}, comment {{ 'present' if r.HAS_COMMENT else 'missing' }};
+      most frequent writer {{ r.SUGGESTED_OWNER }}{{ '; ' if not loop.last }}{% endfor %}.
+    remediation:
+      type: sql
+      autonomy: L2
+      template: |
+        -- Ownership bootstrapped from write usage; the steward confirms owner and description before execution.
+        {% for r in rows %}{% if not r.HAS_OWNER_TAG %}ALTER TABLE {{ r.OBJECT_NAME }} SET TAG {{ r.OWNER_TAG_FQ }} = '{{ r.SUGGESTED_OWNER }}';
+        {% endif %}{% if not r.HAS_COMMENT %}ALTER TABLE {{ r.OBJECT_NAME }} SET COMMENT = 'Tier-1 table; owner {{ r.SUGGESTED_OWNER }} (description pending steward review)';
+        {% endif %}{% endfor %}
+      rollback: |
+        {% for r in rows %}{% if not r.HAS_OWNER_TAG %}ALTER TABLE {{ r.OBJECT_NAME }} UNSET TAG {{ r.OWNER_TAG_FQ }};
+        {% endif %}{% if not r.HAS_COMMENT %}ALTER TABLE {{ r.OBJECT_NAME }} UNSET COMMENT;
+        {% endif %}{% endfor %}
+    kpis_to_watch: [KPI-GOV-002, KPI-GOV-001]
+    last_verified: "2026-10-01"
+
+  - id: DX-GOV-02
+    title: Tier-1 tables without data-quality monitoring
+    description: Tier-1 tables with no scheduled data metric functions (DMFs).
+    domain: D5
+    waf_pillar: security_governance
+    severity: medium
+    confidence_class: high
+    detector:
+      requires: [TABLES, DATA_METRIC_FUNCTION_REFERENCES, COLUMNS, CLIENT_INPUTS, TAG_REFERENCES]
+      inputs: [tier1_tables]
+      cluster_by: object
+      params: {}
+      signals: |
+        SELECT t.FQ_NAME AS OBJECT_NAME, t.FQ_NAME AS CLUSTER_KEY,
+               (SELECT count(*) FROM DATA_METRIC_FUNCTION_REFERENCES d
+                WHERE d.REF_ENTITY_NAME = t.FQ_NAME AND coalesce(d.SCHEDULE_STATUS, 'STARTED') = 'STARTED') AS DMF_COUNT,
+               (SELECT c.COLUMN_NAME FROM COLUMNS c WHERE c.FQ_NAME = t.FQ_NAME ORDER BY c.ORDINAL_POSITION LIMIT 1) AS KEY_COLUMN
+        FROM TABLES t JOIN _TIER1_TABLES tt ON tt.FQ_NAME = t.FQ_NAME
+      rule: DMF_COUNT = 0
+    evidence:
+      kind: TBL
+      fields: [DMF_COUNT, KEY_COLUMN]
+    value:
+      method: "incident avoidance: risk = likelihood × impact (rubric) of undetected Tier-1 data-quality incidents"
+    risk:
+      likelihood_ref: rubric.diagnostics.risk_model.gov_02.likelihood
+      impact_ref: rubric.diagnostics.risk_model.gov_02.impact
+      method: "Quality regressions on Tier-1 data reach consumers undetected (likelihood × impact, 1–5 each)"
+    effort: {size: S}
+    title_template: "Add a DQ rule pack to {{ rows[0].OBJECT_NAME }}"
+    rationale_template: >-
+      {{ rows[0].OBJECT_NAME }} is Tier-1 and has {{ rows[0].DMF_COUNT }} scheduled data metric functions.
+    remediation:
+      type: sql
+      autonomy: L2
+      template: |
+        ALTER TABLE {{ rows[0].OBJECT_NAME }} SET DATA_METRIC_SCHEDULE = 'TRIGGER_ON_CHANGES';
+        ALTER TABLE {{ rows[0].OBJECT_NAME }} ADD DATA METRIC FUNCTION SNOWFLAKE.CORE.ROW_COUNT ON ();
+        ALTER TABLE {{ rows[0].OBJECT_NAME }} ADD DATA METRIC FUNCTION SNOWFLAKE.CORE.NULL_COUNT ON ({{ rows[0].KEY_COLUMN }});
+        ALTER TABLE {{ rows[0].OBJECT_NAME }} ADD DATA METRIC FUNCTION SNOWFLAKE.CORE.DUPLICATE_COUNT ON ({{ rows[0].KEY_COLUMN }});
+      rollback: |
+        ALTER TABLE {{ rows[0].OBJECT_NAME }} DROP DATA METRIC FUNCTION SNOWFLAKE.CORE.DUPLICATE_COUNT ON ({{ rows[0].KEY_COLUMN }});
+        ALTER TABLE {{ rows[0].OBJECT_NAME }} DROP DATA METRIC FUNCTION SNOWFLAKE.CORE.NULL_COUNT ON ({{ rows[0].KEY_COLUMN }});
+        ALTER TABLE {{ rows[0].OBJECT_NAME }} DROP DATA METRIC FUNCTION SNOWFLAKE.CORE.ROW_COUNT ON ();
+        ALTER TABLE {{ rows[0].OBJECT_NAME }} UNSET DATA_METRIC_SCHEDULE;
+    kpis_to_watch: [KPI-GOV-004]
+    last_verified: "2026-10-01"
+
+  - id: DX-GOV-03
+    title: Unused objects
+    description: Tables not accessed in the snapshot window and not altered for longer than the rubric window.
+    domain: D5
+    waf_pillar: security_governance
+    severity: low
+    confidence_class: medium
+    detector:
+      requires: [TABLES, ACCESS_HISTORY, TABLE_STORAGE_METRICS]
+      inputs: [storage_price_per_tb_month]
+      cluster_by: theme
+      params:
+        unused_days: {threshold_ref: rubric.diagnostics.checks.gov_03.unused_days}
+      signals: |
+        WITH la AS (SELECT OBJECT_NAME, max(QUERY_START_TIME) AS LAST_ACCESS FROM ACCESS_HISTORY GROUP BY OBJECT_NAME)
+        SELECT t.FQ_NAME AS OBJECT_NAME, 'archive' AS CLUSTER_KEY, t.TABLE_CATALOG, t.TABLE_NAME,
+               date_diff('day', t.LAST_ALTERED, $as_of) AS DAYS_SINCE_ALTERED,
+               la.LAST_ACCESS,
+               CASE WHEN la.LAST_ACCESS IS NULL THEN 1 ELSE 0 END AS NO_ACCESS_IN_WINDOW,
+               coalesce(s.ACTIVE_BYTES, 0) + coalesce(s.TIME_TRAVEL_BYTES, 0) + coalesce(s.FAILSAFE_BYTES, 0) AS STORAGE_BYTES,
+               (coalesce(s.ACTIVE_BYTES, 0) + coalesce(s.TIME_TRAVEL_BYTES, 0) + coalesce(s.FAILSAFE_BYTES, 0)) / $bytes_per_tb AS STORAGE_TB
+        FROM TABLES t
+        LEFT JOIN la ON la.OBJECT_NAME = t.FQ_NAME
+        LEFT JOIN TABLE_STORAGE_METRICS s ON s.FQ_NAME = t.FQ_NAME
+      rule: NO_ACCESS_IN_WINDOW = 1 AND DAYS_SINCE_ALTERED >= $unused_days
+    evidence:
+      kind: TBL
+      fields: [DAYS_SINCE_ALTERED, NO_ACCESS_IN_WINDOW, STORAGE_BYTES]
+    value:
+      method: "storage $ released after archive-then-drop: TB × storage price per TB-month × 12; also reduces attack surface"
+      p50: STORAGE_TB * realisation * storage_price_per_tb_month * months_per_year
+      conservative: STORAGE_TB * realisation * conservative_factor * storage_price_per_tb_month * months_per_year
+      factors:
+        realisation: rubric.diagnostics.checks.gov_03.realisation
+        conservative_factor: rubric.diagnostics.checks.gov_03.conservative_factor
+    risk:
+      likelihood_ref: rubric.diagnostics.risk_model.gov_03.likelihood
+      impact_ref: rubric.diagnostics.risk_model.gov_03.impact
+      method: "Unused objects keep stale (possibly sensitive) data reachable (likelihood × impact, 1–5 each)"
+    effort: {size: S}
+    title_template: "Archive then drop {{ n }} unused table{{ 's' if n != 1 else '' }}"
+    rationale_template: >-
+      {{ n }} tables had no access in the {{ window_days }}-day window and were last altered at least {{ params.unused_days }} days ago
+      ({{ tb(rows | sum(attribute='STORAGE_BYTES')) }} in total).
+    remediation:
+      type: sql
+      autonomy: L2
+      template: |
+        -- Quarantine first (rename into an archive schema); drop after the agreed quarantine period.
+        {% for db in rows | map(attribute='TABLE_CATALOG') | unique | sort %}CREATE SCHEMA IF NOT EXISTS {{ db }}.ALTITUDE_ARCHIVE;
+        {% endfor %}{% for r in rows %}ALTER TABLE {{ r.OBJECT_NAME }} RENAME TO {{ r.TABLE_CATALOG }}.ALTITUDE_ARCHIVE.{{ r.TABLE_NAME }};
+        {% endfor %}
+      rollback: |
+        {% for r in rows %}ALTER TABLE {{ r.TABLE_CATALOG }}.ALTITUDE_ARCHIVE.{{ r.TABLE_NAME }} RENAME TO {{ r.OBJECT_NAME }};
+        {% endfor %}
+    kpis_to_watch: [KPI-USE-003, KPI-COST-009]
+    last_verified: "2026-10-01"
