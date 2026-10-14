@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ theme.PACKAGE_D_NAME }} — findings</h1>
+{% if run %}
+<p class="muted">Run <code>{{ run.run_id }}</code> · snapshot <code>{{ run.snapshot_id }}</code> · rubric <code>{{ run.rubric_version }}</code> · tier {{ run.tier }}</p>
+<div class="kpi"><span>{{ theme.HEALTH_INDEX_NAME }}</span><b>{{ "%.1f"|format(run.platform_health_index or 0) }}</b><a href="/api/v1/diagnostics/runs/{{ run.run_id }}">scorecard</a></div>
+<div class="kpi"><span>Suggestions</span><b>{{ rows|length }}</b><a href="/progress">progress board</a></div>
+<div class="kpi"><span>Identified value (p50)</span><b>{{ rows|sum(attribute="value_p50_usd")|usd }}</b><a href="/api/v1/diagnostics/suggestions">ids</a></div>
+{% else %}<p class="muted">No diagnostic run yet.</p>{% endif %}
+<table>
+<thead><tr><th>#</th><th>Suggestion</th><th>Check</th><th>Quadrant</th><th>Value p50</th><th>Confidence</th><th>Status</th><th>Evidence</th></tr></thead>
+<tbody>
+{% for r in rows %}
+<tr><td>{{ r.priority_rank }}</td>
+<td><a href="/suggestion?id={{ r.suggestion_id }}">{{ r.title }}</a><br><code>{{ r.suggestion_id }}</code></td>
+<td>{{ r.check_id }}</td><td>{{ r.quadrant }}</td><td>{{ r.value_p50_usd|usd }}</td>
+<td>{{ "%.2f"|format(r.confidence) }}{% if r.needs_review %} · review{% endif %}</td><td>{{ r.status }}</td>
+<td>{% for e in r.record.evidence_refs %}<a href="/api/v1/diagnostics/evidence/{{ e }}"><code>{{ e }}</code></a> {% endfor %}</td></tr>
+{% endfor %}
+</tbody></table>
+{% endblock %}

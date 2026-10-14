@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Agent fleet</h1>
+<p class="muted">L2 drafts never run without a recorded approval; L3 runs only pre-approved, reversible actions with auto-rollback.</p>
+<h2>Waiting for approval</h2>
+<table><thead><tr><th>Action</th><th>Agent</th><th>Autonomy</th><th>Type</th><th>Target</th><th>Confidence</th><th>Rationale</th></tr></thead><tbody>
+{% for a in pending %}<tr><td><code>{{ a.action_id }}</code></td><td>{{ a.agent_id }}</td><td>{{ a.autonomy }}</td><td>{{ a.action_type }}</td>
+<td>{{ a.target }}</td><td>{{ "%.2f"|format(a.confidence or 0) }}</td><td>{{ a.rationale }}</td></tr>
+{% else %}<tr><td colspan="7" class="muted">Nothing waiting.</td></tr>{% endfor %}
+</tbody></table>
+<h2>Action log (immutable)</h2>
+<table><thead><tr><th>When</th><th>Action</th><th>Seq</th><th>Status</th><th>Actor</th><th>Type</th><th>Target</th></tr></thead><tbody>
+{% for a in recent %}<tr><td>{{ a.recorded_at }}</td><td><code>{{ a.action_id }}</code></td><td>{{ a.seq }}</td><td>{{ a.status }}</td>
+<td>{{ a.actor }}</td><td>{{ a.action_type }}</td><td>{{ a.target }}</td></tr>{% endfor %}
+</tbody></table>
+{% endblock %}

@@ -57,7 +57,7 @@ def portal_principal(request: Request) -> Principal | None:
 
 
 def page(env: Environment, template: str, request: Request, p: Principal | None, **ctx: Any) -> HTMLResponse:
-    nav = [(path, label) for path, label, perm, _ in PAGES if p and p.can(perm)]
+    nav = [(path, label) for path, label, perm, _ in PAGES if label and p and p.can(perm)]
     html = env.get_template(template).render(request=request, principal=p, nav=nav, theme=tokens(), **ctx)
     return HTMLResponse(render_tokens(html))
 
@@ -152,6 +152,8 @@ def mount(app: FastAPI) -> None:
 
     for path, _label, perm, handler in PAGES:
         _register(app, env, ctx, path, perm, handler)
+    for url, directory in ctx.extras.get("static_mounts", []):
+        app.mount(url, StaticFiles(directory=str(directory), html=True), name=f"static:{url}")
 
 
 def _register(app: FastAPI, env: Environment, ctx: Any, path: str, perm: str, handler: Any) -> None:

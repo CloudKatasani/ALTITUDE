@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Progress — identified vs realised</h1>
+<div class="kpi"><span>Identified (p50, annualised)</span><b>{{ b.identified.value_p50_usd|usd }}</b>
+<a href="/findings" title="{{ b.identified.ids|join(' ') }}">{{ b.identified.count }} suggestions</a></div>
+<div class="kpi"><span>Realised (measured in-account)</span><b>{{ b.realised.value_annual_usd|usd }}</b>
+<a href="/api/v1/diagnostics/progress" title="{{ b.realised.ids|join(' ') }}">{{ b.realised.ids|length }} measurements</a></div>
+<div class="kpi"><span>Quick wins</span><b>{{ b.quick_wins.count }}</b><a href="/findings" title="{{ b.quick_wins.ids|join(' ') }}">ids</a></div>
+<table><thead><tr><th>Status</th><th>Count</th><th>Value p50</th><th>Suggestions</th></tr></thead><tbody>
+{% for st, v in b.by_status.items() %}<tr><td>{{ st }}</td><td>{{ v.count }}</td><td>{{ v.value_p50_usd|usd }}</td>
+<td>{% for i in v.ids %}<a href="/suggestion?id={{ i }}"><code>{{ i }}</code></a> {% endfor %}</td></tr>{% endfor %}
+</tbody></table>
+{% endblock %}
