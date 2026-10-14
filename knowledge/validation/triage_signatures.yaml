@@ -1,0 +1,65 @@
+version: 1.0.0
+description: >
+  Root-cause signatures used by the AI mismatch triage agent to cluster L3/L4 mismatches and link
+  them to the Pattern Library. `issue_by_dialect` resolves the known issue for the source dialect.
+signatures:
+  - id: SIG-DUPLICATE-ROWS
+    signature: duplicate_rows
+    description: Target holds extra copies of rows that are otherwise identical to the source row
+    issue_by_dialect: {teradata: TD-01, sqlserver: MS-08}
+    confidence_ref: rubric.validation.triage.signature_confidence.duplicate_rows
+  - id: SIG-TRAILING-SPACE
+    signature: trailing_space
+    description: Values differ only by trailing spaces
+    issue_by_dialect: {teradata: TD-03}
+    confidence_ref: rubric.validation.triage.signature_confidence.trailing_space
+  - id: SIG-CASE-ONLY
+    signature: case_only
+    description: Values differ only by letter case
+    issue_by_dialect: {teradata: TD-02, sqlserver: MS-01}
+    confidence_ref: rubric.validation.triage.signature_confidence.case_only
+  - id: SIG-EMPTY-VS-NULL
+    signature: empty_vs_null
+    description: One side holds '' where the other holds NULL
+    issue_by_dialect: {oracle: OR-01}
+    confidence_ref: rubric.validation.triage.signature_confidence.empty_vs_null
+  - id: SIG-SCALE-TRUNCATION
+    signature: scale_truncation
+    description: Target numeric equals the source rounded/truncated to fewer decimal places
+    issue_by_dialect: {oracle: OR-02, teradata: TD-05, netezza: NZ-04}
+    confidence_ref: rubric.validation.triage.signature_confidence.scale_truncation
+  - id: SIG-TIMESTAMP-PRECISION
+    signature: timestamp_precision
+    description: Timestamps differ by less than a second (fractional precision or DATETIME rounding)
+    issue_by_dialect: {sqlserver: MS-02, teradata: TD-11}
+    confidence_ref: rubric.validation.triage.signature_confidence.timestamp_precision
+  - id: SIG-TIME-COMPONENT-LOST
+    signature: time_component_lost
+    description: Target keeps the date but the time of day is midnight
+    issue_by_dialect: {oracle: OR-03}
+    confidence_ref: rubric.validation.triage.signature_confidence.time_component_lost
+  - id: SIG-TIMEZONE-SHIFT
+    signature: timezone_shift
+    description: Timestamps differ by a whole number of hours
+    issue_by_dialect: {teradata: TD-11}
+    confidence_ref: rubric.validation.triage.signature_confidence.timezone_shift
+  - id: SIG-FLOAT-PRECISION
+    signature: float_precision
+    description: Floating-point values differ only in the last significant digits
+    issue_by_dialect: {teradata: XD-10, oracle: XD-10, sqlserver: XD-10, netezza: XD-10, redshift: XD-10}
+    confidence_ref: rubric.validation.triage.signature_confidence.float_precision
+  - id: SIG-MISSING-ROWS
+    signature: missing_rows
+    description: Keys present in the source are missing in the target
+    issue_by_dialect: {}
+    confidence_ref: rubric.validation.triage.signature_confidence.missing_rows
+  - id: SIG-EXTRA-ROWS
+    signature: extra_rows
+    description: Keys present in the target are missing in the source
+    issue_by_dialect: {sqlserver: MS-08}
+    confidence_ref: rubric.validation.triage.signature_confidence.extra_rows
+  - id: SIG-UNEXPLAINED
+    signature: unexplained
+    description: No known signature explains the difference; human triage required
+    issue_by_dialect: {}
+    confidence_ref: rubric.validation.triage.signature_confidence.unexplained

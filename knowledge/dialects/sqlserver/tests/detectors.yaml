@@ -1,0 +1,101 @@
+dialect: sqlserver
+description: Detector and profile tests for the SQL Server register.
+test_cases:
+  - id: TC-MS-01-101
+    issue_id: MS-01
+    kind: detector
+    description: Numeric predicates are not collation-sensitive; an explicit CI collation is
+    source_sql: |
+      SELECT order_id FROM dbo.orders WHERE order_id = 42 AND amount > 10;
+      SELECT name COLLATE SQL_Latin1_General_CP1_CI_AS FROM dbo.customer;
+    expect_issues: [MS-01]
+    expect_lines: {MS-01: [2]}
+
+  - id: TC-MS-02-101
+    issue_id: MS-02
+    kind: profile
+    description: DATETIME source columns
+    source_sql: ""
+    profile:
+      columns:
+        - {table: dbo.events, column: event_ts, source_type: DATETIME, target_type: TIMESTAMP_NTZ(9)}
+    expect_issues: [MS-02]
+
+  - id: TC-MS-03-101
+    issue_id: MS-03
+    kind: detector
+    description: NOLOCK hints and isolation level
+    source_sql: |
+      SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+      SELECT * FROM dbo.orders WITH (NOLOCK);
+    expect_issues: [MS-03]
+
+  - id: TC-MS-05-101
+    issue_id: MS-05
+    kind: detector
+    description: TRY/CATCH with @@ROWCOUNT and RAISERROR
+    source_sql: |
+      BEGIN TRY
+        UPDATE dbo.orders SET status = 'X' WHERE order_id = @id;
+        IF @@ROWCOUNT = 0 RAISERROR('not found', 16, 1);
+      END TRY
+      BEGIN CATCH
+        THROW;
+      END CATCH
+    expect_issues: [MS-05]
+
+  - id: TC-MS-06-101
+    issue_id: MS-06
+    kind: detector
+    description: Dynamic SQL
+    source_sql: |
+      DECLARE @sql NVARCHAR(MAX) = N'SELECT * FROM ' + @table;
+      EXEC sp_executesql @sql;
+      EXEC (@sql);
+    expect_issues: [MS-06]
+
+  - id: TC-MS-07-101
+    issue_id: MS-07
+    kind: detector
+    description: SSIS package containing a C# script task
+    source_sql: |
+      <DTS:Executable DTS:ExecutableType="Microsoft.ScriptTask" DTS:ObjectName="Compute bonus">
+        <DTS:ObjectData><ScriptProject Language="CSharp"/></DTS:ObjectData>
+      </DTS:Executable>
+    expect_issues: [MS-07]
+
+  - id: TC-MS-08-101
+    issue_id: MS-08
+    kind: profile
+    description: Enforced cascades and triggers in the catalog
+    source_sql: ""
+    profile:
+      constraints:
+        - {table: dbo.orders, kind: foreign_key, on_delete: cascade}
+      triggers:
+        - {name: trg_orders_audit, table: dbo.orders}
+    expect_issues: [MS-08]
+
+  - id: TC-MS-09-101
+    issue_id: MS-09
+    kind: detector
+    description: Cursor loop with singleton updates
+    source_sql: |
+      DECLARE c CURSOR FOR SELECT order_id FROM dbo.orders;
+      OPEN c;
+      FETCH NEXT FROM c INTO @id;
+      WHILE @@FETCH_STATUS = 0
+      BEGIN
+        UPDATE dbo.orders SET status = 'X' WHERE order_id = @id;
+        FETCH NEXT FROM c INTO @id;
+      END
+    expect_issues: [MS-09]
+
+  - id: TC-MS-10-101
+    issue_id: MS-10
+    kind: detector
+    description: Synapse distribution and columnstore
+    source_sql: |
+      CREATE TABLE dbo.fact_sales (id INT, amount DECIMAL(12,2))
+      WITH (DISTRIBUTION = HASH(id), CLUSTERED COLUMNSTORE INDEX);
+    expect_issues: [MS-10]

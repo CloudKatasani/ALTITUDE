@@ -1,0 +1,79 @@
+dialect: common
+description: Golden and detector tests for cross-source drift issues.
+test_cases:
+  - id: TC-XD-07-001
+    issue_id: XD-07
+    kind: golden
+    scan_dialect: sqlserver
+    description: MIN/MAX on strings follow the case-insensitive collation in SQL Server
+    source_sql: |
+      CREATE TABLE dbo.product (product_id INT, product_name VARCHAR(40));
+      SELECT MIN(product_name), MAX(product_name) FROM dbo.product;
+    fixture: |
+      CREATE TABLE product (product_id INTEGER, product_name VARCHAR);
+      INSERT INTO product VALUES (1, 'apple'), (2, 'Banana'), (3, 'cherry'), (4, 'Date');
+    source_emulation: |
+      SELECT arg_min(product_name, lower(product_name)), arg_max(product_name, lower(product_name)) FROM product;
+    naive:
+      snowflake: SELECT MIN(product_name), MAX(product_name) FROM product;
+      expect: diverge
+    fixed:
+      snowflake: SELECT MIN_BY(product_name, UPPER(product_name)), MAX_BY(product_name, UPPER(product_name)) FROM product;
+    fix_pattern: FX-XD-07-A
+    expected_rows: [["apple", "Date"]]
+
+  - id: TC-XD-08-001
+    issue_id: XD-08
+    kind: golden
+    scan_dialect: sqlserver
+    description: T-SQL UPDATE ... FROM with a multi-match source; expected rows are the reconciled baseline
+    source_sql: |
+      UPDATE a SET a.balance = a.balance + j.amount
+      FROM dbo.account a JOIN dbo.adjustment j ON a.acct_id = j.acct_id;
+    fixture: |
+      CREATE TABLE account (acct_id INTEGER, balance DECIMAL(12,2));
+      INSERT INTO account VALUES (1, 100.00), (2, 200.00);
+      CREATE TABLE adjustment (acct_id INTEGER, amount DECIMAL(12,2));
+      INSERT INTO adjustment VALUES (1, 10.00), (1, 20.00), (2, 5.00);
+    source_emulation: |
+      SELECT a.acct_id, a.balance + coalesce(sum(j.amount), 0)
+      FROM account a LEFT JOIN adjustment j ON a.acct_id = j.acct_id
+      GROUP BY a.acct_id, a.balance ORDER BY a.acct_id;
+    naive:
+      snowflake: |
+        UPDATE account SET balance = account.balance + j.amount FROM adjustment j WHERE account.acct_id = j.acct_id;
+        SELECT acct_id, balance FROM account ORDER BY acct_id;
+      expect: diverge
+    fixed:
+      snowflake: |
+        UPDATE account SET balance = account.balance + j.amount
+        FROM (SELECT acct_id, SUM(amount) AS amount FROM adjustment GROUP BY acct_id) j
+        WHERE account.acct_id = j.acct_id;
+        SELECT acct_id, balance FROM account ORDER BY acct_id;
+    fix_pattern: FX-XD-08-A
+    expected_rows: [[1, 130], [2, 205]]
+
+  - id: TC-XD-10-101
+    issue_id: XD-10
+    kind: detector
+    scan_dialect: teradata
+    description: SUM over a FLOAT column
+    source_sql: |
+      CREATE MULTISET TABLE sci.readings (sensor_id INTEGER, reading FLOAT);
+      SELECT sensor_id, SUM(reading) FROM sci.readings GROUP BY 1;
+    expect_issues: [XD-10]
+
+  - id: TC-XD-12-101
+    issue_id: XD-12
+    kind: detector
+    scan_dialect: sqlserver
+    description: Explicit transactions with DDL in a procedure
+    source_sql: |
+      CREATE PROCEDURE dbo.rebuild AS
+      BEGIN
+        BEGIN TRANSACTION;
+        TRUNCATE TABLE dbo.stage;
+        INSERT INTO dbo.stage SELECT * FROM dbo.src;
+        COMMIT TRANSACTION;
+      END
+    expect_issues: [XD-12]

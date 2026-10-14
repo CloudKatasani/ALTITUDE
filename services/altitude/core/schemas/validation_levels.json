@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Validation levels per table tier (Section 12.3)",
+  "x-altitude-globs": ["validation/levels.yaml"],
+  "type": "object",
+  "required": ["version", "levels", "tiers"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "description": {"type": "string"},
+    "levels": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "description"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"enum": ["L0", "L1", "L2", "L3", "L4", "L5"]},
+          "name": {"type": "string"},
+          "description": {"type": "string"}
+        }
+      }
+    },
+    "tiers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "description", "levels", "threshold_ref"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^tier\\d$"},
+          "description": {"type": "string"},
+          "levels": {
+            "type": "object",
+            "required": ["L0", "L1", "L2", "L3", "L4", "L5"],
+            "additionalProperties": false,
+            "patternProperties": {"^L[0-5]$": {"enum": ["full", "sample", "none"]}}
+          },
+          "threshold_ref": {"type": "string", "pattern": "^rubric\\."}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Validation normalisation rules (versioned data, applied identically on both sides)",
+  "x-altitude-globs": ["validation/normalisation.yaml"],
+  "type": "object",
+  "required": ["version", "rules"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "description": {"type": "string"},
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "op", "applies_to", "description"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^NR-[A-Z0-9-]+$"},
+          "op": {"enum": ["numeric_canonical", "float_canonical", "timestamp_canonical", "date_canonical",
+                          "boolean_canonical", "rtrim", "upper", "empty_as_null", "timestamp_precision",
+                          "numeric_scale"]},
+          "applies_to": {"type": "array", "items": {"enum": ["string", "integer", "decimal", "float", "date",
+                                                             "timestamp", "boolean"]}, "minItems": 1},
+          "always": {"type": "boolean"},
+          "policy": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+          "linked_issues": {"type": "array", "items": {"type": "string", "pattern": "^[A-Z]{2}-\\d{2}$"}},
+          "params": {"type": "object"},
+          "description": {"type": "string"}
+        },
+        "oneOf": [
+          {"required": ["always"], "properties": {"always": {"const": true}}, "not": {"required": ["policy"]}},
+          {"required": ["policy"], "not": {"required": ["always"]}}
+        ]
+      }
+    }
+  }
+}

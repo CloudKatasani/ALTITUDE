@@ -1,0 +1,65 @@
+version: 1.0.0
+description: >
+  Normalisation rules applied identically on both sides before L2 aggregation and L3 hashing
+  (Section 12.3). Rules marked `always` canonicalise representation only and never hide a
+  semantic difference; policy rules are switched on per programme decision (ADR) and name the
+  known issue whose drift they deliberately neutralise.
+rules:
+  - id: NR-CANON-NUMERIC
+    op: numeric_canonical
+    applies_to: [integer, decimal]
+    always: true
+    description: Render exact numerics as canonical decimals (no trailing zeros) so 1.50 and 1.5 hash identically
+  - id: NR-CANON-FLOAT
+    op: float_canonical
+    applies_to: [float]
+    always: true
+    params: {significant_digits: 15}
+    description: Render floats with 15 significant digits so engine-specific last-digit noise does not mismatch
+  - id: NR-CANON-TIMESTAMP
+    op: timestamp_canonical
+    applies_to: [timestamp]
+    always: true
+    description: Render timestamps as ISO-8601 with microseconds
+  - id: NR-CANON-DATE
+    op: date_canonical
+    applies_to: [date]
+    always: true
+    description: Render dates as ISO-8601
+  - id: NR-CANON-BOOLEAN
+    op: boolean_canonical
+    applies_to: [boolean]
+    always: true
+    description: Render booleans as true/false
+  - id: NR-RTRIM
+    op: rtrim
+    applies_to: [string]
+    policy: char_padding_ignored
+    linked_issues: [TD-03]
+    description: Remove trailing spaces (CHAR pad semantics)
+  - id: NR-CASEFOLD
+    op: upper
+    applies_to: [string]
+    policy: normalise_case
+    linked_issues: [TD-02, MS-01, XD-07]
+    description: Compare strings case-insensitively
+  - id: NR-EMPTY-AS-NULL
+    op: empty_as_null
+    applies_to: [string]
+    policy: oracle_null_semantics
+    linked_issues: [OR-01]
+    description: Treat '' and NULL as equal
+  - id: NR-TS-MILLIS
+    op: timestamp_precision
+    applies_to: [timestamp]
+    policy: datetime_tolerance
+    linked_issues: [MS-02, TD-11]
+    params: {fractional_digits: 3}
+    description: Truncate timestamps to milliseconds
+  - id: NR-NUMERIC-SCALE
+    op: numeric_scale
+    applies_to: [decimal]
+    policy: aligned_numeric_scale
+    linked_issues: [OR-02]
+    params: {scale: 2}
+    description: Round exact numerics to the agreed reporting scale (only after the scale ADR is signed)

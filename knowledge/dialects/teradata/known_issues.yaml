@@ -1,0 +1,278 @@
+dialect: teradata
+version: 1.0.0
+description: Teradata known-issues register (Section 10.1). Severity S1 = silent wrong answers.
+known_issues:
+  - id: TD-01
+    source_dialect: teradata
+    title: SET tables silently discarded duplicate rows on insert; Snowflake keeps them
+    severity: S1
+    checklist_items: [6]
+    symptoms:
+      - "Target row count exceeds source after loading the same batch"
+      - "COUNT(*) and SUM() on the migrated table are higher than on Teradata; COUNT(DISTINCT *) matches"
+    detection:
+      type: static_and_profile
+      static_rule: "CREATE SET TABLE (or CREATE TABLE without MULTISET in Teradata session mode) plus every INSERT into such a table"
+      profile_rule: "Table kind = SET in DBC.TablesV, or target row count > source distinct row count after load"
+      detector: static.td_set_table
+      extra_detectors: [profile.set_table_duplicates]
+    fix_patterns:
+      - id: FX-TD-01-A
+        description: "Dedupe in the load: INSERT ... SELECT ... QUALIFY ROW_NUMBER() OVER (PARTITION BY <all columns> ORDER BY <all columns>) = 1, or SELECT DISTINCT"
+        applies_when: "Programme policy = preserve_set_semantics (default)"
+      - id: FX-TD-01-B
+        description: "MERGE on the full row (or natural key) so re-delivered duplicates are ignored"
+        applies_when: "Incremental loads with a natural key"
+    tests: [TC-TD-01-001, TC-TD-01-101, TC-TD-01-102]
+    validation_normalisation: "L1 compares source distinct row count with target row count; L3 keyed duplicates cluster to TD-01"
+    mismatch_signatures: [duplicate_rows]
+    decision_required: true
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-teradata
+
+  - id: TD-02
+    source_dialect: teradata
+    title: Case-insensitive comparisons (NOT CASESPECIFIC, Teradata session mode) become case-sensitive
+    severity: S1
+    checklist_items: [1, 7]
+    symptoms:
+      - "Filters on literal strings return fewer rows in Snowflake"
+      - "Joins on code columns drop rows whose case differs; GROUP BY splits case variants"
+    detection:
+      type: static_and_profile
+      static_rule: "NOT CASESPECIFIC / (NOT CS) column attributes, BTET session mode, predicates on such columns"
+      profile_rule: "DBC.ColumnsV.UpperCaseFlag = N for character columns used in joins/filters"
+      detector: static.td_case_insensitive
+      extra_detectors: [profile.case_insensitive_columns]
+    fix_patterns:
+      - id: FX-TD-02-A
+        description: "Declare the column with COLLATE 'en-ci' (programme collation policy) and retest joins/filters"
+        applies_when: "Policy = case_insensitive_collation"
+      - id: FX-TD-02-B
+        description: "Normalise at ingestion (UPPER) or compare UPPER(col) = UPPER(:value) in rewritten predicates"
+        applies_when: "Policy = normalise_case"
+    tests: [TC-TD-02-001, TC-TD-02-101]
+    validation_normalisation: "Case-fold string columns for L3 hashing only when policy normalise_case is applied"
+    mismatch_signatures: [case_only]
+    decision_required: true
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-teradata
+
+  - id: TD-03
+    source_dialect: teradata
+    title: Trailing-space handling in CHAR comparisons differs
+    severity: S1
+    checklist_items: [5]
+    symptoms:
+      - "Joins between CHAR(n) exports and VARCHAR columns return no rows"
+      - "String lengths differ (LENGTH counts pad characters)"
+    detection:
+      type: static
+      static_rule: "CHAR(n)/CHARACTER(n) columns, especially those used in joins and equality predicates"
+      profile_rule: "Source CHAR(n) column mapped to VARCHAR without RTRIM in the load"
+      detector: static.td_char_columns
+      extra_detectors: [profile.char_padding]
+    fix_patterns:
+      - id: FX-TD-03-A
+        description: "RTRIM at load and convert CHAR(n) to VARCHAR(n)"
+        applies_when: "Default"
+      - id: FX-TD-03-B
+        description: "Compare RTRIM(a) = RTRIM(b) in rewritten joins when raw values must be preserved"
+        applies_when: "Raw layer must preserve exact source values"
+    tests: [TC-TD-03-001]
+    validation_normalisation: "RTRIM string columns before L3 hashing when policy char_padding_ignored is applied"
+    mismatch_signatures: [trailing_space]
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-teradata
+
+  - id: TD-04
+    source_dialect: teradata
+    title: Integer date arithmetic and date-format literals (CYYMMDD integers vs dates)
+    severity: S1
+    checklist_items: [4, 9]
+    symptoms:
+      - "Dates land in 1970 (integer interpreted as epoch seconds) or conversions fail"
+      - "Filters on integer date literals such as 1260101 silently match nothing"
+    detection:
+      type: static
+      static_rule: "CAST(int AS DATE), CAST(date AS INTEGER), CYYMMDD integer literals, (DATE) casts and FORMAT clauses"
+      detector: static.td_integer_date
+    fix_patterns:
+      - id: FX-TD-04-A
+        description: "Decode Teradata integer dates explicitly: DATE_FROM_PARTS(1900 + FLOOR(d / 10000), MOD(FLOOR(d / 100), 100), MOD(d, 100))"
+        applies_when: "Integer-encoded dates in source columns or literals"
+      - id: FX-TD-04-B
+        description: "Replace integer date arithmetic with DATEADD/DATEDIFF and explicit casts"
+        applies_when: "Arithmetic on dates"
+    tests: [TC-TD-04-001]
+    validation_normalisation: "None; mismatches are real defects"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-teradata
+
+  - id: TD-05
+    source_dialect: teradata
+    title: Division of integers returns an integer in Teradata; Snowflake returns a decimal
+    severity: S1
+    checklist_items: [3]
+    symptoms:
+      - "Averages and ratios gain decimals; downstream joins on computed buckets break"
+    detection:
+      type: static
+      static_rule: "Integer expression / integer expression (literals, COUNT, INTEGER columns)"
+      detector: static.int_division
+    fix_patterns:
+      - id: FX-TD-05-A
+        description: "Make intent explicit: TRUNC(a / b) (or FLOOR for non-negative values) to keep integer semantics"
+        applies_when: "Integer result was intended"
+      - id: FX-TD-05-B
+        description: "Cast one operand to NUMBER(p,s) when decimals were intended and the source was a latent bug (decision required)"
+        applies_when: "Business confirms decimal intent"
+    tests: [TC-TD-05-001, TC-TD-05-101]
+    validation_normalisation: "None"
+    mismatch_signatures: [scale_truncation]
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-teradata
+
+  - id: TD-06
+    source_dialect: teradata
+    title: BTEQ error handling and .ACTIVITYCOUNT control flow must be rebuilt
+    severity: S2
+    checklist_items: [12]
+    symptoms:
+      - "Converted scripts continue after failures or skip steps"
+    detection:
+      type: static
+      static_rule: ".IF ERRORCODE/.ACTIVITYCOUNT, .GOTO/.LABEL, .QUIT, .ERRORLEVEL dot-commands"
+      detector: static.td_bteq_control
+    fix_patterns:
+      - id: FX-TD-06-A
+        description: "Rebuild as Snowflake Scripting with EXCEPTION blocks and SQLROWCOUNT, orchestrated by tasks or an external orchestrator"
+        applies_when: "Always"
+    tests: [TC-TD-06-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-teradata
+
+  - id: TD-07
+    source_dialect: teradata
+    title: Recursive views and deep view stacks perform differently
+    severity: S3
+    checklist_items: []
+    symptoms:
+      - "Queries over view stacks are slower and more expensive in Snowflake"
+    detection:
+      type: profile
+      static_rule: "CREATE RECURSIVE VIEW / WITH RECURSIVE"
+      profile_rule: "View dependency depth above rubric.patterns.profile.view_depth_max"
+      detector: profile.view_depth
+      extra_detectors: [static.recursive_view]
+    fix_patterns:
+      - id: FX-TD-07-A
+        description: "Materialise intermediate layers as dynamic tables; flatten view stacks"
+        applies_when: "Depth above rubric limit and the stack is queried frequently"
+    tests: [TC-TD-07-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-teradata
+
+  - id: TD-08
+    source_dialect: teradata
+    title: Teradata-style UPDATE ... FROM with joins and ambiguous multi-match updates
+    severity: S1
+    checklist_items: [8]
+    symptoms:
+      - "Updated values differ between runs or from the source baseline"
+      - "Snowflake raises 'Duplicate row detected during DML action' when ERROR_ON_NONDETERMINISTIC_UPDATE is set"
+    detection:
+      type: static_and_profile
+      static_rule: "UPDATE <t> FROM <t>, <s> / UPDATE ... SET ... FROM joins and MERGE with a source that may be non-unique on the join key"
+      profile_rule: "Join key of the update source is not unique (distinct count < row count)"
+      detector: static.update_from_join
+      extra_detectors: [profile.update_source_uniqueness]
+    fix_patterns:
+      - id: FX-TD-08-A
+        description: "Pre-aggregate or dedupe the update source to one row per target key (GROUP BY key / QUALIFY ROW_NUMBER() = 1)"
+        applies_when: "Always for multi-match sources"
+    tests: [TC-TD-08-001, TC-TD-08-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-teradata
+
+  - id: TD-09
+    source_dialect: teradata
+    title: TASM workload priorities have no 1:1 equivalent
+    severity: S3
+    checklist_items: []
+    symptoms:
+      - "Mixed workloads contend after cutover; SLAs slip at peak"
+    detection:
+      type: profile
+      profile_rule: "TASM/TIWM workload definitions present in the harvest"
+      detector: profile.tasm_workloads
+    fix_patterns:
+      - id: FX-TD-09-A
+        description: "Map workloads to dedicated warehouses with resource monitors and query acceleration where justified"
+        applies_when: "Always"
+    tests: [TC-TD-09-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: true
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-teradata
+
+  - id: TD-10
+    source_dialect: teradata
+    title: Identity columns and GENERATED ALWAYS gaps
+    severity: S4
+    checklist_items: []
+    symptoms:
+      - "Surrogate key values differ or have gaps after migration"
+    detection:
+      type: static
+      static_rule: "GENERATED ALWAYS|BY DEFAULT AS IDENTITY in DDL"
+      detector: static.identity_columns
+    fix_patterns:
+      - id: FX-TD-10-A
+        description: "Use sequences/AUTOINCREMENT; never assume gap-free or ordered values; carry source keys during migration"
+        applies_when: "Always"
+    tests: [TC-TD-10-101]
+    validation_normalisation: "Exclude generated surrogate keys from L3 hashing when re-generated in target"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-teradata
+
+  - id: TD-11
+    source_dialect: teradata
+    title: Timestamp precision and time-zone session defaults
+    severity: S1
+    checklist_items: [4, 11]
+    symptoms:
+      - "Daily aggregates shift rows across day boundaries"
+      - "Timestamps differ by whole hours or in fractional seconds"
+    detection:
+      type: static_and_profile
+      static_rule: "SET TIME ZONE, AT LOCAL/AT TIME ZONE, TIMESTAMP(n) WITH TIME ZONE, CAST(timestamp AS DATE)"
+      profile_rule: "DBS Control / session time zone not UTC in the settings harvest"
+      detector: static.td_timestamp_tz
+      extra_detectors: [profile.session_timezone]
+    fix_patterns:
+      - id: FX-TD-11-A
+        description: "Standardise a TIMESTAMP_NTZ (UTC) vs TIMESTAMP_TZ policy upfront; convert explicitly with CONVERT_TIMEZONE where business days are local"
+        applies_when: "Always (programme-level ADR)"
+    tests: [TC-TD-11-001, TC-TD-11-101]
+    validation_normalisation: "Compare timestamps in UTC at the agreed precision"
+    mismatch_signatures: [timezone_shift, timestamp_precision]
+    decision_required: true
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-teradata

@@ -1,0 +1,135 @@
+dialect: netezza
+version: 1.0.0
+description: Netezza (IBM PureData) known-issues register (Section 10.4).
+known_issues:
+  - id: NZ-01
+    source_dialect: netezza
+    title: Distribution keys and zone-map design are irrelevant in Snowflake
+    severity: S3
+    checklist_items: []
+    symptoms:
+      - "Effort spent emulating DISTRIBUTE ON / ORGANIZE ON"
+    detection:
+      type: static
+      static_rule: "DISTRIBUTE ON, ORGANIZE ON, GROOM TABLE, GENERATE STATISTICS"
+      detector: static.nz_distribution
+    fix_patterns:
+      - id: FX-NZ-01-A
+        description: "Drop distribution/organisation clauses; cluster only when measured pruning benefit justifies it"
+        applies_when: "Always"
+    tests: [TC-NZ-01-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-netezza
+
+  - id: NZ-02
+    source_dialect: netezza
+    title: NZPLSQL stored procedures need rewriting
+    severity: S2
+    checklist_items: [12]
+    symptoms:
+      - "Procedures fail to convert automatically"
+    detection:
+      type: static
+      static_rule: "LANGUAGE NZPLSQL, BEGIN_PROC/END_PROC"
+      detector: static.nz_nzplsql
+    fix_patterns:
+      - id: FX-NZ-02-A
+        description: "Rewrite in Snowflake Scripting, set-based where possible"
+        applies_when: "Always"
+    tests: [TC-NZ-02-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-netezza
+
+  - id: NZ-03
+    source_dialect: netezza
+    title: nzsql shell orchestration must be rebuilt
+    severity: S2
+    checklist_items: []
+    symptoms:
+      - "Control flow and error handling live in shell scripts around nzsql/nzload"
+    detection:
+      type: static
+      static_rule: "nzsql, nzload, nz_migrate invocations in shell scripts"
+      detector: static.nz_shell
+    fix_patterns:
+      - id: FX-NZ-03-A
+        description: "Snowflake SQL + orchestrator (tasks or external) with explicit error handling; COPY INTO for nzload"
+        applies_when: "Always"
+    tests: [TC-NZ-03-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-netezza
+
+  - id: NZ-04
+    source_dialect: netezza
+    title: Integer division returns an integer in Netezza; Snowflake returns a decimal
+    severity: S1
+    checklist_items: [3]
+    symptoms:
+      - "Ratios and averages gain decimals"
+    detection:
+      type: static
+      static_rule: "Integer expression / integer expression"
+      detector: static.int_division
+    fix_patterns:
+      - id: FX-NZ-04-A
+        description: "TRUNC(a / b) where integer semantics were intended; explicit NUMBER cast otherwise"
+        applies_when: "Always"
+    tests: [TC-NZ-04-001]
+    validation_normalisation: "None"
+    mismatch_signatures: [scale_truncation]
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-netezza
+
+  - id: NZ-05
+    source_dialect: netezza
+    title: Date behaviours differ (day-of-week numbering, date part semantics)
+    severity: S1
+    checklist_items: [4, 11]
+    symptoms:
+      - "Weekday buckets shifted by one (Netezza DOW Sunday=1; Snowflake DAYOFWEEK Sunday=0 with WEEK_START=0)"
+    detection:
+      type: static
+      static_rule: "EXTRACT(DOW ...), DATE_PART('dow', ...), TO_CHAR(..., 'D')"
+      detector: static.nz_date_behaviour
+    fix_patterns:
+      - id: FX-NZ-05-A
+        description: "DAYOFWEEK(d) + 1 (with WEEK_START = 0) or DAYOFWEEKISO per agreed calendar; set WEEK_START explicitly"
+        applies_when: "Always"
+    tests: [TC-NZ-05-001]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-netezza
+
+  - id: NZ-06
+    source_dialect: netezza
+    title: End-of-support timelines drive deadline pressure
+    severity: S4
+    checklist_items: []
+    symptoms:
+      - "Migration scope squeezed by appliance end of support"
+    detection:
+      type: profile
+      profile_rule: "Platform end-of-support date within rubric.patterns.profile.end_of_support_horizon_days"
+      detector: profile.end_of_support
+    fix_patterns:
+      - id: FX-NZ-06-A
+        description: "Favour lift-and-shift + refactor backlog to meet the deadline"
+        applies_when: "End of support inside the horizon"
+    tests: [TC-NZ-06-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: true
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-netezza

@@ -1,0 +1,84 @@
+dialect: netezza
+description: Golden and detector tests for the Netezza register.
+test_cases:
+  - id: TC-NZ-04-001
+    issue_id: NZ-04
+    kind: golden
+    description: Integer division truncates in Netezza and returns a decimal in Snowflake
+    source_sql: |
+      CREATE TABLE sales.daily_units (store_id INTEGER, units INTEGER) DISTRIBUTE ON (store_id);
+      SELECT SUM(units) / COUNT(*) AS avg_units FROM sales.daily_units;
+    fixture: |
+      CREATE TABLE daily_units (store_id INTEGER, units INTEGER);
+      INSERT INTO daily_units VALUES (1, 7), (2, 2), (3, 2);
+    source_emulation: |
+      SELECT SUM(units) // COUNT(*) FROM daily_units;
+    naive:
+      snowflake: SELECT SUM(units) / COUNT(*) AS avg_units FROM daily_units;
+      expect: diverge
+    fixed:
+      snowflake: SELECT TRUNC(SUM(units) / COUNT(*)) AS avg_units FROM daily_units;
+    fix_pattern: FX-NZ-04-A
+    expected_rows: [[3]]
+
+  - id: TC-NZ-05-001
+    issue_id: NZ-05
+    kind: golden
+    description: EXTRACT(DOW) is 1-7 (Sunday = 1) in Netezza and 0-6 in Snowflake (WEEK_START = 0)
+    source_sql: |
+      SELECT EXTRACT(DOW FROM sale_date) AS dow, COUNT(*) FROM sales.daily GROUP BY 1 ORDER BY 1;
+    fixture: |
+      CREATE TABLE daily (sale_date DATE);
+      INSERT INTO daily VALUES ('2026-10-04'), ('2026-10-05'), ('2026-10-05');
+    source_emulation: |
+      -- Netezza: Sunday = 1 ... Saturday = 7
+      SELECT dayofweek(sale_date) + 1 AS dow, COUNT(*) FROM daily GROUP BY 1 ORDER BY 1;
+    naive:
+      snowflake: SELECT EXTRACT(DOW FROM sale_date) AS dow, COUNT(*) FROM daily GROUP BY 1 ORDER BY 1;
+      expect: diverge
+    fixed:
+      snowflake: SELECT DAYOFWEEK(sale_date) + 1 AS dow, COUNT(*) FROM daily GROUP BY 1 ORDER BY 1;
+    fix_pattern: FX-NZ-05-A
+    expected_rows: [[1, 1], [2, 2]]
+
+  - id: TC-NZ-01-101
+    issue_id: NZ-01
+    kind: detector
+    description: Distribution and organisation clauses
+    source_sql: |
+      CREATE TABLE sales.fact (id INTEGER, d DATE) DISTRIBUTE ON (id) ORGANIZE ON (d);
+      GROOM TABLE sales.fact;
+    expect_issues: [NZ-01]
+
+  - id: TC-NZ-02-101
+    issue_id: NZ-02
+    kind: detector
+    description: NZPLSQL procedure
+    source_sql: |
+      CREATE OR REPLACE PROCEDURE etl.load_day(DATE) RETURNS INTEGER LANGUAGE NZPLSQL AS
+      BEGIN_PROC
+      BEGIN
+        INSERT INTO sales.fact SELECT * FROM stage.fact;
+        RETURN 0;
+      END;
+      END_PROC;
+    expect_issues: [NZ-02]
+
+  - id: TC-NZ-03-101
+    issue_id: NZ-03
+    kind: detector
+    description: nzsql/nzload shell orchestration
+    source_sql: |
+      #!/bin/sh
+      nzload -db SALES -t FACT -df /data/fact.dat -delim '|' || exit 1
+      nzsql -db SALES -f /etl/post_load.sql
+    expect_issues: [NZ-03]
+
+  - id: TC-NZ-06-101
+    issue_id: NZ-06
+    kind: profile
+    description: Appliance end of support inside the horizon
+    source_sql: ""
+    profile:
+      platform: {end_of_support: "2027-06-30", as_of: "2026-10-01"}
+    expect_issues: [NZ-06]

@@ -1,0 +1,17 @@
+dialect: oracle
+version: 1.0.0
+description: Oracle to Snowflake conversion map (Section 10.2 highlights).
+mappings:
+  - {id: MAP-OR-001, category: types, source_construct: "NUMBER (no precision/scale)", target_construct: "NUMBER(38, s) with explicit scale, or FLOAT", note: "Snowflake defaults scale 0", related_issues: [OR-02], last_verified: "2026-10-01", verified_by: practice-lead-oracle}
+  - {id: MAP-OR-002, category: types, source_construct: "VARCHAR2(n BYTE/CHAR)", target_construct: "VARCHAR(n) (characters)", note: "", related_issues: [OR-01], last_verified: "2026-10-01", verified_by: practice-lead-oracle}
+  - {id: MAP-OR-003, category: types, source_construct: "DATE", target_construct: "TIMESTAMP_NTZ", note: "Oracle DATE contains time", related_issues: [OR-03], last_verified: "2026-10-01", verified_by: practice-lead-oracle}
+  - {id: MAP-OR-004, category: types, source_construct: "TIMESTAMP WITH LOCAL TIME ZONE", target_construct: "TIMESTAMP_LTZ", note: "", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-oracle}
+  - {id: MAP-OR-005, category: procedural, source_construct: "PL/SQL package", target_construct: "Schema + procedures/UDFs; package state to table/session variables", note: "No packages", related_issues: [OR-04], last_verified: "2026-10-01", verified_by: practice-lead-oracle}
+  - {id: MAP-OR-006, category: sql, source_construct: "CONNECT BY", target_construct: "CONNECT BY or recursive CTE", note: "Supported; test ordering", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-oracle}
+  - {id: MAP-OR-007, category: ddl, source_construct: "Sequences", target_construct: "Sequences", note: "Gaps, no CURRVAL parity in all contexts", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-oracle}
+  - {id: MAP-OR-008, category: procedural, source_construct: "Triggers", target_construct: "Streams + tasks, or move logic into pipelines", note: "Not supported", related_issues: [OR-07], last_verified: "2026-10-01", verified_by: practice-lead-oracle}
+  - {id: MAP-OR-009, category: sql, source_construct: "ROWNUM", target_construct: "ROW_NUMBER() / LIMIT", note: "", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-oracle}
+  - {id: MAP-OR-010, category: ddl, source_construct: "Materialized views", target_construct: "Dynamic tables (usually)", note: "Snowflake MV restrictions", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-oracle}
+  - {id: MAP-OR-011, category: ddl, source_construct: "Global temporary tables", target_construct: "Temporary/transient tables", note: "", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-oracle}
+  - {id: MAP-OR-012, category: procedural, source_construct: "DBMS_* utilities", target_construct: "Rewritten", note: "Case-by-case", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-oracle}
+  - {id: MAP-OR-013, category: integration, source_construct: "DB links", target_construct: "Data sharing / external access / pipelines", note: "", related_issues: [], last_verified: "2026-10-01", verified_by: practice-lead-oracle}

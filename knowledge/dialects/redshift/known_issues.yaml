@@ -1,0 +1,115 @@
+dialect: redshift
+version: 1.0.0
+description: Amazon Redshift known-issues register (Section 10.5).
+known_issues:
+  - id: RS-01
+    source_dialect: redshift
+    title: Case-folding of identifiers when quoted identifiers are used
+    severity: S2
+    checklist_items: [1]
+    symptoms:
+      - "Objects created with quoted mixed-case names are not found (Redshift folds to lower case, Snowflake to upper case)"
+    detection:
+      type: static
+      static_rule: "Quoted identifiers containing lower-case letters; enable_case_sensitive_identifier"
+      detector: static.quoted_identifiers
+    fix_patterns:
+      - id: FX-RS-01-A
+        description: "Identifier policy: unquote and upper-case, or quote consistently everywhere (QUOTED_IDENTIFIERS_IGNORE_CASE where agreed)"
+        applies_when: "Always"
+    tests: [TC-RS-01-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: true
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-redshift
+
+  - id: RS-02
+    source_dialect: redshift
+    title: VARCHAR lengths are bytes in Redshift and characters in Snowflake
+    severity: S2
+    checklist_items: []
+    symptoms:
+      - "Length checks and fixed-width extracts differ for multibyte data"
+    detection:
+      type: static_and_profile
+      static_rule: "VARCHAR(n)/CHAR(n) declarations"
+      profile_rule: "Profiled max byte length differs from max character length"
+      detector: static.rs_varchar_length
+      extra_detectors: [profile.varchar_multibyte]
+    fix_patterns:
+      - id: FX-RS-02-A
+        description: "Re-derive VARCHAR(n) in characters from profiled data; review LENGTH/OCTET_LENGTH usage"
+        applies_when: "Multibyte data present"
+    tests: [TC-RS-02-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-redshift
+
+  - id: RS-03
+    source_dialect: redshift
+    title: Late-binding views
+    severity: S2
+    checklist_items: []
+    symptoms:
+      - "Views reference objects that do not exist yet; deployment order breaks"
+    detection:
+      type: static
+      static_rule: "WITH NO SCHEMA BINDING"
+      detector: static.rs_late_binding_views
+    fix_patterns:
+      - id: FX-RS-03-A
+        description: "Deploy views in dependency order; validate references at build time"
+        applies_when: "Always"
+    tests: [TC-RS-03-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-redshift
+
+  - id: RS-04
+    source_dialect: redshift
+    title: UNLOAD patterns must be re-pointed
+    severity: S4
+    checklist_items: []
+    symptoms:
+      - "Downstream file consumers stop receiving extracts"
+    detection:
+      type: static
+      static_rule: "UNLOAD ('...') TO 's3://...'"
+      detector: static.rs_unload
+    fix_patterns:
+      - id: FX-RS-04-A
+        description: "COPY INTO @stage with explicit file format; data sharing where consumers allow"
+        applies_when: "Always"
+    tests: [TC-RS-04-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-redshift
+
+  - id: RS-05
+    source_dialect: redshift
+    title: DISTKEY/SORTKEY/ENCODE tuning has no equivalent
+    severity: S3
+    checklist_items: []
+    symptoms:
+      - "Effort spent emulating distribution and sort keys"
+    detection:
+      type: static
+      static_rule: "DISTKEY, SORTKEY, DISTSTYLE, INTERLEAVED, ENCODE"
+      detector: static.rs_dist_sort
+    fix_patterns:
+      - id: FX-RS-05-A
+        description: "Remove; cluster only when measured pruning benefit justifies it"
+        applies_when: "Always"
+    tests: [TC-RS-05-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-redshift

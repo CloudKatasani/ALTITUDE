@@ -1,0 +1,262 @@
+dialect: oracle
+version: 1.0.0
+description: Oracle (incl. Exadata) known-issues register (Section 10.2).
+known_issues:
+  - id: OR-01
+    source_dialect: oracle
+    title: Empty string treated as NULL in Oracle; distinct value in Snowflake
+    severity: S1
+    checklist_items: [2]
+    symptoms:
+      - "Row counts match but COUNT(col) and IS NULL filters differ"
+      - "String concatenation results differ"
+    detection:
+      type: static_and_profile
+      static_rule: "Predicates using IS NULL / IS NOT NULL / NVL / COALESCE on VARCHAR2 columns, comparisons with '' and || concatenation"
+      profile_rule: "Null-count on Snowflake side lower than source for same column after load"
+      detector: static.or_empty_string_null
+      extra_detectors: [profile.null_count_delta]
+    fix_patterns:
+      - id: FX-OR-01-A
+        description: "Normalise at ingestion: NULLIF(TRIM(col), '') for VARCHAR columns in raw to silver"
+        applies_when: "Programme policy = oracle_null_semantics"
+      - id: FX-OR-01-B
+        description: "Rewrite predicates: (col IS NULL OR col = ''); wrap concatenation operands in COALESCE(col, '')"
+        applies_when: "Raw layer must preserve exact source values"
+    tests: [TC-OR-01-001, TC-OR-01-002, TC-OR-01-101]
+    validation_normalisation: "Treat '' and NULL as equal for L3 hashing when policy A applied"
+    mismatch_signatures: [empty_vs_null]
+    decision_required: true
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-oracle
+
+  - id: OR-02
+    source_dialect: oracle
+    title: Unscaled NUMBER mapped to scale 0 truncates decimals
+    severity: S1
+    checklist_items: [3]
+    symptoms:
+      - "SUM/AVG differ; amounts rounded to whole units"
+    detection:
+      type: static_and_profile
+      static_rule: "NUMBER without precision/scale (or NUMBER(*)) in DDL, PL/SQL declarations and casts"
+      profile_rule: "Profiled max scale of the source column exceeds the target column scale"
+      detector: static.or_unscaled_number
+      extra_detectors: [profile.max_scale]
+    fix_patterns:
+      - id: FX-OR-02-A
+        description: "Profile max scale (metadata stats or permission-gated sample) and declare NUMBER(38, s) explicitly"
+        applies_when: "Always"
+      - id: FX-OR-02-B
+        description: "Map to FLOAT only for genuinely approximate measures (checklist item 10 applies)"
+        applies_when: "Scientific/approximate values"
+    tests: [TC-OR-02-001, TC-OR-02-101]
+    validation_normalisation: "Canonical decimal rendering only; never round to the target scale"
+    mismatch_signatures: [scale_truncation]
+    decision_required: true
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-oracle
+
+  - id: OR-03
+    source_dialect: oracle
+    title: Oracle DATE time component lost when mapped to DATE
+    severity: S1
+    checklist_items: [4]
+    symptoms:
+      - "Intraday filters and ordering differ; timestamps show midnight"
+    detection:
+      type: static_and_profile
+      static_rule: "DATE columns in DDL, SYSDATE, TO_DATE with time formats, TRUNC(date)"
+      profile_rule: "Source DATE column has non-midnight values and the target type is DATE"
+      detector: static.or_date_type
+      extra_detectors: [profile.date_time_component]
+    fix_patterns:
+      - id: FX-OR-03-A
+        description: "Map Oracle DATE to TIMESTAMP_NTZ; fix downstream comparisons that relied on TRUNC"
+        applies_when: "Always"
+    tests: [TC-OR-03-001, TC-OR-03-101]
+    validation_normalisation: "None"
+    mismatch_signatures: [time_component_lost]
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-oracle
+
+  - id: OR-04
+    source_dialect: oracle
+    title: Packages with global state, overloading and autonomous transactions
+    severity: S2
+    checklist_items: [12]
+    symptoms:
+      - "Converted procedures lose package state between calls; logging rolls back with the caller"
+    detection:
+      type: static
+      static_rule: "CREATE PACKAGE [BODY], package-level variables, PRAGMA AUTONOMOUS_TRANSACTION"
+      detector: static.or_package_state
+    fix_patterns:
+      - id: FX-OR-04-A
+        description: "Decompose into schema + procedures/UDFs; move state into tables or session variables; redesign autonomous logging"
+        applies_when: "Always"
+    tests: [TC-OR-04-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-oracle
+
+  - id: OR-05
+    source_dialect: oracle
+    title: Row-by-row BULK COLLECT / cursor loops
+    severity: S3
+    checklist_items: []
+    symptoms:
+      - "Converted procedures are slow and expensive"
+    detection:
+      type: static
+      static_rule: "BULK COLLECT, FORALL, explicit cursors, FOR rec IN (SELECT ...) loops"
+      detector: static.cursor_loops
+    fix_patterns:
+      - id: FX-OR-05-A
+        description: "Set-based rewrite (INSERT ... SELECT / MERGE); AI refactor agent with generated unit tests"
+        applies_when: "Always"
+    tests: [TC-OR-05-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-oracle
+
+  - id: OR-06
+    source_dialect: oracle
+    title: Legacy (+) outer joins
+    severity: S2
+    checklist_items: []
+    symptoms:
+      - "Conversion errors or inner-join semantics after naive rewrite"
+    detection:
+      type: static
+      static_rule: "(+) operator in WHERE clauses"
+      detector: static.or_outer_join_plus
+    fix_patterns:
+      - id: FX-OR-06-A
+        description: "Convert to ANSI LEFT/RIGHT OUTER JOIN, keeping filter predicates on the optional side in the ON clause"
+        applies_when: "Always"
+    tests: [TC-OR-06-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-oracle
+
+  - id: OR-07
+    source_dialect: oracle
+    title: Triggers used for audit or derivation
+    severity: S2
+    checklist_items: [6]
+    symptoms:
+      - "Audit columns or derived values stop being populated"
+    detection:
+      type: static
+      static_rule: "CREATE [OR REPLACE] TRIGGER"
+      detector: static.triggers
+    fix_patterns:
+      - id: FX-OR-07-A
+        description: "Streams + tasks or pipeline logic; audit via ACCESS_HISTORY"
+        applies_when: "Always"
+    tests: [TC-OR-07-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-oracle
+
+  - id: OR-08
+    source_dialect: oracle
+    title: NLS_* session settings drive date formats, sort and comparison
+    severity: S1
+    checklist_items: [11, 7]
+    symptoms:
+      - "Date strings render differently (01-OCT-26 vs 2026-10-01); string sort order differs"
+    detection:
+      type: static_and_profile
+      static_rule: "ALTER SESSION SET NLS_*, TO_CHAR/TO_DATE without an explicit format model"
+      profile_rule: "Non-default NLS_DATE_FORMAT / NLS_SORT / NLS_COMP in the settings harvest"
+      detector: static.or_nls
+      extra_detectors: [profile.nls_settings]
+    fix_patterns:
+      - id: FX-OR-08-A
+        description: "Harvest NLS settings and make every format explicit, e.g. UPPER(TO_CHAR(d, 'DD-MON-YY')) to reproduce NLS_DATE_FORMAT=DD-MON-RR"
+        applies_when: "Always"
+    tests: [TC-OR-08-001, TC-OR-08-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: true
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-oracle
+
+  - id: OR-09
+    source_dialect: oracle
+    title: LOB sizes, LONG, XMLTYPE and spatial types
+    severity: S2
+    checklist_items: []
+    symptoms:
+      - "Load failures on oversized values; XML/spatial functions unavailable"
+    detection:
+      type: static
+      static_rule: "LONG, LONG RAW, CLOB/BLOB/NCLOB, BFILE, XMLTYPE, SDO_GEOMETRY"
+      detector: static.or_lob_types
+    fix_patterns:
+      - id: FX-OR-09-A
+        description: "Check current Snowflake size limits; VARIANT/GEOGRAPHY; externalise large binaries to object storage"
+        applies_when: "Always"
+    tests: [TC-OR-09-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-oracle
+
+  - id: OR-10
+    source_dialect: oracle
+    title: Exadata performance relied on smart scan, HCC and partition pruning
+    severity: S3
+    checklist_items: []
+    symptoms:
+      - "Large scans slower than on Exadata until clustering/pruning is designed"
+    detection:
+      type: profile
+      static_rule: "COMPRESS FOR QUERY/ARCHIVE, PARALLEL degree clauses"
+      profile_rule: "Exadata features (smart scan, HCC) present in the platform harvest"
+      detector: profile.exadata_features
+      extra_detectors: [static.or_exadata_storage]
+    fix_patterns:
+      - id: FX-OR-10-A
+        description: "Clustering keys only for very large, frequently filtered tables; measure first"
+        applies_when: "After L5 performance baseline"
+    tests: [TC-OR-10-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: false
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-oracle
+
+  - id: OR-11
+    source_dialect: oracle
+    title: Oracle licensing exposure during migration (extra cores for unload, diagnostic packs)
+    severity: S4
+    checklist_items: []
+    symptoms:
+      - "Unplanned licence true-up after AWR/ASH use or extra unload cores"
+    detection:
+      type: profile
+      profile_rule: "Diagnostics/Tuning Pack usage or planned unload capacity above licensed cores"
+      detector: profile.licensing_exposure
+    fix_patterns:
+      - id: FX-OR-11-A
+        description: "Licence review in Phase 0; use DBA_* views instead of AWR when packs are not licensed"
+        applies_when: "Always"
+    tests: [TC-OR-11-101]
+    validation_normalisation: "None"
+    mismatch_signatures: []
+    decision_required: true
+    last_verified: "2026-10-01"
+    verified_by: practice-lead-oracle

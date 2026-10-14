@@ -1,0 +1,125 @@
+dialect: sqlserver
+description: Golden tests for SQL Server S1 issues (see teradata/tests/golden.yaml for the structure).
+test_cases:
+  - id: TC-MS-01-001
+    issue_id: MS-01
+    kind: golden
+    description: Case-insensitive default collation matches every case variant of a literal
+    source_sql: |
+      CREATE TABLE dbo.customer (customer_id INT, status VARCHAR(20));
+      SELECT COUNT(*) FROM dbo.customer WHERE status = 'active';
+    fixture: |
+      CREATE TABLE customer (customer_id INTEGER, status VARCHAR);
+      INSERT INTO customer VALUES (1, 'Active'), (2, 'ACTIVE'), (3, 'active'), (4, 'Closed');
+    source_emulation: |
+      -- SQL_Latin1_General_CP1_CI_AS: comparisons ignore case
+      SELECT COUNT(*) FROM customer WHERE lower(status) = lower('active');
+    naive:
+      snowflake: SELECT COUNT(*) FROM customer WHERE status = 'active';
+      expect: diverge
+    fixed:
+      snowflake: SELECT COUNT(*) FROM customer WHERE UPPER(status) = UPPER('active');
+    fix_pattern: FX-MS-01-B
+    expected_rows: [[3]]
+
+  - id: TC-MS-01-002
+    issue_id: MS-01
+    kind: golden
+    description: COUNT(DISTINCT) collapses case variants under a case-insensitive collation
+    source_sql: |
+      CREATE TABLE dbo.customer (customer_id INT, status VARCHAR(20));
+      SELECT COUNT(DISTINCT status) FROM dbo.customer;
+    fixture: |
+      CREATE TABLE customer (customer_id INTEGER, status VARCHAR);
+      INSERT INTO customer VALUES (1, 'Active'), (2, 'ACTIVE'), (3, 'active'), (4, 'Closed');
+    source_emulation: |
+      SELECT COUNT(DISTINCT lower(status)) FROM customer;
+    naive:
+      snowflake: SELECT COUNT(DISTINCT status) FROM customer;
+      expect: diverge
+    fixed:
+      snowflake: SELECT COUNT(DISTINCT UPPER(status)) FROM customer;
+    fix_pattern: FX-MS-01-B
+    expected_rows: [[2]]
+
+  - id: TC-MS-02-001
+    issue_id: MS-02
+    kind: golden
+    description: "'23:59:59.999' rounds to next-day midnight in DATETIME, so SQL Server includes midnight rows"
+    source_sql: |
+      CREATE TABLE dbo.events (event_id INT, event_ts DATETIME);
+      DECLARE @day_end DATETIME = '2026-10-01 23:59:59.999';
+      SELECT COUNT(*) FROM dbo.events WHERE event_ts BETWEEN '2026-10-01' AND @day_end;
+    fixture: |
+      CREATE TABLE events (event_id INTEGER, event_ts TIMESTAMP);
+      INSERT INTO events VALUES (1, '2026-10-01 08:00:00'), (2, '2026-10-01 23:59:59.997'), (3, '2026-10-02 00:00:00');
+    source_emulation: |
+      -- DATETIME stores 1/300 s ticks: the boundary literal is rounded to the nearest tick
+      SELECT COUNT(*) FROM events
+      WHERE event_ts BETWEEN TIMESTAMP '2026-10-01 00:00:00'
+        AND make_timestamp(CAST(round(epoch_ms(TIMESTAMP '2026-10-01 23:59:59.999') * 3 / 10.0) * 10 // 3 AS BIGINT) * 1000);
+    naive:
+      snowflake: SELECT COUNT(*) FROM events WHERE event_ts BETWEEN '2026-10-01' AND '2026-10-01 23:59:59.999';
+      expect: diverge
+    fixed:
+      snowflake: |
+        SELECT COUNT(*) FROM events
+        WHERE event_ts BETWEEN '2026-10-01 00:00:00.000'::TIMESTAMP_NTZ(3) AND '2026-10-02 00:00:00.000'::TIMESTAMP_NTZ(3);
+    fix_pattern: FX-MS-02-A
+    expected_rows: [[3]]
+
+  - id: TC-MS-04-001
+    issue_id: MS-04
+    kind: golden
+    description: SET DATEFORMAT dmy reads '01/10/2026' as 1 October; Snowflake AUTO reads 10 January
+    source_sql: |
+      SET DATEFORMAT dmy;
+      SELECT COUNT(*) FROM dbo.orders WHERE order_date = '01/10/2026';
+    fixture: |
+      CREATE TABLE orders (order_id INTEGER, order_date DATE);
+      INSERT INTO orders VALUES (1, '2026-10-01'), (2, '2026-10-01'), (3, '2026-01-10');
+    source_emulation: |
+      SELECT COUNT(*) FROM orders WHERE order_date = CAST(strptime('01/10/2026', '%d/%m/%Y') AS DATE);
+    naive:
+      snowflake: SELECT COUNT(*) FROM orders WHERE order_date = '01/10/2026';
+      duckdb: |
+        -- Snowflake DATE_INPUT_FORMAT=AUTO resolves MM/DD/YYYY
+        SELECT COUNT(*) FROM orders WHERE order_date = CAST(strptime('01/10/2026', '%m/%d/%Y') AS DATE);
+      expect: diverge
+    fixed:
+      snowflake: SELECT COUNT(*) FROM orders WHERE order_date = TO_DATE('01/10/2026', 'DD/MM/YYYY');
+    fix_pattern: FX-MS-04-A
+    expected_rows: [[2]]
+
+  - id: TC-MS-08-001
+    issue_id: MS-08
+    kind: golden
+    description: ON DELETE CASCADE removes child rows in SQL Server; Snowflake leaves orphans
+    source_sql: |
+      CREATE TABLE dbo.customer (customer_id INT PRIMARY KEY, name VARCHAR(50));
+      CREATE TABLE dbo.orders (
+        order_id INT PRIMARY KEY,
+        customer_id INT REFERENCES dbo.customer (customer_id) ON DELETE CASCADE
+      );
+      DELETE FROM dbo.customer WHERE customer_id = 1;
+      SELECT COUNT(*) FROM dbo.orders;
+    fixture: |
+      CREATE TABLE customer (customer_id INTEGER, name VARCHAR);
+      INSERT INTO customer VALUES (1, 'A'), (2, 'B');
+      CREATE TABLE orders (order_id INTEGER, customer_id INTEGER);
+      INSERT INTO orders VALUES (10, 1), (11, 1), (12, 2);
+    source_emulation: |
+      -- the engine cascades the parent delete to orders
+      SELECT COUNT(*) FROM orders o WHERE NOT EXISTS (SELECT 1 FROM customer c WHERE c.customer_id = o.customer_id AND c.customer_id = 1);
+    naive:
+      snowflake: |
+        DELETE FROM customer WHERE customer_id = 1;
+        SELECT COUNT(*) FROM orders;
+      expect: diverge
+    fixed:
+      snowflake: |
+        DELETE FROM orders WHERE customer_id IN (SELECT customer_id FROM customer WHERE customer_id = 1);
+        DELETE FROM customer WHERE customer_id = 1;
+        SELECT COUNT(*) FROM orders;
+    fix_pattern: FX-MS-08-A
+    expected_rows: [[1]]
