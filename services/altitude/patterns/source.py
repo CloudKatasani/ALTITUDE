@@ -141,10 +141,11 @@ class SourceContext:
             line = self.line_of(m.start())
             yield Match(line, self.line_text(line), m)
 
-    def find_in(self, stmt: Statement, pattern: str, flags: int = re.IGNORECASE) -> Iterator[Match]:
-        """Regex over one statement's nostr view."""
+    def find_in(self, stmt: Statement, pattern: str, flags: int = re.IGNORECASE,
+                view: str = "nostr") -> Iterator[Match]:
+        """Regex over one statement (``nostr`` view by default; ``code`` keeps string literals)."""
         rx = re.compile(pattern, flags)
-        seg = self.nostr[stmt.start:stmt.start + len(stmt.text)]
+        seg = (self.nostr if view == "nostr" else self.code)[stmt.start:stmt.start + len(stmt.text)]
         for m in rx.finditer(seg):
             line = self.line_of(stmt.start + m.start())
             yield Match(line, self.line_text(line), m)
@@ -178,11 +179,17 @@ class SourceContext:
             if body.startswith(".") or _GO_LINE.fullmatch(body) or body.upper() == "GO":
                 err = "dot-command"
             else:
-                try:
-                    parsed = sqlglot.parse(text, read=read, error_level=ErrorLevel.RAISE)
-                    ast = next((p for p in parsed if p is not None), None)
-                except (ParseError, TokenError, ValueError, RecursionError) as e:  # pragma: no branch
-                    err = str(e).splitlines()[0][:200] if str(e) else type(e).__name__
+                ast, err = _parse(text, read)
+                if ast is None or isinstance(ast, exp.Command):
+                    # Statement recovery: procedural wrappers (CREATE PROCEDURE ... BEGIN, BEGIN TRY, IS BEGIN)
+                    # do not parse, but the DML inside them usually does.
+                    m = _DML.search(self.nostr, start + 1, b)
+                    if m:
+                        rec_ast, _ = _parse(self.code[m.start():b], read)
+                        if rec_ast is not None and not isinstance(rec_ast, exp.Command):
+                            out.append(Statement(text=self.code[start:m.start()], start=start,
+                                                 start_line=self.line_of(start), ast=None, error=err or "command"))
+                            start, text, ast, err = m.start(), self.code[m.start():b], rec_ast, None
             out.append(Statement(text=text, start=start, start_line=self.line_of(start), ast=ast, error=err))
         return out
 
@@ -221,6 +228,17 @@ class SourceContext:
 
     def column_type(self, name: str) -> str | None:
         return self.ddl_columns.get(name.strip('"[]').lower())
+
+
+_DML = re.compile(r"\b(SELECT|INSERT|UPDATE|DELETE|MERGE|WITH)\b", re.IGNORECASE)
+
+
+def _parse(text: str, read: str | None) -> tuple[exp.Expression | None, str | None]:
+    try:
+        parsed = sqlglot.parse(text, read=read, error_level=ErrorLevel.RAISE)
+        return next((p for p in parsed if p is not None), None), None
+    except (ParseError, TokenError, ValueError, RecursionError) as e:
+        return None, (str(e).splitlines()[0][:200] if str(e) else type(e).__name__)
 
 
 def _paren_body(text: str, open_idx: int) -> str:

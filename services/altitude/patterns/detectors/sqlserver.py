@@ -24,6 +24,10 @@ def ms_case_insensitive(ctx: SourceContext, rubrics) -> Iterable[Finding]:
         yield hit(m, "strong", "explicit case-insensitive collation", rationale)
     for st in ctx.statements:
         if not st.parsed:
+            if st.error != "dot-command":
+                for m in ctx.find_in(st, r"(?<![@\w.])\b[\w.\]\[]+\s*(?:=|<>|!=|\bLIKE\b)\s*N?'([^']*)'", view="code"):
+                    if re.search(r"[A-Za-z]", m.m.group(1)):
+                        yield hit(m, "weak", "string comparison (token rule; statement did not parse)", rationale)
             continue
         for node in st.ast.find_all(exp.EQ, exp.NEQ, exp.Like, exp.In):
             sides = [node.this] + ([node.expression] if node.args.get("expression") is not None else [])

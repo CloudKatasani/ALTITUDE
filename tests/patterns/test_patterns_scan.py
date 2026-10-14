@@ -48,6 +48,22 @@ def test_bteq_and_unparseable_code_use_token_fallback():
     assert ("TD-08", 2) in ids and ("TD-06", 3) in ids
 
 
+def test_dml_inside_procedure_bodies_is_recovered_for_ast_rules():
+    tsql = ("CREATE PROCEDURE dbo.p AS\nBEGIN\n  BEGIN TRY\n    SELECT id FROM dbo.c\n"
+            "    WHERE region = 'EMEA';\n  END TRY\n  BEGIN CATCH THROW; END CATCH\nEND\n")
+    hits = [h for h in scan_sql(tsql, "sqlserver") if h.issue_id == "MS-01"]
+    assert [(h.line, h.confidence) for h in hits] == [(5, Scanner().rubrics.get(
+        "rubric.patterns.detector_confidence.medium"))]
+    ora = "CREATE OR REPLACE PROCEDURE p IS\nBEGIN\n  UPDATE c SET m = NVL(m, 'X') WHERE id = 1;\nEND;\n"
+    assert {h.line for h in scan_sql(ora, "oracle") if h.issue_id == "OR-01"} == {3}
+
+
+def test_token_fallback_for_unparseable_tsql():
+    sql = "IF @mode = 'Full' AND status = 'Active' GOTO x WITH garbage (((;\n"
+    hits = [h for h in scan_sql(sql, "sqlserver") if h.issue_id == "MS-01"]
+    assert len(hits) == 1 and "token rule" in hits[0].message  # @mode assignment-style compare is ignored
+
+
 def test_clean_ansi_teradata_has_no_s1_hits():
     sql = """
     CREATE MULTISET TABLE sales.orders (order_id INTEGER, amount DECIMAL(12,2), status VARCHAR(10) CASESPECIFIC)
