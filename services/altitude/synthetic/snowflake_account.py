@@ -77,6 +77,10 @@ class SyntheticAccount:
 # --------------------------------------------------------------------------- helpers
 
 
+def billed_full(w: dict, active: float) -> bool:
+    return active + w["bursts"] * w["auto_suspend"] / 3600.0 >= 1.0
+
+
 def _rng(spec: AccountSpec, *keys: Any) -> random.Random:
     h = hashlib.sha256(json.dumps([spec.seed, spec.account_name, *map(str, keys)]).encode()).hexdigest()
     return random.Random(int(h[:16], 16))
@@ -357,7 +361,7 @@ def generate(spec: AccountSpec | None = None) -> SyntheticAccount:
     # ---------------------------------------------------------------- account & client inputs
     T["ACCOUNT_INFO"].append(dict(ACCOUNT_NAME=spec.account_name, ORGANIZATION_NAME=spec.organization,
                                   REGION=spec.region, EDITION=spec.edition,
-                                  ACCOUNT_LOCATOR=f"XY{abs(hash(spec.account_name)) % 100000:05d}",
+                                  ACCOUNT_LOCATOR="XY" + hashlib.md5(spec.account_name.encode()).hexdigest()[:5].upper(),
                                   NETWORK_POLICY=None if s("DX-SEC-04") else "NP_CORPORATE"))
 
     # ---------------------------------------------------------------- warehouses & monitors
@@ -414,6 +418,9 @@ def generate(spec: AccountSpec | None = None) -> SyntheticAccount:
                 clusters = 1
                 if w["name"] == "WH_BI_PROD" and h in (8, 9, 10) and not s("DX-PERF-01"):
                     clusters = 2
+                if factor > 1.0 and billed_full(w, active):
+                    # an anomaly on a warehouse already billing full hours shows up as extra clusters (scale-out)
+                    clusters = max(clusters, int(round(factor)))
                 tail = w["bursts"] * w["auto_suspend"] / 3600.0
                 billed = min(1.0, active + tail)
                 compute = round(cph * billed * clusters, 6)
