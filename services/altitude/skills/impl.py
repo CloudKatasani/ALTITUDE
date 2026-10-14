@@ -49,3 +49,15 @@ def build_synthetic_snapshot(context: Any = None, profile: str = "seeded", days:
     snap.register(ctx.store)
     return {"snapshot_id": snap.snapshot_id, "path": str(snap.path), "content_hash": snap.content_hash,
             "tables": snap.tables()}
+
+
+def build_go_no_go_pack(context: Any = None, engagement_id: str = "", plan_id: str = "", snapshot_id: str = "",
+                        facts: dict | None = None) -> dict:
+    from altitude.cutover import build_go_no_go_pack as build, render_markdown
+
+    ctx = coerce(context)
+    pack = build(ctx.store, engagement_id, plan_id, snapshot_id, facts or {})
+    out = ctx.workspace / "cutover" / f"{pack['go_no_go_id']}.md"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(render_markdown(pack))
+    return {**pack, "report_path": str(out)}

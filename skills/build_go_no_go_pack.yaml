@@ -1,0 +1,13 @@
+name: build_go_no_go_pack
+description: Assemble the go/no-go evidence pack for a cutover plan and evaluate the cutover_go gate (recommendation only).
+permission: run
+entrypoint: altitude.skills.impl:build_go_no_go_pack
+input_schema:
+  type: object
+  properties:
+    engagement_id: {type: string}
+    plan_id: {type: string}
+    snapshot_id: {type: string}
+    facts: {type: object}
+  required: [engagement_id, plan_id, snapshot_id]
+  additionalProperties: false

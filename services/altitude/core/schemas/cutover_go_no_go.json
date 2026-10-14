@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Go/no-go criteria and pack layout",
+  "x-altitude-globs": ["cutover/*.yaml"],
+  "type": "object",
+  "required": ["criteria", "sections", "strategies"],
+  "additionalProperties": false,
+  "properties": {
+    "criteria": {"type": "array", "items": {"type": "object", "required": ["metric", "op"], "additionalProperties": false,
+      "properties": {"metric": {"type": "string"}, "op": {"enum": ["==", "!=", ">=", "<=", ">", "<"]},
+        "ref": {"type": "string", "pattern": "^rubric\\."}, "value": {}},
+      "oneOf": [{"required": ["ref"]}, {"required": ["value"]}]}},
+    "sections": {"type": "array", "items": {"type": "object", "required": ["id", "title"]}},
+    "strategies": {"type": "object", "additionalProperties": {"type": "string"}}
+  }
+}

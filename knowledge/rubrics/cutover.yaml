@@ -1,0 +1,7 @@
+namespace: cutover
+version: 1.0.0
+description: Cutover and decommissioning thresholds (Sections 13, Appendix C).
+values:
+  parallel_cycles_min: 2          # consecutive clean parallel-run cycles, at least one covering month-end
+  month_end_cycle_required: true
+  decommission_consumer_window_days: 30   # any legacy query in this window blocks decommission
