@@ -5,7 +5,7 @@
 <p class="muted">Run <code>{{ run.run_id }}</code> · snapshot <code>{{ run.snapshot_id }}</code> · rubric <code>{{ run.rubric_version }}</code> · tier {{ run.tier }}</p>
 <div class="kpi"><span>{{ theme.HEALTH_INDEX_NAME }}</span><b>{{ "%.1f"|format(run.platform_health_index or 0) }}</b><a href="/api/v1/diagnostics/runs/{{ run.run_id }}">scorecard</a></div>
 <div class="kpi"><span>Suggestions</span><b>{{ rows|length }}</b><a href="/progress">progress board</a></div>
-<div class="kpi"><span>Identified value (p50)</span><b>{{ rows|sum(attribute="value_p50_usd")|usd }}</b><a href="/api/v1/diagnostics/suggestions">ids</a></div>
+<div class="kpi"><span>Identified value (p50)</span><b>{{ total_value|usd }}</b><a href="/api/v1/diagnostics/suggestions">ids</a></div>
 {% else %}<p class="muted">No diagnostic run yet.</p>{% endif %}
 <table>
 <thead><tr><th>#</th><th>Suggestion</th><th>Check</th><th>Quadrant</th><th>Value p50</th><th>Confidence</th><th>Status</th><th>Evidence</th></tr></thead>

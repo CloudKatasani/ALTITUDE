@@ -221,7 +221,8 @@ def _findings_page(request: Request, p: Principal, ctx: Context):
     run = run[0] if run else None
     if run:
         run["summary"] = _j(run["summary"])
-    return "findings.html", {"run": run, "rows": rows, "statuses": lifecycle}
+    total = sum(float(r["value_p50_usd"] or 0) for r in rows)
+    return "findings.html", {"run": run, "rows": rows, "statuses": lifecycle, "total_value": total}
 
 
 def _suggestion_page(request: Request, p: Principal, ctx: Context):
