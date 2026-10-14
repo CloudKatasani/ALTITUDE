@@ -26,6 +26,7 @@ MODULE_CLIS = [
     "altitude.validation.cli",
     "altitude.etl.cli",
     "altitude.airready.cli",
+    "altitude.website.cli",
     "altitude.api.cli",
     "altitude.mcp.cli",
 ]

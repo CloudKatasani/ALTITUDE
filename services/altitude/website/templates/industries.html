@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-hero"><div class="wrap">
+  <div class="eyebrow">Industries</div>
+  <h1>Snowflake for regulated industries — utilities first</h1>
+  <p class="lead">Vertical depth is what makes evidence persuasive: we know your regulator, your data and your operating constraints.</p>
+</div></section>
+<section class="block"><div class="wrap grid g2">
+  {% for i in site.industries %}<div class="card">{% if i.lead %}<span class="chip accent">Lead vertical</span>{% endif %}<h3 style="margin-top:8px">{{ i.name }}</h3><p>{{ i.text }}</p></div>{% endfor %}
+</div></section>
+<section class="block alt"><div class="wrap split">
+  <div><h2>Typical entry point by segment</h2><table><thead><tr><th>Segment</th><th>Trigger</th><th>Entry offer</th></tr></thead><tbody>
+  <tr><td>Existing Snowflake customers</td><td>Cost overrun, governance gaps, AI ambition</td><td>D0 Snapshot → Package D → Package O</td></tr>
+  <tr><td>Regulated (utilities, banking, healthcare, insurance)</td><td>Audit findings, AI governance pressure</td><td>Governance + AI-readiness + managed run</td></tr>
+  <tr><td>Mid-market on SQL Server / Oracle</td><td>Hardware refresh, licence renewal, cloud mandate</td><td>Migration assessment → migration sprint</td></tr>
+  <tr><td>Enterprise on Teradata / Netezza / Exadata</td><td>Contract renewal 12–24 months out</td><td>Paid assessment → migration factory</td></tr>
+  <tr><td>Hadoop / Cloudera estates</td><td>Support cost, skills scarcity</td><td>Re-architect to Snowflake + Iceberg</td></tr>
+  </tbody></table></div>
+  <div class="callout"><b>For utilities specifically</b><p>NERC CIP-aligned access evidence, AMI-scale data patterns, OT/IT boundary design and regulatory reporting packs — built into our checks, agents and use-case packs.</p></div>
+</div></section>
+{% endblock %}

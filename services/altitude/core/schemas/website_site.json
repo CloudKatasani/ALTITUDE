@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Public website copy",
+  "x-altitude-globs": ["website/*.yaml"],
+  "type": "object",
+  "required": ["hero", "pitch", "journey", "problems", "differentiators", "buyers", "not_for_you", "method_d2",
+               "deliverables_d", "industries", "faq"],
+  "properties": {
+    "hero": {"type": "object", "required": ["title", "subtitle", "primary_cta"]},
+    "journey": {"type": "array", "items": {"type": "object", "required": ["step", "offer", "text"],
+      "properties": {"offer": {"type": "string", "pattern": "^OFF-"}}}},
+    "differentiators": {"type": "array", "minItems": 8, "items": {"type": "object", "required": ["title", "text", "proof"]}},
+    "faq": {"type": "array", "items": {"type": "object", "required": ["q", "a"]}}
+  }
+}

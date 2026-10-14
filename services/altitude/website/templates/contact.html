@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-hero"><div class="wrap">
+  <div class="eyebrow">Start free</div>
+  <h1>Book a D0 Snapshot</h1>
+  <p class="lead">One week, in your account, with a read-only role. You get the top ten findings with dollar values and a one-hour readout — and you keep the evidence.</p>
+</div></section>
+<section class="block"><div class="wrap split">
+  {% if live %}
+  <form class="contact card" method="post" action="/contact">
+  {% else %}
+  <form class="contact card" method="get" action="mailto:{{ theme.SUPPORT_EMAIL }}" enctype="text/plain">
+  {% endif %}
+    <label>Name<input name="name" required autocomplete="name"></label>
+    <label>Work email<input name="email" type="email" required autocomplete="email"></label>
+    <label>Company<input name="company" required autocomplete="organization"></label>
+    <label>Annual Snowflake spend<select name="spend"><option>Under $250K</option><option>$250K–$1M</option><option>$1M–$5M</option><option>Over $5M</option><option>Not on Snowflake yet</option></select></label>
+    <label>What brings you here?<select name="interest">{% for o in offers %}<option value="{{ o.id }}" {% if o.id == "OFF-D0" %}selected{% endif %}>{{ o.name }}</option>{% endfor %}</select></label>
+    <label>Anything we should know?<textarea name="message" rows="4"></textarea></label>
+    <button class="btn" type="submit">Request my snapshot</button>
+  </form>
+  <div>
+    <h2>What happens next</h2>
+    <ol><li>A 30-minute call to agree scope and the credit cap for the diagnostics warehouse.</li><li>You run our bootstrap script — we hand you the permission manifest first. No ACCOUNTADMIN.</li><li>Automated checks run in your account; nothing but aggregates and findings leaves it.</li><li>One-hour readout with the top ten findings, each with evidence and a dollar or risk value.</li></ol>
+    <div class="callout"><b>Prefer the Native App?</b> Install the D0 Snapshot from the Marketplace listing and run it yourself — nothing leaves your account at all.</div>
+  </div>
+</div></section>
+{% endblock %}

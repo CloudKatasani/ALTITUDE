@@ -1,0 +1,68 @@
+# Public website copy (marketing site). Names come from theme tokens at render time ({{PRODUCT_NAME}} etc.).
+# Claims follow the spec's honesty rules: speed figures are targets until calibrated; competitors are named by
+# category only; every sample number on the site is computed from a synthetic estate and labelled as such.
+hero:
+  eyebrow: "The evidence-first Snowflake partner"
+  title: "Know where every Snowflake dollar and risk sits — then fix it, watch it, and prove it."
+  subtitle: "We diagnose your estate down to the dollar, fix what matters, keep it observable in your own account, and migrate with proof that every answer still matches. Part of our fee is staked on the result."
+  primary_cta: {label: "Book a free D0 Snapshot", href: "contact.html"}
+  secondary_cta: {label: "See a sample diagnostic", href: "package-d.html#sample"}
+pitch: "Most Snowflake partners will tell you what they think is wrong. We show you, with evidence from your own account, exactly where every dollar and every risk sits — including in the reports and KPIs your business relies on. Then we fix it, keep it observable in your own account, and stake part of our fee on the result."
+journey:
+  - {step: Diagnose, offer: OFF-D, text: "Package D: evidence-backed findings across 10 domains, each with a dollar or risk value."}
+  - {step: Fix, offer: OFF-REM, text: "Remediation sprints ship the fixes as code, each with a rollback."}
+  - {step: Observe, offer: OFF-O, text: "Package O keeps a living scorecard running inside your account."}
+  - {step: Operate, offer: OFF-RUN, text: "Governed agents and senior SREs run cost, quality and access hygiene."}
+  - {step: Migrate, offer: OFF-ASSESS, text: "Migration factory with provable equivalence, from assessment to decommission."}
+  - {step: AI-Ready, offer: OFF-AI, text: "Semantic views, Cortex Search and evaluated agents on governed data."}
+problems:
+  - {problem: "Unknown estate", symptom: "Nobody knows which of 38,000 objects are used; 30–60% are typically dead", cost: "Scope and timeline inflate 1.5–2×"}
+  - {problem: "Conversion ≠ migration", symptom: "Tools convert SQL, not ETL behaviour, schedules, security, BI semantics or SLAs", cost: "'90% converted' programmes that are 40% done"}
+  - {problem: "Silent semantic drift", symptom: "Case sensitivity, NULL vs empty string, numeric scale, time zones — code runs, answers differ", cost: "Trust lost at UAT; parallel runs drag on"}
+  - {problem: "Cost shock", symptom: "Warehouses sized like the old appliance, no auto-suspend discipline, no monitors", cost: "First bill 2–3× forecast"}
+  - {problem: "Not AI-ready", symptom: "No semantic models, descriptions, classification or lineage", cost: "Cortex and agent initiatives stall at security review"}
+  - {problem: "No run model", symptom: "The project team leaves; nobody owns cost, quality or access hygiene", cost: "Degradation within two quarters"}
+differentiators:
+  - {title: "Evidence-first, down to the dollar", text: "Every finding carries evidence IDs, a dollar or risk value with its method, effort, confidence and the fix. The same snapshot always gives the same result.", proof: "A live D0 Snapshot in your account with a read-only role"}
+  - {title: "Warehouse + pipelines + BI + AI", text: "Duplicate reports, conflicting KPI definitions, dashboards whose refresh cost exceeds their use — found alongside warehouse waste.", proof: "BI rationalisation and KPI lineage in Package D"}
+  - {title: "Observability you own", text: "A multi-account archive beyond the native retention window, an ~80-KPI catalogue, chargeback and alerts — running in your account.", proof: "Package O demo deployment and KPI catalogue"}
+  - {title: "Provable equivalence", text: "L0–L5 validation, drift detectors, mismatch clustering and go/no-go evidence packs that auditors accept.", proof: "Our open drift checker run on a sample of your SQL"}
+  - {title: "Fees tied to outcomes", text: "Fee credit, a value floor and free re-baselining. Observability is priced flat by spend band — never as a percentage of your spend.", proof: "Contract terms in the proposal"}
+  - {title: "In-account, least privilege, metadata-only", text: "SNOWFLAKE database roles, never ACCOUNTADMIN. Row data never leaves. A Native App option is available.", proof: "The permission manifest and bootstrap script, handed over in the first meeting"}
+  - {title: "Agents that operate, under governance", text: "Autonomy levels L0–L3, approval workflow, pre-approved reversible actions with auto-rollback, immutable audit.", proof: "The agent action log and an approval flow demo"}
+  - {title: "Regulated-utility depth", text: "Access evidence aligned to NERC CIP, AMI-scale data patterns, OT/IT boundary design, regulatory reporting packs.", proof: "Vertical use-case packs and founder credentials"}
+buyers:
+  - {buyer: CFO, hears: "Quantified savings with a stated method, chargeback by cost centre, and a forecast you can trust."}
+  - {buyer: "CIO / CDO", hears: "A platform health index aligned to Snowflake's Well-Architected pillars, a roadmap, and AI-readiness."}
+  - {buyer: CISO, hears: "Least-privilege engagement, access hygiene evidence, masking coverage, agent identity controls."}
+  - {buyer: "Platform owner", hears: "Remediation-as-code pull requests, alerts with runbooks, fewer 2 a.m. incidents."}
+  - {buyer: "Business owner", hears: "Fewer, trusted reports with one definition per KPI."}
+not_for_you:
+  - "A 150+ person, multi-country programme with offshore factory economics — a global SI fits better; we can act as the diagnostic and validation partner alongside it."
+  - "Lowest-rate staff augmentation — not our model."
+  - "A very small estate below the qualification threshold — the free D0 Snapshot is enough; a Deep Diagnostic would not pay back."
+  - "You want a tool, not a partner — buy SaaS."
+method_d2:
+  - {week: 0, activities: "Kickoff; access bootstrap script; permission manifest; credit cap for the diagnostics warehouse; stakeholder map", output: "Access confirmed"}
+  - {week: 1, activities: "Automated harvest and signals; BI metadata harvest; Snowflake's free WAF assessment as an input; 6–10 interviews", output: "Data completeness report"}
+  - {week: 2, activities: "Root-cause clustering; value modelling; draft scorecard", output: "Quick-win memo — value in week 2"}
+  - {week: 3, activities: "Remediation drafts; validation workshop to remove false positives; roadmap", output: "Validated findings register"}
+  - {week: 4, activities: "Executive readout; handover of all artifacts; baseline snapshot sealed", output: "Final deliverables"}
+deliverables_d:
+  - "Executive readout: Platform Health Index, scorecard by domain and WAF pillar, top suggestions, savings and risk model, roadmap"
+  - "Findings register (CSV/XLSX): every suggestion with evidence, value, method, effort and confidence"
+  - "Remediation backlog importable into Jira or Azure DevOps"
+  - "Remediation-as-code pack: SQL, Terraform and dbt drafts as a pull request, each with a rollback"
+  - "Savings & risk model with every assumption explicit"
+  - "Immutable baseline snapshot — the basis for re-diagnosis and for Package O"
+industries:
+  - {name: "Utilities & energy", lead: true, text: "AMI consumption analytics, outage impact, asset health, vegetation management, procurement spend, customer churn/arrears, regulatory reporting assistants; NERC CIP-aligned access evidence and OT/IT boundary design."}
+  - {name: "Banking & insurance", lead: false, text: "Governance and AI-readiness under audit pressure; equivalence evidence for regulatory reports."}
+  - {name: "Healthcare", lead: false, text: "PHI classification and masking coverage, access reviews, agent identity controls."}
+  - {name: "Retail", lead: false, text: "FinOps and chargeback for fast-growing estates; clean-room patterns for partner data."}
+faq:
+  - {q: "Do you need ACCOUNTADMIN?", a: "No. A dedicated read-only role is granted SNOWFLAKE database roles (usage, governance, object and security viewer). You get the bootstrap script and permission manifest before we start, and access is revoked at close with the access log handed to you."}
+  - {q: "Does our data leave the account?", a: "No row data ever leaves. Analysis runs in your account; only aggregates and findings leave it — and with the Native App option, nothing does."}
+  - {q: "How is this different from Snowflake's free Well-Architected assessment?", a: "We run it as one input. Package D adds dollar-quantified findings, root-cause clusters, BI and KPI analysis, remediation-as-code with rollback, and a re-baselineable snapshot."}
+  - {q: "How do you price observability?", a: "Flat, by spend band. Never as a percentage of your Snowflake spend, so we gain nothing when your spend rises."}
+  - {q: "How fast are AI-accelerated migrations?", a: "Our speed figures are targets until measured on the first engagements and published with the method. What we guarantee is the evidence: equivalence packs per table tier before cutover."}

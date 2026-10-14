@@ -92,10 +92,10 @@ def test_engagement_facts_drive_home_page_challenges(flow):
     stored = c.put(f"/api/v1/engagements/{eng['engagement_id']}/facts", headers=H(), json={"facts": facts}).json()
     assert stored == facts
     c.post("/login", data={"user": "lead@acme", "role": "delivery_lead"})
-    home = c.get("/").text
+    home = c.get("/app").text
     assert "SH-CH-001" in home and "4200 procedural scripts" in home
     c.put(f"/api/v1/engagements/{eng['engagement_id']}/facts", headers=H(), json={"facts": {"test_harness": True}})
-    assert "SH-CH-001" not in c.get("/").text  # latest value wins
+    assert "SH-CH-001" not in c.get("/app").text  # latest value wins
 
 
 def test_sherpa_evidence_is_readable_not_raw_json(flow):

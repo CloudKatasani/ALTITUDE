@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-hero"><div class="wrap">
+  <div class="eyebrow">Managed Run</div>
+  <h1>Agents that operate your platform — under governance</h1>
+  <p class="lead">Package O3 plus a fleet of maintenance agents and senior SREs. Agents observe, recommend and draft; they act on their own only within a catalogue of pre-approved, reversible actions you sign off — with blast-radius limits, audit and automatic rollback.</p>
+  <p><a class="btn" href="contact.html">Discuss a managed run</a></p>
+</div></section>
+
+<section class="block"><div class="wrap grid g4">
+  <div class="card"><h3>L0 · Observe</h3><p>Report what it sees.</p></div>
+  <div class="card"><h3>L1 · Recommend</h3><p>Explain and suggest, with confidence and rationale.</p></div>
+  <div class="card"><h3>L2 · Draft</h3><p>Prepare the change; it never runs without a recorded approver.</p></div>
+  <div class="card"><h3>L3 · Execute</h3><p>Only pre-approved, reversible actions within limits — auto-reverted if the guard metric regresses.</p></div>
+</div></section>
+
+<section class="block alt"><div class="wrap">
+  <h2>The agent catalogue</h2>
+  <p class="sub">Each agent has its own service identity, a minimal read-only tool scope, an evaluation suite of golden incidents that gates every change, and an immutable action log.</p>
+  <table><thead><tr><th>Agent</th><th>Trigger</th><th>What it does</th><th>Max autonomy</th><th>Measured by</th></tr></thead><tbody>
+  {% for a in s.agents %}<tr><td><b>{{ a.name }}</b>{% if a.live %} <span class="chip accent">live</span>{% endif %}</td><td>{{ a.trigger }}</td><td>{{ a.purpose }}</td><td>{{ a.autonomy }}</td><td>{{ a.kpi }}</td></tr>{% endfor %}
+  </tbody></table>
+</div></section>
+
+<section class="block"><div class="wrap split">
+  <div><h2>What a managed run includes</h2><ul class="ticks"><li>Package O3: full KPI catalogue, all dashboards, anomaly detection, ask-the-platform</li><li>Business-hours alert response with runbooks</li><li>Quarterly optimisation sprint</li><li>Annual Package D re-run to re-baseline the Health Index</li><li>L2/L3 support for pipelines, access hygiene and release changes</li></ul></div>
+  <div class="card"><h3>{{ offer["OFF-RUN"].name }}</h3><p>{{ offer["OFF-RUN"].scope }}</p><div class="price" style="font-weight:700;font-size:1.3rem;color:var(--primary)">{{ offer["OFF-RUN"].monthly_usd|usd_range }}/month</div><p class="muted">Annual subscription, flat by spend band.</p></div>
+</div></section>
+{% endblock %}

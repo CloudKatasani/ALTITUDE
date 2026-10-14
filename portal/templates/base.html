@@ -18,10 +18,10 @@
 </head>
 <body>
 <header class="top">
-  <a class="brand" href="/">{{ theme.PRODUCT_NAME }}</a>
+  <a class="brand" href="/app">{{ theme.PRODUCT_NAME }}</a>
   {% if principal %}
   <nav>
-    <a href="/">Outcome path</a>
+    <a href="/app">Outcome path</a>
     <a href="/facts">Engagement facts</a>
     {% for path, label in nav %}<a href="{{ path }}">{{ label }}</a>{% endfor %}
     <a href="/review">Review queue</a>

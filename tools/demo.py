@@ -104,7 +104,7 @@ def screenshots(base: str, ws: Path, out: Path, ids: dict) -> list[str]:
     exe = os.environ.get("ALTITUDE_DEMO_BROWSER") or ("/opt/pw-browsers/chromium"
                                                       if Path("/opt/pw-browsers/chromium").exists() else None)
     out.mkdir(parents=True, exist_ok=True)
-    pages = [("01_outcome_path", "/"), ("01b_engagement_facts", "/facts"), ("02_findings", "/findings"),
+    pages = [("01_outcome_path", "/app"), ("01b_engagement_facts", "/facts"), ("02_findings", "/findings"),
              ("03_suggestion", f"/suggestion?id={ids['suggestion_id']}"), ("04_progress", "/progress"),
              ("05_sherpa", "/sherpa?q=Which+warehouses+are+idle-heavy%3F"), ("06_review_queue", "/review"),
              ("07_review_board", "/decisions"), ("08_agents", "/agents"), ("09_observability", "/dashboards")]

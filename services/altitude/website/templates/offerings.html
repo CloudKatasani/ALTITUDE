@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-hero"><div class="wrap">
+  <div class="eyebrow">Offerings</div>
+  <h1>Fixed-scope packages, from a free snapshot to a managed run</h1>
+  <p class="lead">Start where the value is fastest. Each step's natural next step reuses the same evidence, so nothing is re-discovered and nothing is re-sold.</p>
+</div></section>
+
+<section class="block"><div class="wrap">
+  <h2>The offer ladder</h2>
+  <p class="sub">Typical sizes are indicative and validated against our first engagements.</p>
+  <div class="ladder">
+    {% for step, oid, buyer in [(0, "OFF-D0", "Platform owner"), (1, "OFF-D", "CDO / CIO / CFO"), (2, "OFF-REM", "Platform owner"), (3, "OFF-O", "Platform owner / FinOps"), (4, "OFF-RUN", "CIO"), (5, "OFF-FACTORY", "CIO / CDO")] %}
+    {% set o = offer[oid] %}
+    <div class="rung"><div class="n">{{ step }}</div><div><b><a href="#{{ oid }}">{{ o.name }}</a></b><br><span class="muted">{{ o.scope }}</span></div>
+      <div>{{ buyer }}</div><div><b>{{ o|price }}</b></div></div>
+    {% endfor %}
+  </div>
+</div></section>
+
+<section class="block alt"><div class="wrap">
+  <h2>Every offering</h2>
+  <p class="sub">Fixed-scope offers sell faster and de-risk both sides; staff augmentation is deliberately a small part of what we do.</p>
+  <div class="grid g3">
+    {% for o in offers %}
+    <div class="card offer" id="{{ o.id }}">
+      <h3>{{ o.name }}</h3>
+      <div class="meta"><span class="chip">{{ o.duration_weeks[0] }}{% if o.duration_weeks[1] != o.duration_weeks[0] %}–{{ o.duration_weeks[1] }}{% endif %} weeks</span><span class="chip">{{ o.buyer }}</span></div>
+      <p>{{ o.scope }}.</p>
+      {% if o.next and offer.get(o.next) %}<p class="muted">Next step: <a href="#{{ o.next }}">{{ offer[o.next].name.split(" — ")[0] }}</a></p>{% endif %}
+      <div class="price">{{ o|price }}</div>
+      {% set detail = {"OFF-D": "package-d.html", "OFF-D0": "package-d.html", "OFF-O": "package-o.html", "OFF-ASSESS": "migration.html", "OFF-MIG": "migration.html", "OFF-FACTORY": "migration.html", "OFF-RUN": "managed-run.html", "OFF-AI": "ai-ready.html", "OFF-FOUND": "migration.html#foundation"} %}
+      {% if detail.get(o.id) %}<a href="{{ detail[o.id] }}" style="margin-top:8px">Learn more →</a>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div></section>
+
+<section class="block"><div class="wrap">
+  <h2>Which package next?</h2>
+  <p class="sub">We recommend follow-on work from what the diagnostic actually finds — never from a sales plan.</p>
+  <table><thead><tr><th>If the evidence shows…</th><th>We recommend</th></tr></thead><tbody>
+  <tr><td>High untagged spend, no monitors, idle-heavy warehouses</td><td>FinOps remediation sprint + Package O</td></tr>
+  <tr><td>Critical security findings</td><td>Security hardening sprint</td></tr>
+  <tr><td>Heavy BI duplication, conflicting KPI definitions</td><td>BI rationalisation programme</td></tr>
+  <tr><td>Brittle legacy ETL or sources still on appliances</td><td>Migration assessment</td></tr>
+  <tr><td>Low AI-readiness score</td><td>AI-Ready programme</td></tr>
+  <tr><td>Recurring pipeline failures, no on-call</td><td>Managed Run (Package O3)</td></tr>
+  </tbody></table>
+</div></section>
+{% endblock %}

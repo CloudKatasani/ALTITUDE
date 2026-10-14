@@ -42,12 +42,12 @@ def test_form_saves_changes_and_drives_challenges(client):
                                "test_harness": "no", "deadline_weeks": ""}, follow_redirects=True)
     assert "Saved: pattern, procedural_object_count, test_harness" in r.text
     assert "SH-CH-001" in r.text  # live preview of Sherpa's challenges
-    assert "SH-CH-001" in c.get("/").text
+    assert "SH-CH-001" in c.get("/app").text
     assert c.get(f"/api/v1/engagements/{eid}/facts", headers=H()).json() == {
         "pattern": "lift_and_shift", "procedural_object_count": 4200, "test_harness": False}
     # clearing a field removes the fact; challenge disappears
     c.post("/facts", data={"engagement_id": eid, "test_harness": "yes"})
-    assert "SH-CH-001" not in c.get("/").text
+    assert "SH-CH-001" not in c.get("/app").text
     c.post("/facts", data={"engagement_id": eid, "pattern": ""})
     assert "pattern" not in c.get(f"/api/v1/engagements/{eid}/facts", headers=H()).json()
     trail = c.get("/api/v1/audit", headers=H(), params={"subject_type": "engagement", "subject_id": eid}).json()

@@ -51,7 +51,7 @@ the next-three-actions list and the {{ theme.REVIEW_BOARD_NAME }} reason over th
   <h2>{{ theme.COPILOT_NAME }} challenges from these facts</h2>
   {% for c in challenges %}<p class="flag {{ c.severity }}"><b>[{{ c.id }}]</b> {{ c.message }}</p>
   {% else %}<p class="muted">No risks flagged from the current facts.</p>{% endfor %}
-  <p class="muted"><a href="/">Back to the outcome path</a></p>
+  <p class="muted"><a href="/app">Back to the outcome path</a></p>
 </section>
 </div>
 {% endif %}

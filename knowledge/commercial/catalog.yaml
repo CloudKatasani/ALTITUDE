@@ -1,8 +1,8 @@
 # Service catalogue, tiers and guarantees (Sections 5.3, 6.7, 6.8, 7.7, 34). Indicative hypotheses — calibrate.
 offers:
   - {id: OFF-D0, name: "D0 Diagnostics Snapshot", package: D0, duration_weeks: [1, 1], fee_usd: [0, 0], buyer: "Platform owner", next: OFF-D, scope: "Automated in-account D1-D5 checks; top-10 findings; 1-hour readout"}
-  - {id: OFF-D, name: "Package D — Platform Deep Diagnostics", package: D, duration_weeks: [2, 6], fee_usd: [20000, 150000], buyer: "CDO / CIO / CFO", next: OFF-REM, scope: "Section 6"}
-  - {id: OFF-O, name: "Package O — Platform Observability add-on", package: O, duration_weeks: [3, 8], fee_usd: [15000, 60000], monthly_usd: [3000, 25000], buyer: "Platform owner / FinOps", next: OFF-RUN, scope: "Section 7"}
+  - {id: OFF-D, name: "Package D — Platform Deep Diagnostics", package: D, duration_weeks: [2, 6], fee_usd: [20000, 150000], buyer: "CDO / CIO / CFO", next: OFF-REM, scope: "Metadata-only, evidence-backed diagnostic across 10 domains with quantified, prioritised suggestions and remediation-as-code"}
+  - {id: OFF-O, name: "Package O — Platform Observability add-on", package: O, duration_weeks: [3, 8], fee_usd: [15000, 60000], monthly_usd: [3000, 25000], buyer: "Platform owner / FinOps", next: OFF-RUN, scope: "Client-owned observability in your account: archive, ~80 KPIs, chargeback, alerts and an ask-the-platform agent"}
   - {id: OFF-REM, name: "Remediation Sprint", package: remediation, duration_weeks: [4, 8], fee_usd: [40000, 150000], buyer: "Platform owner", next: OFF-O, scope: "Implements accepted Package D suggestions"}
   - {id: OFF-BI, name: "BI Rationalisation Programme", package: bi, duration_weeks: [6, 12], fee_usd: [60000, 250000], buyer: "CDO", next: OFF-AI, scope: "Report rationalisation, KPI lineage, certified semantic layer"}
   - {id: OFF-ASSESS, name: "Migration Assessment", package: assessment, duration_weeks: [3, 6], fee_usd: [40000, 120000], buyer: "CIO", next: OFF-MIG, scope: "Harvest, disposition, waves, pattern, estimate with confidence bands, TCO"}

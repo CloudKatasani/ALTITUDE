@@ -69,7 +69,7 @@ def mount(app: FastAPI) -> None:
         app.mount("/static", StaticFiles(directory=str(static)), name="static")
     ctx = app.state.ctx
 
-    @app.get("/", response_class=HTMLResponse)
+    @app.get("/app", response_class=HTMLResponse)
     def home(request: Request) -> HTMLResponse:
         p = portal_principal(request)
         if p is None:
@@ -92,7 +92,7 @@ def mount(app: FastAPI) -> None:
 
     @app.post("/login")
     def do_login(user: str = Form(""), role: str = Form(""), token: str = Form("")) -> RedirectResponse:
-        resp = RedirectResponse("/", status_code=303)
+        resp = RedirectResponse("/app", status_code=303)
         if token:
             resp.set_cookie("altitude_token", token, httponly=True, samesite="strict")
         elif os.environ.get("ALTITUDE_AUTH") == "dev" and role in roles():

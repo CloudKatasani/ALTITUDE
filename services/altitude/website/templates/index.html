@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div class="wrap">
+    <div class="eyebrow">{{ site.hero.eyebrow }}</div>
+    <h1>{{ site.hero.title }}</h1>
+    <p class="lead">{{ site.hero.subtitle }}</p>
+    <div class="actions">
+      <a class="btn" href="{{ site.hero.primary_cta.href }}">{{ site.hero.primary_cta.label }}</a>
+      <a class="btn ghost" href="{{ site.hero.secondary_cta.href }}">{{ site.hero.secondary_cta.label }}</a>
+    </div>
+  </div>
+</section>
+
+<section class="block">
+  <div class="wrap">
+    <div class="eyebrow">One path, six outcomes</div>
+    <h2>Diagnose → Fix → Observe → Operate → Migrate → AI-Ready</h2>
+    <p class="sub">Every step reuses the same evidence store, pattern library and agent fleet — so each engagement starts where the last one ended.</p>
+    <div class="journey">
+      {% for j in site.journey %}<a href="offerings.html#{{ j.offer }}"><b>{{ j.step }}</b><span>{{ j.text }}</span></a>{% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="block alt" id="sample">
+  <div class="wrap">
+    <div class="eyebrow">What a diagnostic finds <span class="sample-tag">synthetic sample</span></div>
+    <h2>A 90-day look at one Snowflake account</h2>
+    <p class="sub">Our platform ran Package D against a synthetic estate. Every number below links to evidence in an immutable snapshot — this is the shape of what you receive.</p>
+    <div class="stats">
+      <div class="stat"><b>{{ s.value_p50|usd }}</b><span>identified annual value (p50)</span></div>
+      <div class="stat"><b>{{ s.suggestions }}</b><span>evidence-backed suggestions</span></div>
+      <div class="stat"><b>{{ s.quick_wins|length }}</b><span>quick wins for the first 30 days</span></div>
+      <div class="stat"><b>{{ s.phi }}</b><span>{{ theme.HEALTH_INDEX_NAME }} (0–100)</span></div>
+    </div>
+    <div class="grid g2" style="margin-top:24px">
+      {% for t in s.top[:4] %}
+      <div class="card"><span class="chip">{{ t.check_id }}</span> <span class="chip accent">{{ t.priority.quadrant|label }}</span>
+        <h3 style="margin-top:8px">{{ t.title }}</h3>
+        <p class="muted">{% if t.value.annualised_usd and t.value.annualised_usd.p50 %}<b>{{ t.value.annualised_usd.p50|usd }}</b>/yr · {% endif %}confidence {{ "%.2f"|format(t.confidence) }} · effort {{ t.effort.size }}</p>
+        <div class="proof">Evidence {{ t.evidence_refs[:3]|join(", ") }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    <p style="margin-top:20px"><a class="btn outline" href="package-d.html#sample">Explore the full sample →</a></p>
+  </div>
+</section>
+
+<section class="block">
+  <div class="wrap">
+    <div class="eyebrow">The problems we solve</div>
+    <h2>Why Snowflake estates leak money and trust</h2>
+    <table><thead><tr><th>Problem</th><th>Symptom</th><th>Cost</th></tr></thead><tbody>
+    {% for p in site.problems %}<tr><td><b>{{ p.problem }}</b></td><td>{{ p.symptom }}</td><td>{{ p.cost }}</td></tr>{% endfor %}
+    </tbody></table>
+  </div>
+</section>
+
+<section class="block alt">
+  <div class="wrap">
+    <div class="eyebrow">Why us</div>
+    <h2>Differentiators you can verify in the first meeting</h2>
+    <div class="grid g4">
+      {% for d in site.differentiators %}<div class="card"><h3>{{ d.title }}</h3><p>{{ d.text }}</p><div class="proof">Proof: {{ d.proof }}</div></div>{% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="block">
+  <div class="wrap split">
+    <div>
+      <div class="eyebrow">Start free</div>
+      <h2>The D0 Snapshot: one week, in your account, no ACCOUNTADMIN</h2>
+      <p>Automated checks across cost, performance, reliability, security and governance; the top ten findings with dollar values; a one-hour readout. Metadata only — row data never leaves your account, and with our Native App nothing does.</p>
+      <ul class="ticks"><li>Read-only role with SNOWFLAKE database roles; permission manifest up front</li><li>X-Small diagnostics warehouse with a credit cap you agree</li><li>Access revoked at close; the access log is yours</li></ul>
+      <a class="btn" href="contact.html">Book a D0 Snapshot</a>
+    </div>
+    <div class="callout"><b>Our promise</b><p>Every finding comes with evidence from your account, a dollar or risk value with its method, a confidence score, and the fix with its rollback.</p>
+      <p class="muted">Fees are tied to outcomes: a fee credit into follow-on work, a value floor of {{ guardrails.value_floor_multiple|int }}× the fee on Deep Diagnostics, and a free 90-day re-baseline.</p></div>
+  </div>
+</section>
+{% endblock %}
