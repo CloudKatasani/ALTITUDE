@@ -32,7 +32,7 @@ test_cases:
       SELECT code FROM crm.codes WHERE code = 'Ab';
       CREATE MULTISET TABLE crm.people (name VARCHAR(40) NOT CASESPECIFIC);
     expect_issues: [TD-02]
-    expect_absent: []
+    expect_lines: {TD-02: [3]}
 
   - id: TC-TD-05-101
     issue_id: TD-05
